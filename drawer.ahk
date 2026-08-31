@@ -2,7 +2,6 @@
 #SingleInstance Force
 Persistent()
 SetWinDelay(-1)
-DetectHiddenWindows(true)
 
 ; =========================== НАСТРОЙКИ ===========================
 ; exe    — имя процесса
@@ -59,7 +58,7 @@ Toggle(i) {
         g := st.geom
         if g.slide
             Slide(hwnd, g.sx, g.hx, g.y, g.w, g.h)
-        WinHide("ahk_id " hwnd)          ; гарантия невидимости при любой раскладке мониторов
+        try WinMove(g.park, g.y, g.w, g.h, "ahk_id " hwnd)   ; за пределы всех мониторов
         st.shown := false
         return
     }
@@ -77,10 +76,12 @@ Toggle(i) {
     h  := B - T
     sx := (side = "right") ? R - w : L
     hx := (side = "right") ? R     : L - w
-    st.geom := { sx: sx, hx: hx, y: T, w: w, h: h, slide: doSlide }
+    ; Точка парковки заведомо вне всех мониторов, в ту же сторону, куда уезжает окно.
+    vL := SysGet(76), vW := SysGet(78)
+    park := (side = "right") ? vL + vW + 20 : vL - w - 20
+    st.geom := { sx: sx, hx: hx, y: T, w: w, h: h, slide: doSlide, park: park }
 
     WinMove(doSlide ? hx : sx, T, w, h, "ahk_id " hwnd)
-    WinShow("ahk_id " hwnd)
     WinActivate("ahk_id " hwnd)
     if doSlide
         Slide(hwnd, hx, sx, T, w, h)
@@ -155,13 +156,10 @@ Slide(hwnd, fromX, toX, y, w, h) {
     try WinMove(toX, y, w, h, "ahk_id " hwnd)
 }
 
-; При выходе показываем спрятанные окна и возвращаем их на исходные места.
+; При выходе возвращаем окна на исходные места, чтобы ничего
+; не осталось за пределами экранов.
 Cleanup(*) {
     global state
-    for hwnd, st in state {
-        try {
-            WinShow("ahk_id " hwnd)
-            WinMove(st.ox, st.oy, st.ow, st.oh, "ahk_id " hwnd)
-        }
-    }
+    for hwnd, st in state
+        try WinMove(st.ox, st.oy, st.ow, st.oh, "ahk_id " hwnd)
 }
