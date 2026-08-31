@@ -5,13 +5,23 @@ SetWinDelay(-1)
 CoordMode("Mouse", "Screen")   ; по умолчанию v2 отдаёт координаты активного окна
 
 ; =========================== НАСТРОЙКИ ===========================
+; Слот — номер от 1 до 9. Хоткеи слота заданы номером и не настраиваются:
+;   Ctrl+Alt+N        — выдвинуть / убрать окно слота
+;   Ctrl+Alt+Shift+N  — запомнить в слоте текущее активное окно
+;   Ctrl+Alt+0        — очистить все динамические слоты
+;   Ctrl+Alt+Shift+0  — выход, окна возвращаются на исходные места
+;
+; Постоянные слоты: приложение ищется по процессу при каждом нажатии,
+; переживает перезапуск программы, назначить в такой слот другое окно
+; нельзя.
+;
+; slot           — номер слота, 1…9
 ; name           — как приложение называется в уведомлениях
 ; exe            — имя процесса
 ; cls            — класс окна; "" если не важен
-; hotkey         — глобальный хоткей в синтаксисе AutoHotkey:
-;                  ^ Ctrl, ! Alt, + Shift, # Win
 ; focusHotkey    — вернуть фокус: выдвинуть, если спрятано, и активировать.
-;                  "" — выключено
+;                  "" — выключено. Сочетания Ctrl+Alt+Shift+N заняты
+;                  назначением слотов, поэтому по умолчанию Ctrl+Alt+Win+N
 ; monitor        — "cursor" (монитор под курсором) или номер монитора: 1, 2, 3…
 ; edge           — сторона выезда: "left", "right", "top", "bottom"
 ; width          — размер панели в процентах от рабочей области монитора:
@@ -21,70 +31,85 @@ CoordMode("Mouse", "Screen")   ; по умолчанию v2 отдаёт коо�
 ;                  Работает только вместе с activateOnShow: окно, которое
 ;                  не получало фокуса, не может его потерять
 apps := [
-    { name: "VS Code",  exe: "Code.exe",       cls: "Chrome_WidgetWin_1",
-      hotkey: "^!1", focusHotkey: "^!+1",
+    { slot: 1, name: "VS Code",  exe: "Code.exe",       cls: "Chrome_WidgetWin_1",
+      focusHotkey: "^!#1",
       monitor: "cursor", edge: "right", width: 60,
       activateOnShow: true, hideOnBlur: true },
-    { name: "PhpStorm", exe: "phpstorm64.exe", cls: "SunAwtFrame",
-      hotkey: "^!2", focusHotkey: "^!+2",
+    { slot: 2, name: "PhpStorm", exe: "phpstorm64.exe", cls: "SunAwtFrame",
+      focusHotkey: "^!#2",
       monitor: "cursor", edge: "right", width: 60,
       activateOnShow: true, hideOnBlur: true }
 ]
 
-; Временный ящик: по этому хоткею запоминается текущее активное окно, и
-; дальше хоткей управляет именно им. Привязка живёт до перезапуска Ящика.
-temporary := { name: "Временное окно",
-               hotkey: "^!3", focusHotkey: "^!+3",
-               monitor: "cursor", edge: "right", width: 60,
-               activateOnShow: true, hideOnBlur: true }
+; Динамические слоты: свободные номера, в которые окно назначается на
+; ходу. Запоминается дескриптор конкретного окна, а не приложение.
+; Привязки живут до очистки или до перезапуска программы.
+dynamic := { name: "Слот",
+             monitor: "cursor", edge: "right", width: 60,
+             activateOnShow: true, hideOnBlur: true }
 
-exitHotkey := "^!0"   ; выход: окна возвращаются на исходные места
+; Персональные настройки отдельного слота, если понадобятся. Поля, не
+; указанные здесь, берутся из dynamic. Пример:
+;   dynamicSlots[5] := { edge: "left", width: 40 }
+dynamicSlots := Map()
+
 animMs     := 160     ; длительность анимации, мс
 animSteps  := 14      ; 0 — выключить анимацию
 blurMs     := 250     ; как часто проверять потерю фокуса, мс
 ; =================================================================
 
-managed  := Map()    ; индекс приложения -> hwnd
-state    := Map()    ; hwnd -> { orig, geom }
-tempHwnd := 0        ; окно временного ящика, помнится до перезапуска
-watched  := Map()    ; выдвинутые окна с hideOnBlur: hwnd -> настройки
+managed   := Map()   ; индекс приложения -> hwnd
+state     := Map()   ; hwnd -> { orig, geom }
+watched   := Map()   ; выдвинутые окна с hideOnBlur: hwnd -> настройки
+permSlots := Map()   ; номер слота -> индекс в apps
+dynSlots  := Map()   ; номер слота -> hwnd
 
 ; Хоткеи ставятся через клавиатурный хук ($). RegisterHotkey отдаёт
 ; комбинацию первому, кто её занял: если предыдущий экземпляр ещё не
 ; умер, новый молча остаётся без клавиш — процесс жив, хоткеи мертвы.
 ; Хук от этого не зависит.
-live := 0
 for i, a in apps {
+    if !(a.slot >= 1 && a.slot <= 9)
+        MsgBox("У " a.name " номер слота " a.slot ", а слоты только 1…9", "Ящик")
+    else if permSlots.Has(a.slot)
+        MsgBox("Слот " a.slot " занят дважды: " apps[permSlots[a.slot]].name " и " a.name, "Ящик")
+    else
+        permSlots[a.slot] := i
+}
+
+live := 0
+Loop 9 {
+    n := A_Index
     try {
-        Hotkey(Hooked(a.hotkey), OnHotkey.Bind(i))
+        Hotkey(Hooked("^!" n), OnSlot.Bind(n))
         live++
     } catch as e
-        MsgBox("Хоткей " a.hotkey " (" a.name ") не назначен:`n" e.Message, "Ящик")
-    if (Opt(a, "focusHotkey", "") != "") {
-        try {
-            Hotkey(Hooked(a.focusHotkey), OnFocusHotkey.Bind(i))
-            live++
-        } catch as e
-            MsgBox("Хоткей фокуса " a.focusHotkey " (" a.name ") не назначен:`n" e.Message, "Ящик")
-    }
-}
-try {
-    Hotkey(Hooked(temporary.hotkey), OnTempHotkey)
-    live++
-} catch as e
-    MsgBox("Хоткей временного окна " temporary.hotkey " не назначен:`n" e.Message, "Ящик")
-if (Opt(temporary, "focusHotkey", "") != "") {
+        MsgBox("Хоткей слота " n " не назначен:`n" e.Message, "Ящик")
     try {
-        Hotkey(Hooked(temporary.focusHotkey), OnTempFocusHotkey)
+        Hotkey(Hooked("^!+" n), OnSlotBind.Bind(n))
         live++
     } catch as e
-        MsgBox("Хоткей фокуса " temporary.focusHotkey " не назначен:`n" e.Message, "Ящик")
+        MsgBox("Хоткей назначения слота " n " не назначен:`n" e.Message, "Ящик")
+}
+for i, a in apps {
+    if (Opt(a, "focusHotkey", "") = "")
+        continue
+    try {
+        Hotkey(Hooked(a.focusHotkey), OnFocusHotkey.Bind(i))
+        live++
+    } catch as e
+        MsgBox("Хоткей фокуса " a.focusHotkey " (" a.name ") не назначен:`n" e.Message, "Ящик")
 }
 try {
-    Hotkey(Hooked(exitHotkey), (*) => ExitApp())
+    Hotkey(Hooked("^!0"), OnClearHotkey)
     live++
 } catch as e
-    MsgBox("Хоткей выхода " exitHotkey " не назначен:`n" e.Message, "Ящик")
+    MsgBox("Хоткей очистки слотов не назначен:`n" e.Message, "Ящик")
+try {
+    Hotkey(Hooked("^!+0"), (*) => ExitApp())
+    live++
+} catch as e
+    MsgBox("Хоткей выхода не назначен:`n" e.Message, "Ящик")
 
 OnExit(Cleanup)
 TrayTip("Хоткеев живо: " live, "Ящик запущен", 1)
@@ -100,16 +125,23 @@ Opt(cfg, name, def) {
 }
 
 ; Ошибка на одном окне не должна ронять программу целиком — N2.
-OnHotkey(i, *) {
+OnSlot(n, *) {
     try
-        ToggleApp(i)
+        ToggleSlot(n)
     catch as e
         TrayTip("Сбой: " e.Message, "Ящик", 3)
 }
 
-OnTempHotkey(*) {
+OnSlotBind(n, *) {
     try
-        ToggleTemp()
+        BindSlot(n)
+    catch as e
+        TrayTip("Сбой: " e.Message, "Ящик", 3)
+}
+
+OnClearHotkey(*) {
+    try
+        ClearDynamic()
     catch as e
         TrayTip("Сбой: " e.Message, "Ящик", 3)
 }
@@ -121,14 +153,87 @@ OnFocusHotkey(i, *) {
         TrayTip("Сбой: " e.Message, "Ящик", 3)
 }
 
-OnTempFocusHotkey(*) {
-    try
-        FocusTemp()
-    catch as e
-        TrayTip("Сбой: " e.Message, "Ящик", 3)
+; Слот: постоянный ищет своё приложение по процессу, динамический
+; управляет запомненным окном.
+ToggleSlot(n) {
+    global permSlots, dynSlots
+    if permSlots.Has(n) {
+        ToggleApp(permSlots[n])
+        return
+    }
+    if !dynSlots.Has(n) {
+        TrayTip("Слот " n " пуст", "Ящик", 2)
+        return
+    }
+    hwnd := dynSlots[n]
+    if !WinExist("ahk_id " hwnd) {
+        dynSlots.Delete(n)
+        Release(hwnd)
+        TrayTip("Окно слота " n " закрыто, слот освобождён", "Ящик", 2)
+        return
+    }
+    ToggleWindow(hwnd, SlotCfg(n))
 }
 
-; Постоянный ящик: окно ищется по настройкам приложения.
+; Назначение слота: запоминается дескриптор конкретного окна, а не
+; приложение. Постоянный слот перезаписать нельзя — иначе настройка из
+; файла молча потерялась бы до перезапуска.
+BindSlot(n) {
+    global apps, permSlots, dynSlots
+    if permSlots.Has(n) {
+        TrayTip("Слот " n " занят постоянной привязкой: " apps[permSlots[n]].name, "Ящик", 2)
+        return
+    }
+    if !(hwnd := PickActive()) {
+        TrayTip("Активное окно не годится для ящика", "Ящик", 2)
+        return
+    }
+    if (dynSlots.Has(n) && dynSlots[n] != hwnd)
+        Release(dynSlots[n])          ; прежнее окно возвращаем на место
+    dynSlots[n] := hwnd
+    TrayTip("Слот " n ": " WinGetTitle("ahk_id " hwnd), "Ящик", 1)
+}
+
+; Очистка динамических слотов. Постоянные не трогаем, программа
+; продолжает работать — это не выход.
+ClearDynamic() {
+    global dynSlots
+    for n, hwnd in dynSlots
+        Release(hwnd)
+    dynSlots.Clear()
+    TrayTip("Динамические привязки очищены", "Ящик", 1)
+}
+
+; Отпустить окно: вернуть на исходное место и забыть о нём. Окна,
+; которого уже нет, это не касается — WinMove просто не сработает.
+Release(hwnd) {
+    global state, watched
+    if watched.Has(hwnd)
+        watched.Delete(hwnd)
+    if !state.Has(hwnd)
+        return
+    st := state[hwnd]
+    if st.orig
+        try WinMove(st.orig.x, st.orig.y, st.orig.w, st.orig.h, "ahk_id " hwnd)
+    state.Delete(hwnd)
+}
+
+; Настройки динамического слота: общие, поверх которых кладутся
+; персональные, если для этого номера они заданы.
+SlotCfg(n) {
+    global dynamic, dynamicSlots
+    if !dynamicSlots.Has(n)
+        return dynamic
+    own := dynamicSlots[n]
+    return { name:           Opt(own, "name",           dynamic.name),
+             monitor:        Opt(own, "monitor",        dynamic.monitor),
+             edge:           Opt(own, "edge",           dynamic.edge),
+             width:          Opt(own, "width",          dynamic.width),
+             activateOnShow: Opt(own, "activateOnShow", dynamic.activateOnShow),
+             hideOnBlur:     Opt(own, "hideOnBlur",     dynamic.hideOnBlur) }
+}
+
+; Постоянный слот: окно ищется по настройкам приложения.
 ToggleApp(i) {
     global apps
     a := apps[i]
@@ -159,51 +264,8 @@ AppWindow(i, a) {
     return hwnd
 }
 
-; Временный ящик держит один конкретный hwnd. Ни курсор, ни то, какое
-; приложение активно сейчас, выбранное окно больше не меняют: из пяти
-; окон Chrome управляется ровно то, что было активно при запоминании.
-ToggleTemp() {
-    global temporary, tempHwnd
-
-    had := tempHwnd
-    if !TempAlive() {
-        if had                  ; окно только что закрыли — привязка сброшена
-            return
-        if !(tempHwnd := PickActive()) {
-            TrayTip("Активное окно не годится для ящика", "Ящик", 2)
-            return
-        }
-    }
-    ToggleWindow(tempHwnd, temporary)
-}
-
-; Фокус временного ящика новой привязки не создаёт: если окно не
-; запомнено, активировать нечего.
-FocusTemp() {
-    global temporary, tempHwnd
-
-    had := tempHwnd
-    if !TempAlive() {
-        if !had
-            TrayTip("Временное окно не запомнено", "Ящик", 2)
-        return
-    }
-    FocusWindow(tempHwnd, temporary)
-}
-
-; Жив ли запомненный hwnd. Закрытое окно сбрасывает привязку, чтобы
-; следующее нажатие запомнило новое.
-TempAlive() {
-    global tempHwnd
-    if (tempHwnd && !WinExist("ahk_id " tempHwnd)) {
-        tempHwnd := 0
-        TrayTip("Запомненное окно закрыто, привязка сброшена", "Ящик", 2)
-    }
-    return tempHwnd != 0
-}
-
-; Окно для временного ящика — активное сейчас. Рабочий стол и панель
-; задач не берём: их парковка сломала бы оболочку Windows.
+; Окно, которое назначается в слот, — активное сейчас. Рабочий стол и
+; панель задач не берём: их парковка сломала бы оболочку Windows.
 PickActive() {
     if !(hwnd := WinExist("A"))
         return 0
