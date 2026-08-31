@@ -71,18 +71,18 @@ Toggle(i) {
     side := a.side
     if HasNeighbor(side, L, T, R, B)
         side := (side = "right") ? "left" : "right"
-    slide := !HasNeighbor(side, L, T, R, B)   ; соседа нет — анимация уходит за настоящий край
+    doSlide := !HasNeighbor(side, L, T, R, B)   ; соседа нет — анимация уходит за настоящий край
 
     w  := Integer((R - L) * a.width / 100)
     h  := B - T
     sx := (side = "right") ? R - w : L
     hx := (side = "right") ? R     : L - w
-    st.geom := { sx: sx, hx: hx, y: T, w: w, h: h, slide: slide }
+    st.geom := { sx: sx, hx: hx, y: T, w: w, h: h, slide: doSlide }
 
-    WinMove(slide ? hx : sx, T, w, h, "ahk_id " hwnd)
+    WinMove(doSlide ? hx : sx, T, w, h, "ahk_id " hwnd)
     WinShow("ahk_id " hwnd)
     WinActivate("ahk_id " hwnd)
-    if slide
+    if doSlide
         Slide(hwnd, hx, sx, T, w, h)
     st.shown := true
 }
