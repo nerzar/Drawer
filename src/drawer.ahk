@@ -63,6 +63,9 @@ state     := Map()   ; hwnd -> { orig, geom }
 watched   := Map()   ; выдвинутые окна с hideOnBlur: hwnd -> настройки
 permSlots := Map()   ; номер слота -> индекс в apps
 dynSlots  := Map()   ; номер слота -> hwnd
+foreWnd   := WinExist("A")     ; окно из последнего события активации
+foreReal  := TrackedFore(foreWnd)  ; настоящее ли оно окно приложения
+lastFore  := 0                 ; последнее настоящее окно перед текущим
 
 ; Хоткеи ставятся через клавиатурный хук ($). RegisterHotkey отдаёт
 ; комбинацию первому, кто её занял: если предыдущий экземпляр ещё не
@@ -111,6 +114,17 @@ try {
 } catch as e
     MsgBox("Хоткей выхода не назначен:`n" e.Message, "Ящик")
 
+; Windows активировала окно — Alt+Tab, щелчок по значку на панели задач,
+; что угодно ещё. Если это окно ящика и оно припарковано, выдвигаем его.
+; Хук пассивный: ничего не перехватывает и не может сломать обычную
+; активацию, он только сообщает. Отдельная интеграция с панелью задач
+; поэтому не нужна.
+foreCb   := CallbackCreate(OnForeground, "F", 7)
+foreHook := DllCall("SetWinEventHook", "UInt", 0x0003, "UInt", 0x0003, "Ptr", 0
+                  , "Ptr", foreCb, "UInt", 0, "UInt", 0, "UInt", 0, "Ptr")
+if !foreHook
+    TrayTip("Активация припаркованных окон работать не будет", "Ящик", 2)
+
 OnExit(Cleanup)
 TrayTip("Хоткеев живо: " live, "Ящик запущен", 1)
 
@@ -144,6 +158,94 @@ OnClearHotkey(*) {
         ClearDynamic()
     catch as e
         TrayTip("Сбой: " e.Message, "Ящик", 3)
+}
+
+; Колбэк хука должен возвращать управление немедленно, поэтому вся
+; работа уходит в обычный поток через таймер. Заодно это гасит
+; дублирующиеся события: до срабатывания таймера остаётся последнее.
+OnForeground(hook, event, hwnd, idObject, idChild, thread, time) {
+    global foreWnd, foreReal, lastFore
+    if (idObject != 0 || !hwnd) ; OBJID_WINDOW: событие про само окно
+        return
+    if foreReal                 ; предыдущим считаем только настоящее окно
+        lastFore := foreWnd
+    foreWnd  := hwnd
+    foreReal := TrackedFore(hwnd)   ; проверяем сразу, пока окно живо
+    SetTimer(ForegroundWork, -1)
+}
+
+; Годится ли окно на роль «предыдущего». Переключатель Alt+Tab и панель
+; задач мелькают на долю секунды и к моменту обработки уже мертвы —
+; если считать их предыдущим окном, их исчезновение будет неотличимо от
+; того, что пользователь свернул своё окно. Поэтому проверяем в момент
+; события, пока окно ещё живо.
+TrackedFore(hwnd) {
+    if !hwnd
+        return false
+    try {
+        if !WinExist("ahk_id " hwnd)
+            return false
+        if (WinGetTitle("ahk_id " hwnd) = "")
+            return false
+        cls := WinGetClass("ahk_id " hwnd)
+        if (cls = "Progman" || cls = "WorkerW"
+            || cls = "Shell_TrayWnd" || cls = "Shell_SecondaryTrayWnd"
+            || cls = "XamlExplorerHostIslandWindow" || cls = "MultitaskingViewFrame")
+            return false
+        return !(WinGetExStyle("ahk_id " hwnd) & 0x00000080)    ; WS_EX_TOOLWINDOW
+    }
+    return false
+}
+
+; Показать имеет право только окно из самого события и только если оно
+; припарковано. Цикл «показали — событие — снова показали» гасится не
+; флагом, а фактом: после показа окно уже на экране, и повторное
+; событие от нашей же активации ничего не делает.
+ForegroundWork() {
+    global foreWnd, lastFore, state
+    Critical()
+    hwnd := foreWnd, prev := lastFore
+    if (!hwnd || !state.Has(hwnd) || !WinExist("ahk_id " hwnd))
+        return
+    if !(cfg := SlotOf(hwnd))               ; окно не наше — не трогаем
+        return
+    try {
+        WinGetPos(&x, &y, &w, &h, "ahk_id " hwnd)
+        if HitsMonitor(x, y, w, h)          ; видно на экране — не наше дело
+            return
+        ; Активация досталась панели по наследству: предыдущее настоящее
+        ; окно свернули или закрыли, и Windows отдала фокус следующему в
+        ; Z-порядке. Пользователь панель не выбирал — показывать нельзя,
+        ; но и оставлять фокус в невидимом окне тоже.
+        if Vanished(prev) {
+            RedirectFocus(hwnd)
+            return
+        }
+        Show(hwnd, cfg, state[hwnd])
+    } catch as e
+        TrayTip("Сбой: " e.Message, "Ящик", 3)
+}
+
+; Окно перестало быть активным потому, что исчезло, а не потому, что
+; пользователь выбрал другое: закрыто, скрыто или свёрнуто.
+Vanished(hwnd) {
+    if (!hwnd || !WinExist("ahk_id " hwnd))
+        return true
+    return WinGetMinMax("ahk_id " hwnd) = -1
+}
+
+; Каким слотом управляется это окно и с какими настройками.
+SlotOf(hwnd) {
+    global apps, managed, permSlots, dynSlots
+    for n, i in permSlots {
+        if (managed.Has(i) && managed[i] = hwnd)
+            return apps[i]
+    }
+    for n, h in dynSlots {
+        if (h = hwnd)
+            return SlotCfg(n)
+    }
+    return 0
 }
 
 OnFocusHotkey(i, *) {
@@ -308,13 +410,14 @@ FocusWindow(hwnd, cfg) {
 StateOf(hwnd) {
     global state
     if !state.Has(hwnd)
-        state[hwnd] := { orig: 0, geom: 0 }
+        state[hwnd] := { orig: 0, geom: 0, prev: 0 }
     return state[hwnd]
 }
 
 ; forceActivate — вызов из хоткея фокуса: он активирует окно даже при
 ; activateOnShow: false, иначе от него не было бы смысла.
 Show(hwnd, cfg, st, forceActivate := false) {
+    st.prev := PrevActive(hwnd)      ; кому вернуть фокус, когда уберём
     if (WinGetMinMax("ahk_id " hwnd) != 0)
         WinRestore("ahk_id " hwnd)
 
@@ -342,10 +445,66 @@ Hide(hwnd, st) {
     global watched
     if watched.Has(hwnd)
         watched.Delete(hwnd)
+    wasActive := WinActive("ahk_id " hwnd) ? true : false
     g := st.geom
     if g.slide
         Slide(hwnd, g.sx, g.sy, g.hx, g.hy, g.w, g.h)
     WinMove(g.px, g.py, g.w, g.h, "ahk_id " hwnd)   ; парковка вне всех мониторов
+    if wasActive
+        RestoreFocus(hwnd, st)
+}
+
+; Припаркованное окно не должно остаться активным: ввод уходил бы в
+; невидимое окно, а щелчок по значку на панели задач сворачивал бы его
+; вместо активации. Возвращаем фокус тому, что работало до показа, а
+; если его больше нет — верхнему подходящему окну по Z-порядку.
+RestoreFocus(parked, st) {
+    if FocusCandidate(st.prev, parked) {
+        WinActivate("ahk_id " st.prev)
+        return
+    }
+    RedirectFocus(parked)
+}
+
+; Увести фокус с припаркованного окна на верхнее подходящее по Z-порядку.
+RedirectFocus(parked) {
+    for hwnd in WinGetList() {
+        if FocusCandidate(hwnd, parked) {
+            WinActivate("ahk_id " hwnd)
+            return
+        }
+    }
+}
+
+; Кто был активен перед показом. Само выезжающее окно, оболочка и то,
+; что уже спрятано за краем, в кандидаты не годятся.
+PrevActive(skip) {
+    hwnd := WinExist("A")
+    return FocusCandidate(hwnd, skip) ? hwnd : 0
+}
+
+; Годится ли окно, чтобы отдать ему фокус. Проверка по факту: окно за
+; пределами всех мониторов не годится, кем бы оно ни было припарковано.
+FocusCandidate(hwnd, skip) {
+    if (!hwnd || hwnd = skip)
+        return false
+    try {
+        if !WinExist("ahk_id " hwnd)
+            return false
+        if (WinGetMinMax("ahk_id " hwnd) = -1)
+            return false
+        if !(WinGetStyle("ahk_id " hwnd) & 0x10000000)      ; WS_VISIBLE
+            return false
+        if (WinGetTitle("ahk_id " hwnd) = "")
+            return false
+        cls := WinGetClass("ahk_id " hwnd)
+        if (cls = "Progman" || cls = "WorkerW"
+            || cls = "Shell_TrayWnd" || cls = "Shell_SecondaryTrayWnd")
+            return false
+        WinGetPos(&x, &y, &w, &h, "ahk_id " hwnd)
+        return HitsMonitor(x, y, w, h)
+    }
+    return false
 }
 
 ; Слежение за потерей фокуса. Таймер живёт только пока есть выдвинутое
@@ -512,7 +671,9 @@ Slide(hwnd, fromX, fromY, toX, toY, w, h) {
 ; При выходе возвращаем окна на исходные места, чтобы ничего
 ; не осталось за пределами экранов.
 Cleanup(*) {
-    global state
+    global state, foreHook
+    if foreHook
+        DllCall("UnhookWinEvent", "Ptr", foreHook)
     for hwnd, st in state {
         if st.orig
             try WinMove(st.orig.x, st.orig.y, st.orig.w, st.orig.h, "ahk_id " hwnd)
