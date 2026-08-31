@@ -25,6 +25,7 @@ state   := Map()    ; hwnd -> состояние
 ^!1::Toggle(1)
 ^!2::Toggle(2)
 ^!3::Toggle(3)
+^!0::ExitApp()          ; выход: окна вернутся на исходные места
 
 OnExit(Cleanup)
 
@@ -54,7 +55,7 @@ Toggle(i) {
     }
     st := state[hwnd]
 
-    if st.shown {
+    if IsShown(hwnd, st) {
         g := st.geom
         if g.slide
             Slide(hwnd, g.sx, g.hx, g.y, g.w, g.h)
@@ -86,6 +87,21 @@ Toggle(i) {
     if doSlide
         Slide(hwnd, hx, sx, T, w, h)
     st.shown := true
+}
+
+; Выдвинуто ли окно на самом деле. Пользователь мог свернуть его руками
+; или перетащить — тогда сохранённое состояние врёт, и по хоткею надо
+; показывать окно, а не прятать уже спрятанное.
+IsShown(hwnd, st) {
+    if !st.shown
+        return false
+    if (WinGetMinMax("ahk_id " hwnd) != 0)
+        return false
+    WinGetPos(&x, , &w, , "ahk_id " hwnd)
+    vL := SysGet(76), vW := SysGet(78)
+    if (x >= vL + vW || x + w <= vL)        ; целиком за пределами мониторов
+        return false
+    return true
 }
 
 ; Настоящее окно приложения: видимое, с заголовком, разумного размера.
