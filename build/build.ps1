@@ -1,0 +1,50 @@
+﻿<#
+Собирает тестовый релиз Drawer: компилирует src\drawer.ahk в один exe
+(Ahk2Exe, без консоли, со своей иконкой) и складывает готовую папку
+Drawer-<version> рядом с config.ini, README.md и LICENSE.
+
+Использование:
+    powershell -ExecutionPolicy Bypass -File build\build.ps1
+    powershell -ExecutionPolicy Bypass -File build\build.ps1 -Version v0.2
+
+Ahk2Exe нужен один раз: скачать релиз с
+https://github.com/AutoHotkey/Ahk2Exe/releases и распаковать
+Ahk2Exe.exe в .tools\Ahk2Exe\ (эта папка — вне git, .gitignore).
+#>
+param(
+    [string]$Version = "v0.1"
+)
+
+$ErrorActionPreference = "Stop"
+$root      = Split-Path -Parent $PSScriptRoot
+$ahk2exe   = Join-Path $root ".tools\Ahk2Exe\Ahk2Exe.exe"
+$base      = "$env:LOCALAPPDATA\Programs\AutoHotkey\v2\AutoHotkey64.exe"
+$outDir    = Join-Path $root "dist\Drawer-$Version"
+$exeOut    = Join-Path $outDir "Drawer.exe"
+
+if (!(Test-Path $ahk2exe)) {
+    Write-Error "Не найден компилятор: $ahk2exe`nСкачайте релиз с https://github.com/AutoHotkey/Ahk2Exe/releases и распакуйте Ahk2Exe.exe в .tools\Ahk2Exe\"
+}
+if (!(Test-Path $base)) {
+    Write-Error "Не найден интерпретатор AutoHotkey v2: $base`nНужен для сборки как база компиляции (сам exe после сборки AutoHotkey не требует)."
+}
+
+New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+
+Write-Host "Компиляция $exeOut ..."
+$p = Start-Process -FilePath $ahk2exe -PassThru -Wait -NoNewWindow -ArgumentList @(
+    '/in',   (Join-Path $root "src\drawer.ahk"),
+    '/out',  $exeOut,
+    '/icon', (Join-Path $root "assets\icon.ico"),
+    '/base', $base
+)
+if ($p.ExitCode -ne 0) {
+    Write-Error "Ahk2Exe завершился с кодом $($p.ExitCode)"
+}
+
+Copy-Item (Join-Path $root "src\config.ini") $outDir -Force
+Copy-Item (Join-Path $root "README.md")      $outDir -Force
+Copy-Item (Join-Path $root "LICENSE")        $outDir -Force
+
+Write-Host "`nГотово: $outDir"
+Get-ChildItem $outDir | Format-Table Name, Length

@@ -11,52 +11,99 @@ CoordMode("Mouse", "Screen")   ; по умолчанию v2 отдаёт коо�
 ;   Ctrl+Alt+0        — очистить все динамические слоты
 ;   Ctrl+Alt+Shift+0  — выход, окна возвращаются на исходные места
 ;
-; Постоянные слоты: приложение ищется по процессу при каждом нажатии,
-; переживает перезапуск программы, назначить в такой слот другое окно
-; нельзя.
-;
-; slot           — номер слота, 1…9
-; name           — как приложение называется в уведомлениях
-; exe            — имя процесса
-; cls            — класс окна; "" если не важен
-; focusHotkey    — вернуть фокус: выдвинуть, если спрятано, и активировать.
-;                  "" — выключено. Сочетания Ctrl+Alt+Shift+N заняты
-;                  назначением слотов, поэтому по умолчанию Ctrl+Alt+Win+N
-; monitor        — "cursor" (монитор под курсором) или номер монитора: 1, 2, 3…
-; edge           — сторона выезда: "left", "right", "top", "bottom"
-; width          — размер панели в процентах от рабочей области монитора:
-;                  для left/right это ширина, для top/bottom — высота
-; activateOnShow — делать окно активным при выезде
-; hideOnBlur     — убирать окно, когда фокус ушёл в другое окно.
-;                  Работает только вместе с activateOnShow: окно, которое
-;                  не получало фокуса, не может его потерять
-apps := [
-    { slot: 1, name: "VS Code",  exe: "Code.exe",       cls: "Chrome_WidgetWin_1",
-      focusHotkey: "^!#1",
-      monitor: "cursor", edge: "right", width: 60,
-      activateOnShow: true, hideOnBlur: true },
-    { slot: 2, name: "PhpStorm", exe: "phpstorm64.exe", cls: "SunAwtFrame",
-      focusHotkey: "^!#2",
-      monitor: "cursor", edge: "right", width: 60,
-      activateOnShow: true, hideOnBlur: true }
-]
+; Все настройки — в config.ini рядом с программой (образец —
+; config.example.ini). Файл читается заново при каждом запуске, сама
+; программа его никогда не переписывает. После правки — перезапустить.
+configPath := A_ScriptDir "\config.ini"
+if !FileExist(configPath) {
+    MsgBox("Не найден config.ini рядом с программой:`n" configPath
+         "`n`nСкопируйте config.example.ini в config.ini и настройте под себя.",
+         "Ящик", 16)
+    ExitApp()
+}
 
-; Динамические слоты: свободные номера, в которые окно назначается на
-; ходу. Запоминается дескриптор конкретного окна, а не приложение.
-; Привязки живут до очистки или до перезапуска программы.
-dynamic := { name: "Слот",
-             monitor: "cursor", edge: "right", width: 60,
-             activateOnShow: true, hideOnBlur: true }
-
-; Персональные настройки отдельного слота, если понадобятся. Поля, не
-; указанные здесь, берутся из dynamic. Пример:
-;   dynamicSlots[5] := { edge: "left", width: 40 }
+apps         := []
+dynamic      := {}
 dynamicSlots := Map()
-
-animMs     := 160     ; длительность анимации, мс
-animSteps  := 14      ; 0 — выключить анимацию
-blurMs     := 250     ; как часто проверять потерю фокуса, мс
+animMs       := 160
+animSteps    := 14
+blurMs       := 250
+LoadConfig(configPath, &apps, &dynamic, &dynamicSlots, &animMs, &animSteps, &blurMs)
 ; =================================================================
+
+; Читает config.ini в структуры программы. Числовые и строковые поля
+; (monitor, edge, width, animMs…) идут в апп как есть — их as-is уже
+; проверяют ResolveMonitor/ComputeGeom при показе и сообщают об ошибке
+; через тот же try/catch, что и раньше (N2). Отдельно проверяются
+; только activateOnShow/hideOnBlur: непустая строка "false" в AHK
+; истинна, поэтому её нужно явно разобрать, а не просто передать дальше.
+LoadConfig(path, &apps, &dynamic, &dynamicSlots, &animMs, &animSteps, &blurMs) {
+    animMs    := IniRead(path, "general", "animMs", 160)
+    animSteps := IniRead(path, "general", "animSteps", 14)
+    blurMs    := IniRead(path, "general", "blurMs", 250)
+
+    permSlotNums := Map()
+    Loop 9 {
+        n := A_Index
+        section := "slot" n
+        exe := IniRead(path, section, "exe", "")
+        if (exe = "")   ; поля нет или оно пустое — слот остаётся динамическим
+            continue
+        apps.Push({
+            slot: n,
+            name: IniRead(path, section, "name", "Слот " n),
+            exe: exe,
+            cls: IniRead(path, section, "cls", ""),
+            focusHotkey: IniRead(path, section, "focusHotkey", ""),
+            monitor: IniRead(path, section, "monitor", "cursor"),
+            edge: IniRead(path, section, "edge", "right"),
+            width: IniRead(path, section, "width", 60),
+            activateOnShow: IniBool(path, section, "activateOnShow", true),
+            hideOnBlur: IniBool(path, section, "hideOnBlur", true)
+        })
+        permSlotNums[n] := true
+    }
+
+    dynamic := {
+        name: IniRead(path, "dynamic", "name", "Слот"),
+        monitor: IniRead(path, "dynamic", "monitor", "cursor"),
+        edge: IniRead(path, "dynamic", "edge", "right"),
+        width: IniRead(path, "dynamic", "width", 60),
+        activateOnShow: IniBool(path, "dynamic", "activateOnShow", true),
+        hideOnBlur: IniBool(path, "dynamic", "hideOnBlur", true)
+    }
+
+    Loop 9 {
+        n := A_Index
+        section := "dynamicSlot" n
+        if (IniRead(path, section, , "") = "")   ; секции нет или она пуста
+            continue
+        if permSlotNums.Has(n) {
+            MsgBox("[" section "] задан в config.ini, но слот " n " уже постоянный ([slot" n "]) — динамические настройки для него не действуют", "Ящик")
+            continue
+        }
+        dynamicSlots[n] := {
+            name: IniRead(path, section, "name", dynamic.name),
+            monitor: IniRead(path, section, "monitor", dynamic.monitor),
+            edge: IniRead(path, section, "edge", dynamic.edge),
+            width: IniRead(path, section, "width", dynamic.width),
+            activateOnShow: IniBool(path, section, "activateOnShow", dynamic.activateOnShow),
+            hideOnBlur: IniBool(path, section, "hideOnBlur", dynamic.hideOnBlur)
+        }
+    }
+}
+
+; "true"/"false" — единственный ожидаемый формат. Непустая строка "false"
+; сама по себе истинна в AHK, поэтому её нельзя передавать в Opt() как есть.
+IniBool(path, section, key, def) {
+    v := IniRead(path, section, key, def ? "true" : "false")
+    if (v = "true")
+        return true
+    if (v = "false")
+        return false
+    MsgBox("config.ini: [" section "] " key "=" v " — ожидается true или false, взято " (def ? "true" : "false"), "Ящик")
+    return def
+}
 
 managed   := Map()   ; индекс приложения -> hwnd
 state     := Map()   ; hwnd -> { orig, geom }
@@ -70,14 +117,10 @@ lastFore  := 0                 ; окно, которое было активн�
 ; комбинацию первому, кто её занял: если предыдущий экземпляр ещё не
 ; умер, новый молча остаётся без клавиш — процесс жив, хоткеи мертвы.
 ; Хук от этого не зависит.
-for i, a in apps {
-    if !(a.slot >= 1 && a.slot <= 9)
-        MsgBox("У " a.name " номер слота " a.slot ", а слоты только 1…9", "Ящик")
-    else if permSlots.Has(a.slot)
-        MsgBox("Слот " a.slot " занят дважды: " apps[permSlots[a.slot]].name " и " a.name, "Ящик")
-    else
-        permSlots[a.slot] := i
-}
+; Номер слота — секция config.ini (slot1…slot9), поэтому дубликат или
+; выход за 1…9 структурно невозможен, в отличие от прежних литералов.
+for i, a in apps
+    permSlots[a.slot] := i
 
 live := 0
 Loop 9 {
@@ -537,12 +580,35 @@ WatchBlur() {
             watched.Delete(hwnd)
             continue
         }
-        if WinActive("ahk_id " hwnd)
+        if StillFocused(hwnd)
             continue
         try Hide(hwnd, st)
     }
     if !watched.Count
         SetTimer(WatchBlur, 0)
+}
+
+; Не потеря фокуса, а всплывающее меню того же приложения: у Qt-программ
+; (Telegram и подобных) контекстное меню — отдельное окно верхнего
+; уровня, и на миг само становится передним планом, хотя пользователь
+; никуда не уходил. У VS Code и Steam меню передний план не перехватывает
+; вообще — там первая проверка (WinActive) отвечает сама. Отличаем
+; всплывающее окно от честной потери фокуса тем же признаком, что уже
+; использует TrackedFore() для служебных окон — WS_EX_TOOLWINDOW, — и
+; только если оно принадлежит тому же процессу, что и слот: чужой
+; тултип чужого приложения фокусом слота не считается.
+StillFocused(hwnd) {
+    if WinActive("ahk_id " hwnd)
+        return true
+    try {
+        fore := WinExist("A")
+        if !fore
+            return false
+        if !(WinGetExStyle("ahk_id " fore) & 0x00000080)    ; WS_EX_TOOLWINDOW
+            return false
+        return WinGetPID("ahk_id " fore) = WinGetPID("ahk_id " hwnd)
+    }
+    return false
 }
 
 ; Выдвинуто ли окно на самом деле. Пользователь мог свернуть его,

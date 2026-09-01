@@ -1,2 +1,7 @@
 *.log
 tmp/
+
+# downloaded build tool (Ahk2Exe), fetched by build/build.ps1
+.tools/
+# build output
+dist/
