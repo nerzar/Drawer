@@ -110,6 +110,7 @@ state     := Map()   ; hwnd -> { orig, geom }
 watched   := Map()   ; выдвинутые окна с hideOnBlur: hwnd -> настройки
 permSlots := Map()   ; номер слота -> индекс в apps
 dynSlots  := Map()   ; номер слота -> hwnd
+notified  := Map()   ; текст уведомления -> true, пока оно ещё актуально
 foreWnd   := WinExist("A")     ; текущее окно переднего плана
 lastFore  := 0                 ; окно, которое было активно до него
 
@@ -165,13 +166,31 @@ foreCb   := CallbackCreate(OnForeground, "F", 7)
 foreHook := DllCall("SetWinEventHook", "UInt", 0x0003, "UInt", 0x0003, "Ptr", 0
                   , "Ptr", foreCb, "UInt", 0, "UInt", 0, "UInt", 0, "Ptr")
 if !foreHook
-    TrayTip("Активация припаркованных окон работать не будет", "Ящик", 2)
+    Notify("Активация припаркованных окон работать не будет", "Ящик", 2)
 
 OnExit(Cleanup)
-TrayTip("Хоткеев живо: " live, "Ящик запущен", 1)
+Notify("Хоткеев живо: " live, "Ящик запущен", 1)
 
 Hooked(hk) {
     return (SubStr(hk, 1, 1) = "$") ? hk : "$" hk
+}
+
+; Windows ставит каждый TrayTip в свою очередь показа и не знает, что
+; такой же уже показан или ждёт своей очереди — быстрые повторные
+; нажатия одного хоткея (например, пустого слота) копятся и всплывают
+; ещё долго после того, как пользователь перестал жать. Дедуп — по
+; тексту с заголовком: номер слота уже часть текста ("Слот 3 пуст"),
+; поэтому разные слоты друг другу не мешают сами по себе. Одинаковое
+; уведомление можно показать снова, как только пройдёт время, за
+; которое прежнее успевает и показаться, и исчезнуть.
+Notify(text, title := "Ящик", opt := 1) {
+    global notified
+    key := title "|" text
+    if notified.Has(key)
+        return
+    notified[key] := true
+    SetTimer(() => notified.Delete(key), -4000)
+    TrayTip(text, title, opt)
 }
 
 ; Настройка приложения со значением по умолчанию: запись в apps можно
@@ -185,21 +204,21 @@ OnSlot(n, *) {
     try
         ToggleSlot(n)
     catch as e
-        TrayTip("Сбой: " e.Message, "Ящик", 3)
+        Notify("Сбой: " e.Message, "Ящик", 3)
 }
 
 OnSlotBind(n, *) {
     try
         BindSlot(n)
     catch as e
-        TrayTip("Сбой: " e.Message, "Ящик", 3)
+        Notify("Сбой: " e.Message, "Ящик", 3)
 }
 
 OnClearHotkey(*) {
     try
         ClearDynamic()
     catch as e
-        TrayTip("Сбой: " e.Message, "Ящик", 3)
+        Notify("Сбой: " e.Message, "Ящик", 3)
 }
 
 ; Колбэк хука должен возвращать управление немедленно, поэтому вся
@@ -273,7 +292,7 @@ ForegroundWork() {
         }
         Show(hwnd, cfg, state[hwnd], false, prev)
     } catch as e
-        TrayTip("Сбой: " e.Message, "Ящик", 3)
+        Notify("Сбой: " e.Message, "Ящик", 3)
 }
 
 ; Окно перестало быть активным потому, что исчезло, а не потому, что
@@ -302,7 +321,7 @@ OnFocusHotkey(i, *) {
     try
         FocusApp(i)
     catch as e
-        TrayTip("Сбой: " e.Message, "Ящик", 3)
+        Notify("Сбой: " e.Message, "Ящик", 3)
 }
 
 ; Слот: постоянный ищет своё приложение по процессу, динамический
@@ -314,14 +333,14 @@ ToggleSlot(n) {
         return
     }
     if !dynSlots.Has(n) {
-        TrayTip("Слот " n " пуст", "Ящик", 2)
+        Notify("Слот " n " пуст", "Ящик", 2)
         return
     }
     hwnd := dynSlots[n]
     if !WinExist("ahk_id " hwnd) {
         dynSlots.Delete(n)
         Release(hwnd)
-        TrayTip("Окно слота " n " закрыто, слот освобождён", "Ящик", 2)
+        Notify("Окно слота " n " закрыто, слот освобождён", "Ящик", 2)
         return
     }
     ToggleWindow(hwnd, SlotCfg(n))
@@ -333,17 +352,17 @@ ToggleSlot(n) {
 BindSlot(n) {
     global apps, permSlots, dynSlots
     if permSlots.Has(n) {
-        TrayTip("Слот " n " занят постоянной привязкой: " apps[permSlots[n]].name, "Ящик", 2)
+        Notify("Слот " n " занят постоянной привязкой: " apps[permSlots[n]].name, "Ящик", 2)
         return
     }
     if !(hwnd := PickActive()) {
-        TrayTip("Активное окно не годится для ящика", "Ящик", 2)
+        Notify("Активное окно не годится для ящика", "Ящик", 2)
         return
     }
     if (dynSlots.Has(n) && dynSlots[n] != hwnd)
         Release(dynSlots[n])          ; прежнее окно возвращаем на место
     dynSlots[n] := hwnd
-    TrayTip("Слот " n ": " WinGetTitle("ahk_id " hwnd), "Ящик", 1)
+    Notify("Слот " n ": " WinGetTitle("ahk_id " hwnd), "Ящик", 1)
 }
 
 ; Очистка динамических слотов. Постоянные не трогаем, программа
@@ -353,7 +372,7 @@ ClearDynamic() {
     for n, hwnd in dynSlots
         Release(hwnd)
     dynSlots.Clear()
-    TrayTip("Динамические привязки очищены", "Ящик", 1)
+    Notify("Динамические привязки очищены", "Ящик", 1)
 }
 
 ; Отпустить окно: вернуть на исходное место и забыть о нём. Окна,
@@ -390,7 +409,7 @@ ToggleApp(i) {
     global apps
     a := apps[i]
     if !(hwnd := AppWindow(i, a)) {
-        TrayTip("Окно не найдено: " a.name, "Ящик", 2)
+        Notify("Окно не найдено: " a.name, "Ящик", 2)
         return
     }
     ToggleWindow(hwnd, a)
@@ -400,7 +419,7 @@ FocusApp(i) {
     global apps
     a := apps[i]
     if !(hwnd := AppWindow(i, a)) {
-        TrayTip("Окно не найдено: " a.name, "Ящик", 2)
+        Notify("Окно не найдено: " a.name, "Ящик", 2)
         return
     }
     FocusWindow(hwnd, a)
