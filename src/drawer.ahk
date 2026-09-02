@@ -591,8 +591,14 @@ Watch(hwnd, cfg) {
 
 ; Убираем только то окно, которое выдвинул Ящик и которое он же
 ; активировал. Обычные окна таймер не трогает.
+; Critical — по той же причине, что и в ToggleWindow, только с другой
+; стороны: Hide идёт через Slide со Sleep внутри, а Sleep — это место,
+; где AHK запускает другой поток. Без Critical хоткей или показ по
+; событию активации успевали целиком отработать посередине уборки, и
+; уже показанное окно тут же допрятывалось остатком старой анимации.
 WatchBlur() {
     global watched, state
+    Critical()
     for hwnd in watched.Clone() {
         st := state.Has(hwnd) ? state[hwnd] : 0
         if (!st || !WinExist("ahk_id " hwnd) || !IsDeployed(hwnd, st)) {
