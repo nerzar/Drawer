@@ -5,9 +5,7 @@
 A lightweight Windows utility that lets you park any window off-screen
 and bring it back instantly with a hotkey — like a drawer on your desk.
 
-![Drawer](assets/drawer-preview.png)
-
-![Drawer demo](assets/demo.gif)
+![How Drawer works](assets/drawer-preview.png)
 
 ## Why Drawer?
 
@@ -18,6 +16,13 @@ and bring it back instantly with a hotkey — like a drawer on your desk.
 - 👻 Works with Alt+Tab and the taskbar
 - 🎨 Configurable drawer position, size and behavior
 - 📦 Portable — no installation required
+
+## See it work
+
+Telegram waits outside the screen, comes in over a fullscreen game and
+goes back — nothing minimised, nothing closed, the game keeps running.
+
+![Drawer demo](assets/demo.gif)
 
 ## Quick Start
 
@@ -38,6 +43,8 @@ That's it.
 | `Ctrl + Alt + Shift + 0` | Exit Drawer and restore all windows |
 
 ### How dynamic slots work
+
+![A slot sliding in and out](assets/how-it-works.gif)
 
 Press `Ctrl + Alt + Shift + N` while the window you want is active.
 
