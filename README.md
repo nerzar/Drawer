@@ -26,10 +26,14 @@ goes back — nothing minimised, nothing closed, the game keeps running.
 
 ## Quick Start
 
-1. Download `Drawer-v0.1.zip` from **Releases**.
+1. Download `Drawer-v0.1.1-beta.zip` from **Releases**.
 2. Extract it anywhere.
 3. Edit `config.ini` if you want to customize the default setup.
 4. Run `Drawer.exe`.
+
+All nine slots are dynamic out of the box — bind whatever you like with
+`Ctrl + Alt + Shift + N`. `SETUP.md` in the archive explains every option
+in `config.ini`.
 
 That's it.
 
