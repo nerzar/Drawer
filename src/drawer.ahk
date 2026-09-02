@@ -596,7 +596,8 @@ WatchBlur() {
     for hwnd in watched.Clone() {
         st := state.Has(hwnd) ? state[hwnd] : 0
         if (!st || !WinExist("ahk_id " hwnd) || !IsDeployed(hwnd, st)) {
-            watched.Delete(hwnd)
+            if watched.Has(hwnd)
+                watched.Delete(hwnd)
             continue
         }
         if StillFocused(hwnd)
