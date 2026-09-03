@@ -1,6 +1,6 @@
 # PROJECT_STATE — Drawer
 
-*Handoff document for the next session. Verified against repo at commit 72f24a0 on 2026-09-03.*
+*Handoff document for the next session. Verified against repo at commit 046b92c on 2026-09-03.*
 
 ---
 
@@ -12,10 +12,10 @@
 |---|---|
 | Version | `0.1.2-beta` (line 10 of `src/drawer.ahk`) |
 | Tag | `v0.1.2-beta` |
-| Current commit | `72f24a0` — SETUP.md: shorter, English, no stale promises |
+| Current commit | `046b92c` — docs: add project state handoff |
 | Branch | `master` |
 | Remote | `origin` → `https://github.com/nerzar/Drawer` |
-| Working tree | Clean (untracked: `test/vm-transfer/` — scratch files from VM session, not committed) |
+| Working tree | Clean locally; 1 commit ahead of origin/master (this file, not pushed). Untracked: `test/vm-transfer/` — VM scratch scripts, intentionally uncommitted. |
 
 ---
 
@@ -63,7 +63,7 @@ Registered via AHK keyboard hook (`$` prefix) to avoid conflicts with RegisterHo
 
 | Hotkey | Action |
 |---|---|
-| Ctrl+Alt+1…9 | Toggle slot N (deploy if parked, park if deployed, or bind+park if slot empty for permanent slots) |
+| Ctrl+Alt+1…9 | Toggle slot N: permanent slot → find window by exe, show/park it (silent if app not running); dynamic slot → show/park bound window; empty dynamic slot → silent no-op |
 | Ctrl+Alt+Shift+1…9 | Bind current foreground window to dynamic slot N, notify |
 | Ctrl+Alt+0 | Clear all dynamic slots (release windows to original positions) |
 | Ctrl+Alt+Shift+0 | Exit, release all slots |
@@ -152,7 +152,6 @@ Exit code 0 = all green. Logs in `%TEMP%\drawer-test\<suite>\`.
 | off | off.ahk | `handles=false`: no handles, rest works normally |
 | apps | apps.ahk | VS Code, Telegram, Chrome (requires them installed) |
 | browser | browser.ahk | Chrome full cycle |
-| restart | restart.ahk | Driver for restart scenarios |
 
 ### Last known results (host)
 
@@ -336,6 +335,8 @@ Stop-Process and similar WMI-based process control from guestcontrol (Session 0)
 **NEXT PLANNED STAGE: Settings**
 
 The app currently has no in-app settings UI. All configuration is done by editing `config.ini` manually. The next stage is to design and implement a Settings interface.
+
+**The next Claude must NOT implement Settings immediately. Read the repo, propose architecture, get approval first.**
 
 ### What the next Claude should do
 
