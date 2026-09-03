@@ -1,163 +1,97 @@
-# Drawer (Ящик)
+# Drawer — setup
 
-## Что это
+Reference for `config.ini`. For what Drawer is and how to start, see
+`README.md` (the short one, also on the project page).
 
-Выезжающая панель для окон Windows. Хоткей выдвигает окно приложения
-сбоку экрана поверх остальных, повторный хоткей убирает его за край.
-Окно не закрывается и не сворачивается — оно просто откладывается в
-сторону и ждёт, пока не понадобится снова.
+## Run
 
-Написано после того, как готовое приложение с похожей идеей (WTQ)
-оказалось на практике нерабочим: падало на свёрнутых окнах, зависало
-на служебных окнах PhpStorm, а зависший экземпляр блокировал все
-последующие запуски.
+1. Extract `Drawer-v0.1.2-beta` anywhere.
+2. Run `Drawer.exe`.
 
-## Что он делает
+A tray notification shows the version and how many hotkeys registered.
+Fewer than expected means another program already holds some of them.
+Launching again replaces the running instance — no need to exit first.
 
-- Держит окно приложения (например, редактор кода или мессенджер) вне
-  экрана и выдвигает его по хоткею — как ящик стола.
-- Девять пронумерованных слотов, у каждого свой хоткей `Ctrl+Alt+1…9`.
-- Слот может быть **постоянным** (всегда одно и то же приложение) или
-  **динамическим** (вы сами назначаете в него любое открытое окно).
-- Окно можно выдвинуть и с фокусом (сразу начать в нём работать), и
-  без — просто чтобы подсмотреть, оставаясь в текущем окне.
-- Работает через Alt+Tab и панель задач как обычное окно.
-- Явный выход возвращает все окна на исходные места.
+`Drawer.exe` is self-contained; AutoHotkey is not required. Windows 10/11.
+If `config.ini` is missing next to the exe, Drawer says so and stops
+rather than starting half-configured.
 
-## Требования
+## Hotkeys
 
-- Windows 10/11.
-- Ничего больше не нужно: `Drawer.exe` — самостоятельный файл,
-  устанавливать AutoHotkey не требуется.
-
-## Как запустить
-
-1. Распакуйте папку `Drawer-v0.1.1-beta` куда угодно.
-2. Откройте `config.ini` и посмотрите, что там — по умолчанию слоты 1
-   и 2 привязаны к VS Code и PhpStorm, остальные свободны (раздел
-   «Настройка» ниже).
-3. Запустите `Drawer.exe` двойным щелчком.
-
-При запуске появится уведомление «Ящик запущен, хоткеев живо: N» —
-если его нет или число меньше ожидаемого, значит часть хоткеев не
-встала (обычно потому, что заняты другой программой).
-
-Повторный запуск не конфликтует с первым: новый экземпляр вытесняет
-старый, второй раз выходить не нужно.
-
-## Настройка — config.ini
-
-Все настройки — в `config.ini` рядом с `Drawer.exe`. Программа читает
-его заново при каждом запуске и никогда сама не изменяет — можно
-редактировать в любой момент, изменения применятся после перезапуска.
-
-Файл — обычный текст с построчными комментариями (открывается
-Блокнотом). В нём уже есть подробные комментарии к каждой настройке и
-закомментированные примеры — обычно достаточно поменять несколько
-очевидных значений и сохранить:
-
-| Что настроить | Где |
+| Hotkey | Action |
 |---|---|
-| Какие приложения — постоянные слоты | секции `[slot1]`…`[slot9]` |
-| Монитор, сторона выезда, ширина панели | `monitor`, `edge`, `width` в любой секции слота |
-| Забирать ли фокус при выезде | `activateOnShow` |
-| Убирать ли панель при потере фокуса | `hideOnBlur` |
-| Хоткей возврата фокуса для постоянного слота | `focusHotkey` |
-| Настройки динамических слотов по умолчанию | `[dynamic]` |
-| Персональные настройки одного динамического слота | `[dynamicSlotN]` (пример закомментирован в файле) |
-| Длительность анимации, частота проверки фокуса | `[general]` |
+| `Ctrl+Alt+1…9` | show / hide the slot |
+| `Ctrl+Alt+Shift+1…9` | bind the active window to the slot |
+| `Ctrl+Alt+0` | clear all dynamic slots, windows return home |
+| `Ctrl+Alt+Shift+0` | exit, windows return home |
+| `focusHotkey` | optional per-slot hotkey that only restores focus |
 
-Важно: комментарий (`;`) должен стоять на отдельной строке — `;` в
-конце строки со значением не сработает, программа прочитает его как
-часть значения. Файл сохранён в Юникоде — если правите русский текст
-не в Блокноте, сохраняйте в той же кодировке (обычно называется
-«Unicode» или «UTF-16 LE»), не в UTF-8.
+## Slots
 
-Если `config.ini` не найден рядом с `Drawer.exe`, программа покажет
-об этом сообщение и не запустится — упасть молча она не может.
+All nine slots are **dynamic** out of the box: empty until you press
+`Ctrl+Alt+Shift+N`. That binds the *exact window* that was active, not
+the application — one Chrome window out of five. Rebinding an occupied
+slot sends the old window home. Dynamic bindings are forgotten on exit.
 
-## Хоткеи
+A slot becomes **permanent** by adding a `[slotN]` section with `exe=`.
+It finds its application by process name on every press, so it survives
+restarting that application, and `Ctrl+Alt+Shift+N` refuses to overwrite
+it. With several windows of one application it takes the largest.
 
-| Хоткей | Действие |
-|---|---|
-| `Ctrl+Alt+1…9` | выдвинуть / убрать окно слота |
-| `Ctrl+Alt+Shift+1…9` | запомнить в слоте текущее активное окно |
-| `Ctrl+Alt+0` | очистить динамические слоты, окна вернутся на исходные места |
-| `Ctrl+Alt+Shift+0` | выход из программы, окна вернутся на исходные места |
-| `Ctrl+Alt+Win+1…2` | вернуть фокус в постоянный слот (по умолчанию — слоты 1 и 2) |
+## config.ini
 
-## Постоянная привязка
+Plain text next to `Drawer.exe`, read at startup and never written by
+Drawer. Every option is documented inline in the file itself.
 
-Постоянный слот описан в `config.ini` секцией `[slotN]` и ищет своё
-приложение по имени процесса при каждом нажатии — переживает
-перезапуск программы. Такой слот защищён: `Ctrl+Alt+Shift+N` его не
-перезапишет, а скажет, что он занят.
+| Setting | Where | Meaning |
+|---|---|---|
+| `exe`, `cls` | `[slotN]` | makes the slot permanent |
+| `monitor` | any slot section | `1`, `2`, … or `cursor` |
+| `edge` | any slot section | `left`, `right`, `top`, `bottom` |
+| `width` | any slot section | percent of the screen the drawer takes |
+| `activateOnShow` | any slot section | take focus when sliding in |
+| `hideOnBlur` | any slot section | hide again when focus leaves |
+| `focusHotkey` | `[slotN]` | hotkey that focuses without toggling |
+| defaults | `[dynamic]` | applies to every dynamic slot |
+| overrides | `[dynamicSlotN]` | settings for one dynamic slot |
+| `handles` | `[general]` | edge handles, on by default |
+| `animMs`, `animSteps`, `blurMs` | `[general]` | animation and focus polling |
 
-По умолчанию слоты 1 и 2 — VS Code и PhpStorm, слоты 3–9 свободны.
+Two traps: a `;` comment must sit on its own line — trailing comments
+become part of the value; and the file is UTF-16, so keep that encoding
+if your editor asks.
 
-## Динамическая привязка
+## Edge handles
 
-Слот без секции `[slotN]` в конфиге — динамический, пуст до тех пор,
-пока вы не назначите в него окно через `Ctrl+Alt+Shift+N`.
-Запоминается конкретное окно, а не приложение: из пяти окон Chrome
-слотом станет ровно то, что было активно в момент назначения. Переход
-в другое приложение и курсор на другом мониторе выбор не меняют.
+Each parked window leaves a small tile with its application icon at its
+edge of the monitor. Move the pointer close and it grows and shows the
+slot number; click it and the slot slides in — the same thing the hotkey
+does. The deployed slot has no tile, its neighbours keep theirs, so you
+can switch between parked windows with the mouse alone.
 
-Назначить окно в занятый динамический слот можно в любой момент —
-прежнее окно вернётся на исходное место, слот начнёт управлять новым.
+Set `handles=false` in `[general]` to turn this off entirely.
 
-Динамические привязки живут только пока работает программа — после
-перезапуска слоты снова пусты.
+## Known limitations
 
-## Сброс динамических привязок
+- Killing the process instead of exiting with `Ctrl+Alt+Shift+0` leaves
+  parked windows off-screen. Restart Drawer, bind them again and exit
+  properly, or move them back with another tool.
+- Mashing a hotkey queues the presses: after ~24 rapid presses the window
+  keeps moving for about six seconds.
+- When the chosen edge faces a second monitor, the slot appears and
+  disappears instantly — animating there would show the window on the
+  neighbouring screen.
+- A fullscreen window that is itself always-on-top covers the handles.
+- Only one dynamic slot cannot be cleared on its own — clear all, or
+  close the window and the slot frees itself.
+- Managed windows stay in Alt+Tab and on the taskbar. Handles do not.
+- No autostart.
+- Display scaling other than 100% and monitor layouts other than
+  side-by-side are untested.
 
-`Ctrl+Alt+0` очищает все динамические слоты разом: окна возвращаются
-на исходные места, привязки забываются, программа продолжает
-работать. Постоянные слоты это не затрагивает. Освободить один
-динамический слот отдельно нельзя — только все сразу (либо закрыть
-окно слота, и он освободится сам).
+## Development
 
-## Полный выход
-
-`Ctrl+Alt+Shift+0` — единственный штатный способ закрыть программу.
-Все выдвинутые и припаркованные окна возвращаются на исходные места
-перед выходом, ничего не остаётся спрятанным за краем экрана.
-
-## Известные ограничения тестовой версии
-
-- При нескольких окнах одного приложения постоянный слот берёт окно
-  наибольшей площади. Динамический этим не страдает: он помнит
-  конкретное окно.
-- Динамические слоты забываются при перезапуске программы.
-- Освободить один динамический слот отдельно нельзя — только очистить
-  все сразу.
-- Если к выбранному краю примыкает другой монитор, выезд и уезд без
-  анимации, рывком.
-- Края `top` и `bottom` реализованы, но проверены меньше, чем `left`/`right`.
-- Мониторы с разным масштабом (DPI) не проверялись.
-- Автозапуска нет: программа запускается вручную.
-- Окно остаётся в Alt+Tab и на панели задач (так и задумано на этом
-  этапе — см. «Что дальше»).
-
-## Что дальше
-
-Отложено до обратной связи от первых тестов: убрать окно из Alt+Tab
-по желанию, освобождение одного динамического слота, выбор конкретного
-окна при нескольких окнах одного приложения, автозапуск.
-
-## Разработка
-
-Исходники — `src/drawer.ahk` (нужен [AutoHotkey v2](https://www.autohotkey.com/)
-для запуска без сборки) и `src/config.ini`. Сборка exe — `build/build.ps1`
-(нужен компилятор [Ahk2Exe](https://github.com/AutoHotkey/Ahk2Exe/releases),
-инструкция — в самом скрипте). Подробности решений и история требований —
-в `docs/`, ниже.
-
-| Файл | О чём |
-|---|---|
-| `docs/01-бриф.md` | задача, пользователь, критерии успеха |
-| `docs/02-требования.md` | требования с приоритетами v1 и «потом» |
-| `docs/03-решения.md` | принятые решения и причины каждого |
-| `docs/04-чек-лист-приёмки.md` | сценарии проверки и замеры прогона |
-| `docs/05-план-работ.md` | что сделано и что дальше, по этапам |
-| `docs/06-почему-не-wtq.md` | отказы предшественника с выдержками из логов |
+`src/drawer.ahk` runs directly under [AutoHotkey v2](https://www.autohotkey.com/);
+`build/build.ps1` compiles the exe with [Ahk2Exe](https://github.com/AutoHotkey/Ahk2Exe/releases).
+`test/` is the test bench — see `test/README.md`. Design notes and the
+requirement history live in `docs/`, in Russian.
