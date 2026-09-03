@@ -44,6 +44,14 @@ LoadConfig(configPath, &apps, &dynamic, &dynamicSlots, &animMs, &animSteps, &blu
 ; только activateOnShow/hideOnBlur: непустая строка "false" в AHK
 ; истинна, поэтому её нужно явно разобрать, а не просто передать дальше.
 LoadConfig(path, &apps, &dynamic, &dynamicSlots, &animMs, &animSteps, &blurMs, &handlesOn) {
+    ; Функцию должно быть можно вызвать повторно: настройки перечитывают
+    ; конфиг после записи тем же вызовом, которым программа поднимается.
+    ; Без сброса apps.Push() дописал бы второй комплект постоянных слотов
+    ; к прежнему, а dynamicSlots сохранил бы секции, которых в файле уже
+    ; нет: обе структуры заполняются добавлением, а не заменой.
+    apps         := []
+    dynamicSlots := Map()
+
     animMs    := IniRead(path, "general", "animMs", 160)
     animSteps := IniRead(path, "general", "animSteps", 14)
     blurMs    := IniRead(path, "general", "blurMs", 250)
@@ -123,6 +131,8 @@ notified  := Map()   ; текст уведомления -> true, пока он�
 handles   := Map()   ; номер слота -> кромка припаркованного окна
 handleMode := 0      ; режим опроса кромок: 0 нет, 1 редкий, 2 частый
 handleSync := 0      ; тактов до следующей полной пересборки кромок
+setGui    := 0       ; окно настроек, пока оно открыто
+setUI     := 0       ; его контролы и значения, с которыми окно открылось
 foreWnd   := WinExist("A")     ; текущее окно переднего плана
 lastFore  := 0                 ; окно, которое было активно до него
 
@@ -210,6 +220,10 @@ HANDLE_FAST  := 16
 HANDLE_SYNC  := 4
 OnMessage(0x0201, HandleClick)      ; WM_LBUTTONDOWN
 
+; Единственный собственный пункт в меню трея. Хоткея у настроек нет
+; намеренно: клавиши заданы номером слота и не раздаются под другое (Р16).
+A_TrayMenu.Insert("1&", "Settings", (*) => SettingsShow())
+
 OnExit(Cleanup)
 ; Единственное уведомление, которое ящик показывает сам по себе. Здесь же
 ; версия: иначе тестер не может сказать, какая у него сборка.
@@ -294,6 +308,8 @@ OnForeground(hook, event, hwnd, idObject, idChild, thread, time) {
 ; окна уже нельзя.
 TrackedFore(hwnd) {
     if !hwnd
+        return false
+    if IsServiceWindow(hwnd)     ; окно настроек ящик за смену окна не считает (Р18)
         return false
     try {
         if !WinExist("ahk_id " hwnd)
@@ -480,6 +496,8 @@ AppWindow(i, a) {
 PickActive() {
     if !(hwnd := WinExist("A"))
         return 0
+    if IsServiceWindow(hwnd)     ; собственное окно настроек — не окно слота (Р18)
+        return 0
     cls := WinGetClass("ahk_id " hwnd)
     if (cls = "Progman" || cls = "WorkerW"
         || cls = "Shell_TrayWnd" || cls = "Shell_SecondaryTrayWnd")
@@ -606,6 +624,8 @@ PrevActive(skip) {
 FocusCandidate(hwnd, skip) {
     if (!hwnd || hwnd = skip)
         return false
+    if IsServiceWindow(hwnd)     ; фокус пользователя настройкам не отдаём (Р18)
+        return false
     try {
         if !WinExist("ahk_id " hwnd)
             return false
@@ -676,6 +696,11 @@ StillFocused(hwnd) {
         fore := WinExist("A")
         if !fore
             return false
+        ; Уход в настройки — не потеря фокуса: иначе окно уезжало бы за
+        ; край ровно в тот момент, когда пользователь открыл его настройки
+        ; (Р18). Механика та же, что ниже для всплывающих меню.
+        if IsServiceWindow(fore)
+            return true
         if !(WinGetExStyle("ahk_id " fore) & 0x00000080)    ; WS_EX_TOOLWINDOW
             return false
         return WinGetPID("ahk_id " fore) = WinGetPID("ahk_id " hwnd)
@@ -800,6 +825,8 @@ FindWindow(a) {
     best := 0, bestArea := -1
     for hwnd in WinGetList("ahk_exe " a.exe) {
         try {
+            if IsServiceWindow(hwnd)     ; exe=Drawer.exe не должен ловить настройки (Р18)
+                continue
             if !(WinGetStyle("ahk_id " hwnd) & 0x10000000)      ; WS_VISIBLE
                 continue
             if (a.cls != "" && WinGetClass("ahk_id " hwnd) != a.cls)
@@ -1304,4 +1331,689 @@ HandleClick(wParam, lParam, msg, hwnd) {
             return 0
         }
     }
+}
+
+; ============================= НАСТРОЙКИ =============================
+; Окно настроек — оболочка над config.ini (Р18). На этом этапе оно
+; только читает: ни один путь отсюда в файл не пишет — ни закрытие окна,
+; ни выход из программы.
+;
+; Значения берутся из тех же глобалов, которыми ящик пользуется прямо
+; сейчас (animMs, apps, dynamic…), а настройки слота — из того же
+; SlotCfg(), который спрашивает хоткей. Поэтому окно не может показывать
+; одно, пока программа делает другое.
+;
+; Отдельный вопрос — «откуда взялось значение». В загруженных структурах
+; отсутствующий ключ и ключ со значением, равным умолчанию, неразличимы:
+; IniRead подставляет умолчание молча. Поэтому наличие ключа спрашивается
+; у файла ещё раз — тем же IniRead, но без значения по умолчанию: он
+; бросает исключение, если ключа нет. Второго разбора конфига при этом не
+; появляется. Разобранные значения по-прежнему приходят только из
+; LoadConfig; у файла спрашивается ровно «есть такой ключ или нет».
+;
+; Связь с остальным ящиком — пять вызовов IsServiceWindow(): в
+; PickActive, TrackedFore, FocusCandidate, StillFocused и FindWindow.
+; Больше про настройки код ящика ничего не знает.
+
+; Своё окно настроек. Кромки обходятся без такой проверки: у них пустой
+; заголовок и ToolWindow, и отборы ящика отсеивают их сами. Настройкам
+; так нельзя — это обычное окно с заголовком и фокусом, иначе им нельзя
+; пользоваться. Значит исключение приходится назвать явно.
+IsServiceWindow(hwnd) {
+    global setGui
+    if (!hwnd || !setGui)
+        return false
+    try {
+        if (hwnd = setGui.Hwnd)
+            return true
+        ; Собственный диалог настроек — вопрос про несохранённые правки.
+        ; Для ящика это продолжение того же служебного окна: пока висит
+        ; вопрос, пользователь никуда не уходил, и выдвинутый слот уезжать
+        ; не должен. Без этого WatchBlur, который тикает и во время
+        ; MsgBox, видит обычное окно переднего плана и убирает слот.
+        ; Свой диалог отличается от чужого процессом: окно настроек по
+        ; определению наше, значит и сравнивать не с чем иным.
+        return WinGetClass("ahk_id " hwnd) = "#32770"
+            && WinGetPID("ahk_id " hwnd) = WinGetPID("ahk_id " setGui.Hwnd)
+    }
+    return false
+}
+
+; Ошибка в настройках не должна ронять ящик — та же защита, что у
+; хоткеев (N2).
+SettingsShow() {
+    try
+        SettingsOpen()
+    catch as e
+        Notify("Настройки не открылись: " e.Message, "Ящик", 3)
+}
+
+; Поля слота — в том же порядке, в каком они описаны в config.ini.
+SettingsFields() {
+    return ["name", "exe", "cls", "monitor", "edge", "width",
+            "activateOnShow", "hideOnBlur", "focusHotkey"]
+}
+
+SettingsIsBool(key) {
+    return (key = "activateOnShow" || key = "hideOnBlur")
+}
+
+; Есть ли ключ в файле. IniRead без значения по умолчанию бросает
+; исключение — это и есть ответ.
+IniHas(path, section, key) {
+    try {
+        IniRead(path, section, key)
+        return true
+    }
+    return false
+}
+
+; Первая секция из списка, где ключ действительно есть; "" — ключа нет
+; нигде и значение пришло из умолчаний LoadConfig.
+SettingsFrom(sections, key) {
+    global configPath
+    for s in sections {
+        if IniHas(configPath, s, key)
+            return s
+    }
+    return ""
+}
+
+; Что написать в графе «источник». Третий случай — «≠ файл»: ключ в
+; файле есть, но значение там уже другое, потому что config.ini правили
+; после запуска. Ящик работает по старому, и молчать об этом нельзя,
+; иначе окно припишет файлу то, чего в нём сейчас нет.
+SettingsSrc(sections, key, live, isBool) {
+    global configPath
+    if !(s := SettingsFrom(sections, key))
+        return "по умолчанию"
+    want := isBool ? (live ? "true" : "false") : String(live)
+    return (IniRead(configPath, s, key, "") = want) ? "[" s "]" : "[" s "] ≠ файл"
+}
+
+; Значение поля для показа. Поля может не быть вовсе: у динамического
+; слота нет ни exe, ни cls, ни focusHotkey. Подставить туда пустую
+; строку значило бы выдумать отсутствующую настройку.
+SettingsVal(cfg, key) {
+    if !cfg.HasOwnProp(key)
+        return "—"
+    v := cfg.%key%
+    if SettingsIsBool(key)
+        return v ? "true" : "false"
+    return (v = "") ? "(пусто)" : String(v)
+}
+
+; Строки списка: сначала общие настройки динамических слотов, затем
+; девять номеров. cfg — тот самый объект, который ящик спросит при
+; нажатии хоткея, поэтому показанное и работающее разойтись не могут.
+SettingsRows() {
+    global apps, permSlots, dynamicSlots, dynamic
+    rows := [{ n: 0, kind: "def", cfg: dynamic, sections: ["dynamic"] }]
+    Loop 9 {
+        n := A_Index
+        if permSlots.Has(n) {
+            rows.Push({ n: n, kind: "perm", cfg: apps[permSlots[n]],
+                        sections: ["slot" n] })
+            continue
+        }
+        rows.Push({ n: n, kind: "dyn", cfg: SlotCfg(n),
+                    sections: dynamicSlots.Has(n)
+                              ? ["dynamicSlot" n, "dynamic"] : ["dynamic"] })
+    }
+    return rows
+}
+
+SettingsKind(r) {
+    if (r.kind = "def")
+        return "[dynamic]"
+    return (r.kind = "perm") ? "постоянный" : "динамический"
+}
+
+; Тот же поиск, что у AppWindow(), но без записи в managed: открытие
+; настроек не должно менять, какое окно приложения слот схватит по
+; следующему хоткею — иначе беглый взгляд на статус подменял бы выбор,
+; который иначе сделал бы FindWindow() в момент реального нажатия.
+SettingsAppPeek(i, a) {
+    global managed
+    return (managed.Has(i) && WinExist("ahk_id " managed[i])) ? managed[i] : FindWindow(a)
+}
+
+; Статус слота — те же признаки, на которых стоит остальная программа
+; (HandleManaged/HandleParked, Р4), просто текстом. Второго источника
+; истины не заводится: постоянный слот ищется как для хоткея, но
+; результат никуда не пишется; динамический берётся из dynSlots как есть.
+SettingsSlotStatus(r) {
+    global permSlots, dynSlots, apps
+    if (r.kind = "def")
+        return ""
+    if (r.kind = "perm") {
+        i := permSlots[r.n]
+        if !(hwnd := SettingsAppPeek(i, apps[i]))
+            return "приложение не запущено"
+    } else {
+        if !(dynSlots.Has(r.n) && WinExist("ahk_id " dynSlots[r.n]))
+            return "пусто"
+        hwnd := dynSlots[r.n]
+    }
+    if !HandleManaged(hwnd)
+        return "окно: " WinGetTitle("ahk_id " hwnd)
+    return HandleParked(hwnd) ? "припаркован" : "выдвинут"
+}
+
+; Пересчитать колонку «Состояние» во всех строках. Слот 0 ([dynamic]) в
+; список не входит — это не слот, а общие настройки. Ошибка на одном окне
+; пропускает только его — как и везде в ящике, N2 — и не трогает таймер.
+SettingsSlotsTick() {
+    global setUI
+    if !(ui := setUI)
+        return
+    for idx, r in ui.slotsRows {
+        if (r.kind = "def")
+            continue
+        try
+            ui.slotsLv.Modify(idx, "Col7", SettingsSlotStatus(r))
+    }
+}
+
+; Таймер живёт, только пока видна вкладка Slots — тот же приём, что у
+; таймера кромок: в покое ничего не опрашивается. tabValue приходит прямо
+; из события Tab3, отдельно проверять setGui не нужно: раз событие
+; пришло, окно ещё живо.
+SettingsSlotsTimer(active) {
+    SetTimer(SettingsSlotsTick, active = 2 ? 400 : 0)
+}
+
+; Техническая подпись справа от поля: имя ключа в config.ini и, если
+; ключа в файле нет, пометка об этом. Имя ключа вторично по размеру и
+; цвету — человек читает подпись слева, а имя нужно тому, кто полезет в
+; файл руками. Отсутствие ключа показываем честно: значение взято из
+; умолчаний программы, и пока его не изменили, писать его в файл не
+; будем.
+SettingsHint(g, x, y, section, key) {
+    global configPath
+    txt := key . (IniHas(configPath, section, key) ? "" : "  ·  по умолчанию")
+    g.SetFont("s8 c808080")
+    g.Add("Text", "x" x " y" (y + 2) " w172 h18", txt)
+    g.SetFont("s9 cDefault")
+}
+
+; Сторона выезда. Список закрыт четырьмя значениями, но значение из
+; файла может быть и посторонним — тогда добавляем его пятым пунктом и
+; не трогаем: молча подменять чужую настройку нельзя.
+SettingsEdgeItems() {
+    return ["Слева", "Справа", "Сверху", "Снизу"]
+}
+SettingsEdgeKeys() {
+    return ["left", "right", "top", "bottom"]
+}
+SettingsEdgePick(ddl, cur) {
+    for i, k in SettingsEdgeKeys() {
+        if (cur = k) {
+            ddl.Choose(i)
+            return ""            ; значение штатное, запоминать нечего
+        }
+    }
+    ddl.Add(["в файле: " cur])
+    ddl.Choose(5)
+    return cur                   ; вернём как есть, если пользователь не менял
+}
+
+; Монитор: «за курсором» плюс номера подключённых. Номер из файла,
+; которого сейчас нет (монитор отключили), тоже показываем отдельным
+; пунктом — программа в этом случае работает на мониторе под курсором,
+; но настройку менять за пользователя не должна.
+SettingsMonItems() {
+    out := ["Следовать за курсором"]
+    Loop MonitorGetCount()
+        out.Push("Монитор " A_Index)
+    return out
+}
+SettingsMonPick(ddl, cur) {
+    if (cur = "cursor") {
+        ddl.Choose(1)
+        return ""
+    }
+    if (IsInteger(cur) && cur >= 1 && cur <= MonitorGetCount()) {
+        ddl.Choose(cur + 1)
+        return ""
+    }
+    ddl.Add(["в файле: " cur])
+    ddl.Choose(MonitorGetCount() + 2)
+    return cur
+}
+
+; Анимация задана двумя числами, но выбирать их по отдельности человеку
+; незачем: значимы не миллисекунды, а плавность. Пресеты — только способ
+; показа тех же двух ключей, новых настроек не появляется. Пара, не
+; совпавшая ни с одним пресетом, показывается как «Своя» вместе с
+; настоящими числами: молча округлять чужие значения нельзя.
+SettingsAnimPresets() {
+    return [{ name: "Быстрая",  ms: 100, steps: 10 },
+            { name: "Обычная",  ms: 160, steps: 14 },
+            { name: "Плавная",  ms: 260, steps: 20 }]
+}
+SettingsAnimItems() {
+    out := ["Без анимации"]
+    for p in SettingsAnimPresets()
+        out.Push(p.name)
+    out.Push("Своя")
+    return out
+}
+SettingsAnimPick(ui, ms, steps) {
+    if (steps = 0) {
+        ui.anim.Choose(1)
+        SettingsAnimToggle(ui)
+        return
+    }
+    for i, p in SettingsAnimPresets() {
+        if (ms = p.ms && steps = p.steps) {
+            ui.anim.Choose(i + 1)
+            SettingsAnimToggle(ui)
+            return
+        }
+    }
+    ui.anim.Choose(SettingsAnimPresets().Length + 2)
+    SettingsAnimToggle(ui)
+}
+; Числа редактируются только в режиме «Своя»; в остальных они показывают,
+; во что превратится выбор.
+SettingsAnimToggle(ui := 0) {
+    global setUI
+    if !(ui := ui ? ui : setUI)
+        return
+    own := (ui.anim.Value = SettingsAnimPresets().Length + 2)
+    ui.animMs.Enabled := own
+    ui.animSteps.Enabled := own
+    if own
+        return
+    if (ui.anim.Value = 1) {
+        ui.animSteps.Value := "0"
+        return
+    }
+    p := SettingsAnimPresets()[ui.anim.Value - 1]
+    ui.animMs.Value := String(p.ms)
+    ui.animSteps.Value := String(p.steps)
+}
+
+; Панель под списком: все поля выбранного слота и источник каждого.
+SettingsFill(box, valc, srcc, r) {
+    box.Text := (r.kind = "def")
+              ? "Общие настройки динамических слотов — [dynamic]"
+              : (r.kind = "perm")
+              ? "Слот " r.n " — постоянный, [slot" r.n "]"
+              : "Слот " r.n " — динамический"
+    for i, key in SettingsFields() {
+        valc[i].Text := SettingsVal(r.cfg, key)
+        srcc[i].Text := r.cfg.HasOwnProp(key)
+                      ? SettingsSrc(r.sections, key, r.cfg.%key%,
+                                    SettingsIsBool(key))
+                      : "нет у слота"
+    }
+}
+
+SettingsOpen() {
+    global setGui, setUI, VERSION, configPath
+    global animMs, animSteps, blurMs, handlesOn, dynamic
+
+    ; Окно одно. Повторный вызов из трея поднимает уже открытое, а не
+    ; заводит второе: два окна показывали бы один и тот же файл и
+    ; разошлись бы при первой же правке.
+    if setGui {
+        try {
+            if WinExist("ahk_id " setGui.Hwnd) {
+                WinActivate("ahk_id " setGui.Hwnd)
+                return
+            }
+        }
+        setGui := 0
+    }
+
+    g := Gui("-MaximizeBox", "Drawer — Settings")
+    g.SetFont("s9", "Segoe UI")
+    tab := g.Add("Tab3", "x8 y8 w544 h430", ["General", "Slots", "About"])
+
+    tab.UseTab(1)
+    ui := {}
+
+    ; ---- умолчания динамических слотов: секция [dynamic] ----
+    ; Заголовок и подсказка говорят ровно то, что происходит в файле:
+    ; постоянные слоты сюда не заглядывают, у них свои значения в
+    ; [slotN], и менять их отсюда нельзя. Иначе первая же правка выглядит
+    ; как «настройка не работает».
+    g.Add("GroupBox", "x20 y44 w520 h190", "Поведение по умолчанию")
+    g.SetFont("c606060")
+    g.Add("Text", "x36 y66 w488 h30",
+          "Действует на динамические слоты — те, что назначаются "
+        . "Ctrl+Alt+Shift+N. У постоянных слотов ([slotN] в config.ini) "
+        . "свои значения, и эти настройки их не меняют.")
+    g.SetFont("cDefault")
+
+    g.Add("Text", "x36 y99 w140 h20", "Размер окна")
+    ui.width := g.Add("Edit", "x180 y96 w54 h22 Number Limit3",
+                      String(Opt(dynamic, "width", 60)))
+    g.Add("Text", "x240 y99 w120 h20", "% экрана")
+    SettingsHint(g, 364, 99, "dynamic", "width")
+
+    g.Add("Text", "x36 y127 w140 h20", "Сторона выезда")
+    ui.edge := g.Add("DropDownList", "x180 y124 w150", SettingsEdgeItems())
+    ui.edgeRaw := SettingsEdgePick(ui.edge, Opt(dynamic, "edge", "right"))
+    SettingsHint(g, 364, 127, "dynamic", "edge")
+
+    g.Add("Text", "x36 y155 w140 h20", "Монитор")
+    ui.mon := g.Add("DropDownList", "x180 y152 w150", SettingsMonItems())
+    ui.monRaw := SettingsMonPick(ui.mon, Opt(dynamic, "monitor", "cursor"))
+    SettingsHint(g, 364, 155, "dynamic", "monitor")
+
+    ui.act := g.Add("CheckBox", "x180 y182 w344 h20", "Активировать окно при открытии")
+    ui.act.Value := Opt(dynamic, "activateOnShow", true) ? 1 : 0
+    ui.blur := g.Add("CheckBox", "x180 y206 w344 h20",
+                     "Убирать окно, когда фокус ушёл в другое")
+    ui.blur.Value := Opt(dynamic, "hideOnBlur", true) ? 1 : 0
+
+    ; ---- внешний вид: [general] handles ----
+    g.Add("GroupBox", "x20 y244 w520 h52", "Внешний вид")
+    ui.handles := g.Add("CheckBox", "x36 y266 w300 h20",
+                        "Кромки у края экрана")
+    ui.handles.Value := handlesOn ? 1 : 0
+    SettingsHint(g, 364, 266, "general", "handles")
+
+    ; ---- анимация: два ключа, но выбирается одним списком ----
+    g.Add("GroupBox", "x20 y306 w520 h64", "Анимация")
+    g.Add("Text", "x36 y331 w140 h20", "Плавность")
+    ui.anim := g.Add("DropDownList", "x180 y328 w150", SettingsAnimItems())
+    ui.animMs := g.Add("Edit", "x340 y328 w52 h22 Number Limit4", String(animMs))
+    g.Add("Text", "x396 y331 w24 h20", "мс")
+    ui.animSteps := g.Add("Edit", "x424 y328 w52 h22 Number Limit3", String(animSteps))
+    g.Add("Text", "x480 y331 w56 h20", "шагов")
+    SettingsAnimPick(ui, animMs, animSteps)
+    ui.anim.OnEvent("Change", (*) => SettingsAnimToggle())
+
+    ; ---- дополнительно: blurMs ----
+    g.Add("GroupBox", "x20 y380 w520 h50", "Дополнительно")
+    g.Add("Text", "x36 y403 w200 h20", "Проверка потери фокуса")
+    ui.blurMs := g.Add("Edit", "x240 y400 w54 h22 Number Limit5", String(blurMs))
+    g.SetFont("c606060")
+    g.Add("Text", "x300 y403 w236 h20", "мс — как часто спрашивать")
+    g.SetFont("cDefault")
+
+    tab.UseTab(2)
+    lv := g.Add("ListView", "x20 y44 w520 h160 -Multi +Report",
+                ["Слот", "Тип", "Имя", "Край", "Монитор", "Ширина", "Состояние"])
+    rows := SettingsRows()
+    for r in rows {
+        lv.Add("", r.n ? r.n : "—", SettingsKind(r),
+               SettingsVal(r.cfg, "name"),    SettingsVal(r.cfg, "edge"),
+               SettingsVal(r.cfg, "monitor"), SettingsVal(r.cfg, "width"),
+               SettingsSlotStatus(r))
+    }
+    lv.ModifyCol(1, 44), lv.ModifyCol(2, 90), lv.ModifyCol(3, 100)
+    lv.ModifyCol(4, 56), lv.ModifyCol(5, 64), lv.ModifyCol(6, 56)
+    lv.ModifyCol(7, 110)
+    ; Живая колонка: опрашивается, только пока видна эта вкладка — тот же
+    ; расчёт, что у кромок. Tab3 сам присылает свой Value в событии.
+    ui.slotsLv := lv, ui.slotsRows := rows
+    tab.OnEvent("Change", (ctrl, *) => SettingsSlotsTimer(ctrl.Value))
+
+    box  := g.Add("GroupBox", "x20 y212 w520 h208", "Слот")
+    valc := [], srcc := []
+    for i, key in SettingsFields() {
+        y := 234 + (i - 1) * 20
+        g.Add("Text", "x36 y" y " w118 h18", key)
+        valc.Push(g.Add("Text", "x158 y" y " w160 h18", ""))
+        g.SetFont("c606060")
+        srcc.Push(g.Add("Text", "x324 y" y " w206 h18", ""))
+        g.SetFont("cDefault")
+    }
+    lv.OnEvent("ItemSelect",
+               (LV, item, sel) => (sel && item)
+                                  ? SettingsFill(box, valc, srcc, rows[item])
+                                  : "")
+    lv.Modify(1, "Select Focus")
+    SettingsFill(box, valc, srcc, rows[1])
+
+    tab.UseTab(3)
+    g.SetFont("s12 bold")
+    g.Add("Text", "x20 y48 w520 h26", "Drawer")
+    g.SetFont("s9 norm")
+    g.Add("Text", "x20 y80 w520 h20", "версия " VERSION)
+    g.Add("Text", "x20 y118 w520 h20", "config.ini")
+    g.Add("Edit", "x20 y140 w504 h22 ReadOnly -TabStop", configPath)
+    g.SetFont("c606060")
+    g.Add("Text", "x20 y180 w504 h226",
+          "Программа трогает этот файл только тогда, когда вы нажали "
+        . "«Применить» или «ОК», и записывает ровно те строки, которые "
+        . "вы изменили. Ни закрытие окна, ни выход из программы ничего "
+        . "не сохраняют.`n`n"
+        . "github.com/nerzar/Drawer  ·  лицензия MIT`n`n"
+        . "Хоткеи слотов заданы номером и не настраиваются:`n"
+        . "Ctrl+Alt+1…9  —  выдвинуть или убрать окно слота`n"
+        . "Ctrl+Alt+Shift+1…9  —  назначить активное окно слоту`n"
+        . "Ctrl+Alt+0  —  очистить динамические слоты`n"
+        . "Ctrl+Alt+Shift+0  —  выход, окна возвращаются на места")
+    g.SetFont("cDefault")
+
+    tab.UseTab(0)
+    ; Строка состояния — единственное место, где окно говорит об ошибке
+    ; записи. TrayTip для этого не годится: уведомления пересчитывает
+    ; набор quiet, и новые ломают его.
+    ui.status := g.Add("Text", "x20 y444 w520 h20", "")
+    ui.ok     := g.Add("Button", "x236 y474 w92 h28 Default", "ОК")
+    ui.cancel := g.Add("Button", "x338 y474 w92 h28", "Отмена")
+    ui.apply  := g.Add("Button", "x440 y474 w92 h28", "Применить")
+    ui.ok.OnEvent("Click",     (*) => SettingsSave(true))
+    ui.apply.OnEvent("Click",  (*) => SettingsSave(false))
+    ui.cancel.OnEvent("Click", (*) => SettingsClose())
+    g.OnEvent("Close",  (*) => SettingsClose())
+    g.OnEvent("Escape", (*) => SettingsClose())
+
+    ; Окно объявляется своим ДО показа: иначе первый же его кадр успел бы
+    ; стать передним планом обычного окна и увести за собой hideOnBlur.
+    setUI  := ui
+    SettingsRebase()
+    setGui := g
+    g.Show("w560 h514")
+}
+
+; Закрытие само по себе ничего не сохраняет — ни крестиком, ни Escape,
+; ни кнопкой «Отмена». Несохранённые правки просто теряются, и об этом
+; спрашивают заранее: молча выбросить чужую работу хуже, чем переспросить.
+; force — закрытие после удачного сохранения, спрашивать уже не о чем.
+SettingsClose(force := false) {
+    global setGui, setUI
+    if (!force && SettingsIsDirty()) {
+        if (MsgBox("Изменения не сохранены. Закрыть и отменить их?",
+                   "Ящик", 0x24) != "Yes")
+            return true    ; событиям Close и Escape ненулевое значение
+    }                      ; означает «окно не закрывать»
+    g := setGui
+    setGui := 0        ; сначала забыть, потом рушить: IsServiceWindow не
+    setUI  := 0        ; должен спрашивать у уже разрушенного окна
+    SetTimer(SettingsSlotsTick, 0)   ; иначе таймер живой колонки переживёт закрытие
+    try g.Destroy()
+}
+
+; --------------------------- ЗАПИСЬ (S2) ---------------------------
+; Правила записи заданы Р18 и здесь не обсуждаются: единственный источник
+; истины — config.ini; пишутся отдельные ключи, а не файл; сначала диск,
+; потом работающая программа; после записи — обязательная сверка чтением.
+
+; Целое число из поля. Первая же ошибка отменяет весь разбор: записывать
+; половину настроек и споткнуться на второй половине нельзя.
+SettingsNum(raw, lo, hi, label, &err) {
+    if (err != "")
+        return 0
+    v := Trim(raw)
+    if (v = "" || !IsInteger(v)) {
+        err := label ": нужно целое число"
+        return 0
+    }
+    v := Integer(v)
+    if (v < lo || v > hi) {
+        err := label ": допустимо от " lo " до " hi
+        return 0
+    }
+    return v
+}
+
+; Пустая строка означает «этот ключ писать не надо»: в списке выбран
+; посторонний пункт «в файле: …», то есть значение чужое и менять его
+; программа не бралась.
+SettingsEdgeVal(ui) {
+    keys := SettingsEdgeKeys()
+    v := ui.edge.Value
+    return (v >= 1 && v <= keys.Length) ? keys[v] : ""
+}
+SettingsMonVal(ui) {
+    v := ui.mon.Value
+    if (v = 1)
+        return "cursor"
+    return (v >= 2 && v <= MonitorGetCount() + 1) ? String(v - 1) : ""
+}
+
+; Что сейчас в форме, в том виде, в каком оно ляжет в файл.
+SettingsCollect(&err) {
+    global setUI
+    err := ""
+    if !(ui := setUI)
+        return 0
+    out := []
+
+    w := SettingsNum(ui.width.Value, 5, 100, "Размер окна", &err)
+    if (e := SettingsEdgeVal(ui))
+        out.Push({ sec: "dynamic", key: "edge", val: e })
+    if (m := SettingsMonVal(ui))
+        out.Push({ sec: "dynamic", key: "monitor", val: m })
+    ; «Без анимации» меняет только число шагов: при нуле шагов
+    ; длительность ни на что не влияет, и трогать её незачем.
+    ms := (ui.anim.Value = 1) ? 0
+        : SettingsNum(ui.animMs.Value, 0, 5000, "Длительность анимации", &err)
+    steps := SettingsNum(ui.animSteps.Value, 0, 200, "Шагов анимации", &err)
+    b := SettingsNum(ui.blurMs.Value, 10, 60000, "Проверка потери фокуса", &err)
+    if (err != "")
+        return 0
+
+    out.Push({ sec: "dynamic", key: "width",          val: String(w) })
+    out.Push({ sec: "dynamic", key: "activateOnShow", val: ui.act.Value ? "true" : "false" })
+    out.Push({ sec: "dynamic", key: "hideOnBlur",     val: ui.blur.Value ? "true" : "false" })
+    out.Push({ sec: "general", key: "handles",        val: ui.handles.Value ? "true" : "false" })
+    if (ui.anim.Value != 1)
+        out.Push({ sec: "general", key: "animMs",     val: String(ms) })
+    out.Push({ sec: "general", key: "animSteps",      val: String(steps) })
+    out.Push({ sec: "general", key: "blurMs",         val: String(b) })
+    return out
+}
+
+; Чем программа пользуется прямо сейчас. Сравнивать надо именно с этим,
+; а не с содержимым файла: тогда ключ, которого в файле нет и который не
+; меняли, остаётся ненаписанным сам собой — умолчания живут в
+; LoadConfig, и дублировать их здесь не приходится.
+SettingsLive(sec, key) {
+    global dynamic, animMs, animSteps, blurMs, handlesOn
+    if (sec = "dynamic") {
+        v := Opt(dynamic, key, "")
+        return (key = "activateOnShow" || key = "hideOnBlur")
+             ? (v ? "true" : "false") : String(v)
+    }
+    switch key {
+    case "animMs":    return String(animMs)
+    case "animSteps": return String(animSteps)
+    case "blurMs":    return String(blurMs)
+    case "handles":   return handlesOn ? "true" : "false"
+    }
+    return ""
+}
+
+; Состояние формы одной строкой — этого хватает, чтобы понять, трогал ли
+; её пользователь. Значение из файла может быть невалидным (width=999), и
+; полноценный разбор для такого вопроса не годится.
+SettingsSnapshot() {
+    global setUI
+    if !(ui := setUI)
+        return ""
+    return ui.width.Value "|" ui.edge.Value "|" ui.mon.Value "|"
+         . ui.act.Value "|" ui.blur.Value "|" ui.handles.Value "|"
+         . ui.anim.Value "|" ui.animMs.Value "|" ui.animSteps.Value "|"
+         . ui.blurMs.Value
+}
+; Имя поля — snap, а не base: base у любого объекта AHK занято под
+; прототип, и присваивание туда строки падает на ObjSetBase. Ровно та же
+; ловушка, что с log и exp в тестах.
+SettingsRebase() {
+    global setUI
+    if setUI
+        setUI.snap := SettingsSnapshot()
+}
+SettingsIsDirty() {
+    global setUI
+    return setUI && setUI.HasOwnProp("snap") && setUI.snap != SettingsSnapshot()
+}
+
+SettingsStatus(text, bad := false) {
+    global setUI
+    if !setUI
+        return
+    setUI.status.Opt(bad ? "cA00000" : "c006000")
+    setUI.status.Text := text
+    setUI.status.Redraw()
+}
+
+; Применить: диск, сверка, и только потом работающая программа. Порядок
+; жёсткий — если запись не удалась, ящик остаётся с прежними настройками,
+; а окно с несохранёнными правками, чтобы их можно было повторить.
+SettingsSave(closeAfter) {
+    global setUI, configPath
+    global apps, dynamic, dynamicSlots, animMs, animSteps, blurMs, handlesOn
+    if !setUI
+        return
+    err := ""
+    if !(vals := SettingsCollect(&err)) {
+        SettingsStatus(err, true)
+        return
+    }
+
+    todo := []
+    for v in vals {
+        if (SettingsLive(v.sec, v.key) = v.val)
+            continue
+        todo.Push(v)
+    }
+    if !todo.Length {
+        SettingsRebase()
+        SettingsStatus("Менять нечего: всё уже так")
+        if closeAfter
+            SettingsClose(true)
+        return
+    }
+
+    done := 0
+    for v in todo {
+        try
+            IniWrite(v.val, configPath, v.sec, v.key)
+        catch as e {
+            SettingsStatus("Не записалось: [" v.sec "] " v.key " — " e.Message
+                         . (done ? ".  До сбоя записано строк: " done : ""), true)
+            return
+        }
+        done++
+    }
+
+    ; У предшественника окно настроек рапортовало об успехе, а в файле
+    ; ничего не менялось (О5 в 06-почему-не-wtq.md). Поэтому читаем
+    ; записанное обратно и сравниваем, прежде чем что-то утверждать.
+    for v in todo {
+        got := IniRead(configPath, v.sec, v.key, "")
+        if (got != v.val) {
+            SettingsStatus("Проверка не прошла: [" v.sec "] " v.key
+                         . " — в файле «" got "», ожидалось «" v.val "»", true)
+            return
+        }
+    }
+
+    LoadConfig(configPath, &apps, &dynamic, &dynamicSlots,
+               &animMs, &animSteps, &blurMs, &handlesOn)
+    SetTimer(HandlesSync, -1)
+    SettingsRebase()
+    SettingsStatus("Сохранено. Изменённых строк: " todo.Length)
+    if closeAfter
+        SettingsClose(true)
 }

@@ -23,7 +23,7 @@
 
 Single source file: `src/drawer.ahk` (1 307 lines, AHK v2).  
 Build: `build/build.ps1` compiles with Ahk2Exe → `dist/Drawer-vX.Y.Z-tag/Drawer.exe`.  
-Config: `config.ini` next to the executable, read at startup, never written by Drawer. Format: INI, UTF-16 LE (required for Cyrillic text in `name=` fields).
+Config: `config.ini` next to the executable, read at startup by `LoadConfig()`. Since S2 the Settings window also writes it — but only on Apply/OK, only the keys the user changed, key by key via `IniWrite`, never regenerating the file. `LoadConfig()` is idempotent (it resets `apps` and `dynamicSlots` on entry) so it can be re-run to apply changes. Format: INI, UTF-16 LE (required for Cyrillic text in `name=` fields).
 
 ### Slot types
 
@@ -128,6 +128,14 @@ All items below are in `src/drawer.ahk`. "Tested" means covered by the test harn
 | `[dynamicSlotN]` overrides | Implemented, UNKNOWN |
 | Permanent slot can't be overwritten | Implemented (guard in BindSlot) |
 | No stranded windows on exit | Tested by strand.ahk after each suite |
+| Settings window, opens from tray | Implemented (S1), tested — tray menu item "Settings", single instance |
+| Settings: General editable (S2) | Implemented, tested in VM — `[general]` handles/animMs/animSteps/blurMs and `[dynamic]` width/monitor/edge/activateOnShow/hideOnBlur. Slots and About stay read-only |
+| Settings: writes only changed keys | Implemented, tested — compares against the live values, so a key absent from the file and left alone is never written; `[slotN]` and `[dynamicSlotN]` are never written |
+| Settings: verify-after-write | Implemented, tested — every written key is read back and compared; on mismatch the window shows the error and the runtime is not touched |
+| Settings shows General and Slots from existing config.ini | Implemented — General reads `animMs`, `animSteps`, `blurMs`, `handles`; Slots lists `[dynamic]` plus slots 1–9 with every field, and marks where each value came from (`[general]` / `[slotN]` / `[dynamic]` / default) |
+| Settings never writes unless asked | Implemented, tested — file unchanged after open, after Cancel, after closing with unsaved edits, and after app exit |
+| Settings is a service window | Implemented, tested — excluded from dynamic binding, from handles and from focus tracking (`PickActive`, `TrackedFore`, `FocusCandidate`, `StillFocused`, `FindWindow`) through one `IsServiceWindow()` helper; focusing it does not trigger `hideOnBlur` |
+| Settings: live «Состояние» column (S3) | Implemented, verified manually in VM — dynamic slot shows Empty/Parked/Shown, permanent slot shows Parked/Shown and «приложение не запущено» when the app isn't running, closing the bound window clears the status, bind is rejected while Settings is focused, second Settings window is not created, `hideOnBlur` unaffected, and the live tick does not mark the form dirty. See §4 for why the automated suite doesn't cover this yet |
 
 ---
 
@@ -178,59 +186,132 @@ Environment: VirtualBox 7.2.16, Windows 11 guest ("tetst"), single monitor, user
 | No install required | PASS — ran directly from Desktop with config.ini |
 | Single-instance enforcement | OBSERVED — AHK dialog appears if previous instance not cleanly exited; pressing Нет (No) cancels new instance |
 | Handles in VM | NOT TESTED |
-| Full test suite in VM | NOT RUN — requires 2 monitors |
+| Full test suite in VM | Superseded — see "VM regression" below; the stand now has two monitors |
+
+### VM regression (2026-09-03, dual monitor)
+
+The first run on a stand that matches what the harness was written for: VM `tetst`, two monitors at **1920×1080**, **M2 left of M1**, `layout.ahk` → ГОДИТСЯ, so no `-Force`. Narrow run of the five suites the earlier single-monitor stand had contaminated. 19:45:24 → 19:51:01.
+
+| Suite | Checks | Passed | Failed |
+|---|---|---|---|
+| kromka | 82 | 69 | 13 |
+| slots | 21 | 21 | 0 |
+| life | 23 | 21 | 2 |
+| load | 22 | 18 | 4 |
+| restart | 30 | 29 | 1 |
+| **total** | **178** | **158** | **20** |
+
+`kromka` completed **without the driver crash** for the first time — 82 checks, the same count the host run produces. The crash (`Integer has no property "y"`) was a harness defect in `test/drivers/kromka.ahk`, since fixed there: a missing handle now yields a normal FAIL instead of aborting the suite. No stranded windows after the run.
+
+**The second monitor did not drop out during the run.** Checked afterwards on suspicion. `VBox.log` recorded no display event in the run window — its last write predates the run by 24 minutes, and VirtualBox does log screen enable/disable, resize and guest-screen-count changes. Independently, three suites contain coordinates that are only computable with monitor 2 present: `x=-1920 (L2=-1920)` in `kromka`, and `x=-2900` in `life` and `restart` — the parked position of a monitor-2 left-edge slot, −1920 − 960 − 20. `restart` runs last, so this covers the end of the run. Worth knowing for future reports: `layout.ahk` runs **only at the start** of a run and `strand.ahk` does not report monitors, so end-of-run layout evidence has to come from the suite artifacts.
+
+**Classification of the 20 failures**
+
+- **19 — the known Z-order / timing risk (§7), not a new regression.** All of them are one symptom: a slot deploys itself, therefore has no handle (a deployed slot never does), and dependent checks cascade. The mechanism is documented: closing or hiding a deployed window hands foreground to the next parked slot in Z-order. The affected slot number changes between runs (6 → 3), which is the signature of a race, and the same code is clean on the 2×1920×1080 host. The guest has 2 CPUs and no GPU acceleration, so timing-sensitive checks race far more often here. How much is the known limitation and how much is VM slowness was not separated further — that needs more runs than were authorised.
+- **1 — environment.** `restart`: the permanent slot did not find Paint's window after restarting the application (`x=-999999`, the driver's not-found sentinel). Paint in this guest is the Store app `Microsoft.Paint`, reached through an execution alias; the harness was written against classic `mspaint.exe`.
+
+**None of this touches S2.** No suite in this run opens Settings, `IsServiceWindow()` returns false on its first line while the window is closed, and `LoadConfig()` runs once at startup.
+
+`src/config.ini` before and after the run: `086978fc…905`, 9472 bytes — **unchanged**.
+
+### S3 live status: manual verification (2026-09-04)
+
+The automated `setstat` driver (bench `main`, added this session) did not complete: its test-only hotkey (`^!+F12`/`^!+F11`, wired into the build only for this suite — Settings has no hotkey of its own by design, Р16) never triggered `SettingsShow()`/a status dump, across four VM attempts, while in the same runs the real slot hotkeys (`^!+2`, `^!2`, `^!+3`, `^!+4`) fired correctly. `SettingsOpen()` itself never threw — confirmed by patching `Notify()` to a file for that run, same trick as the `quiet` suite. Root cause not confirmed; leading hypothesis is something specific to F11/F12 in this environment, since swapping the modifier count and lengthening the wait made no difference. **This is a gap in the test driver, not in S3** — nothing on the real code path (tray menu → `SettingsShow()`) is implicated, and two of the four attempts were also lost to the owner having re-synced files to the VM after editing them, not a code issue.
+
+The owner then verified S3 by hand in the VM (`tetst`, two monitors, 1920×955, opened via the real tray menu): with dynamic and permanent slots already Parked/Shown before Settings opened, the live column read correctly — dynamic Empty/Parked/Shown, permanent Parked/Shown, empty slots «пусто». The rest of the required checks (bind rejected while Settings is focused, closing the bound window clears status rather than showing a stale one, `hideOnBlur` unaffected by Settings holding focus, no second Settings window, the live tick not marking the form dirty) were also checked by hand and passed. **S3 behavior is confirmed working — by manual verification, not the automated suite.** `src/config.ini` unchanged across the whole session: `086978fc…08d905`, 9472 bytes, same mtime.
+
+The driver (`test/drivers/setstat.ahk`) and its `run.ps1` wiring (suite `setstat`) are left in the repo for whoever picks up the F11/F12 question — likely fix is swapping the test-only hotkeys for a letter combo (e.g. `^!+S`/`^!+D`) instead of function keys.
+
+### Testing policy
+
+Adopted 2026-09-03, after three full `run.ps1` passes on the main PC seized its desktop for hours and consumed most of a session budget.
+
+- **Main PC: short smoke and manual UI checks only** — launch the app, open a window, take a screenshot.
+- **Long or bulk GUI/regression runs: VM only** (`tetst`, §5). The VM is the primary bench.
+- **`test/run.ps1` is not to be run on the main PC without the owner's explicit permission**, granted per run.
+- **Repeat comparison runs** — the same suites against pristine HEAD, to tell a regression from a flake — **only when a failure is reproducible and relevant.** One suspicious failure is not by itself a reason to spend another pass.
+- For a change that does not touch geometry, focus or handles, no suite run at all: `/validate` plus one targeted driver is enough.
+- Pick suites with `-Only`; `-Suites safe` is 12 suites and about 20 minutes.
 
 ---
 
 ## 5. VM
+
+The VM is the primary test bench (see Testing policy in §4). State below verified 2026-09-03.
 
 ### Current test VM ("tetst")
 
 | Property | Value |
 |---|---|
 | Host VirtualBox | 7.2.16 |
-| Guest OS | Windows 11 (visual confirmation; exact build UNKNOWN — diag-result.txt not read back) |
-| Architecture | x64 (UNKNOWN — not read from diag this session) |
-| Monitor count | 1 (single monitor — insufficient for full test suite which requires 2) |
-| Resolution | ~1536×786 (from screenshots) |
-| DPI/scaling | UNKNOWN |
+| Guest Additions | 7.2.16, RunLevel 3 |
+| Guest OS | Windows 11 x64 |
+| RAM / CPU | 4096 MB / 2 |
+| Monitor count | 1 |
+| Resolution | 1920×955 (work area 1920×907) |
 | Username | vboxuser, password 1211 |
-| AHK in guest | NOT installed — not needed (compiled exe) |
-| VBoxService | Running, Startup=Automatic (fixed this session) |
+| AHK in guest | **v2.0.27 installed** |
+| AHK path | `C:\Users\vboxuser\AppData\Local\Programs\AutoHotkey\v2\AutoHotkey64.exe` |
+| Snapshot | **`base-ahk-v2`** — online snapshot; restoring returns a logged-in desktop with no boot and no login |
+| Staging dir | `C:\drawer-vm` (empty in the base snapshot) |
+| VBoxService | Running, Startup=Automatic |
 
-### File delivery
+The AHK path above is the **first** location `test/run.ps1` probes, so `-Ahk` never has to be passed. Installed with `winget install AutoHotkey.AutoHotkey` through `guestcontrol` — worked on the first attempt.
+
+### guestcontrol runs in interactive Session 1
+
+Measured, not assumed. An AHK script started through `guestcontrol` reported `SessionId = 1`, listed 9 real guest desktop windows (explorer, mspaint, terminals), moved the mouse to the coordinates it asked for, and created and then saw its own GUI window.
+
+**GUI automation through guestcontrol therefore works.** The earlier "Session 0→1 boundary" note applied only to `Stop-Process`, not to GUI work in general.
+
+### Verified in the VM
+
+| Check | Result |
+|---|---|
+| Drawer.exe launches without AHK interpreter | PASS (earlier session) |
+| Tray icon, startup notification, hotkeys | PASS (earlier session) |
+| AHK v2 runs scripts in guest | PASS — `/validate` 0, script exit 0 |
+| A driver actually drives Drawer in the guest | PASS — S1 settings driver, **35/35, 0 failures** |
+| config.ini untouched by a driver run | PASS — SHA unchanged |
+| Handles in VM | NOT TESTED |
+
+### File delivery and command execution
 
 ```powershell
 VBoxManage guestcontrol "tetst" copyto --username vboxuser --password 1211 `
-    "host\path\file.exe" "C:\Users\vboxuser\Desktop\file.exe"
+    "host\path\file.ps1" "C:\drawer-vm\file.ps1"
 ```
 
 Single-file syntax: `source dest-full-path` (not `--target-directory`).
 
-For PS scripts with complex logic: write on host → `copyto` → run with `-ExecutionPolicy Bypass -File`.
+Four rules, each of which cost a failed call before it was learned:
+
+- **`copyto` does not overwrite, and `--force` is not accepted here.** Delete first (`guestcontrol ... rm <path>`), then copy.
+- **Nested quotes do not survive `guestcontrol run` arguments.** Put any non-trivial logic in a `.ps1` on the host, copy it in, and run it with `-NoProfile -ExecutionPolicy Bypass -File`.
+- **Guest-side PowerShell scripts must be ASCII-only.** Windows PowerShell 5.1 in the guest reads a `.ps1` without a BOM as ANSI; Cyrillic becomes mojibake and breaks the parser mid-file. `.ahk` files are unaffected — AHK v2 assumes UTF-8.
+- **Stop processes with `taskkill`, not `Stop-Process`.** `Stop-Process` through guestcontrol does not terminate them.
 
 ### Keyboard simulation
+
+Rarely needed now that guestcontrol reaches Session 1, but still available:
 
 ```powershell
 VBoxManage controlvm "tetst" keyboardputscancode <bytes>  # raw PS/2 Set-1 scancodes
 VBoxManage controlvm "tetst" keyboardputstring "text"     # text input
 ```
 
-Hotkeys confirmed working via this method. Modifier combo order: make Ctrl → make Alt → make Shift → make key → break key → break Shift → break Alt → break Ctrl.
+Modifier combo order: make Ctrl → make Alt → make Shift → make key → break key → break Shift → break Alt → break Ctrl.
 
 ### Known VM limitations
 
-- **1 monitor only** — test harness requires 2 monitors (M2 left of M1); `run.ps1` will refuse to run.
-- **No snapshot** created for this VM.
-- **Stop-Process from guestcontrol fails** across Session 0→1 boundary. Use `taskkill /IM Drawer.exe /F` from an interactive PS session (keyboard simulation) to kill Drawer.
-- **AHK single-instance mutex** lingers after force-kill; next launch shows "Could not close previous instance" dialog (press Нет to abort, then retry after a pause).
-- `test/vm/run-in-vm.ps1` and `test/vm/new-vm.ps1` have **never been executed end-to-end** (require Windows ISO). Written against VBoxManage 7.2 help.
+- **AHK single-instance mutex** lingers after a force-kill; the next launch shows "Could not close previous instance" (press Нет to abort, then retry after a pause).
+- `test/vm/new-vm.ps1` has never been executed end-to-end (requires a Windows ISO). Written against VBoxManage 7.2 help.
 
-### Automation boundary
+### Not done yet
 
-Automatable via VBoxManage: file copy, PS script execution, screenshot, keyboard input.  
-Requires interactive session (keyboard sim): launching GUI apps, UAC elevation, killing Drawer, starting Drawer.  
-Cannot automate: mouse clicks (no VBoxManage mouse API in use; would need SendInput from guest session).
+- **Second monitor — DONE.** `monitorcount=2`, both screens 1920×1080, M2 left of M1 (M1 `0,0..1920,1080`, M2 `-1920,3..0,1083`), work areas 1920×1032. `layout.ahk` returns ГОДИТСЯ, so `-Force` is no longer needed.
+- **`test/vm/run-in-vm.ps1` NOT adapted to `tetst`.** It still hardcodes VM name `drawer-test`, user `tester/tester`, AHK at `C:\drawer-test\ahk\AutoHotkey64.exe`, and a two-monitor screen layout. Never executed end-to-end.
+- **Regression in the VM — partly done.** A twelve-suite `safe` run and a five-suite narrow run have both been executed there; see "VM regression" in §4 for the results. `apps` and `browser` have never run in the VM: they need real VS Code, Telegram and Chrome, which the guest does not have and cannot install (no `winget`).
 
 ---
 
@@ -294,7 +375,7 @@ Stop-Process and similar WMI-based process control from guestcontrol (Session 0)
 
 **Internal-edge animation limitation is accepted.** The code detects internal edges and skips the slide animation. This was documented and accepted; do not "fix" it by animating across the neighbor monitor.
 
-**config.ini is the only settings storage.** Drawer never writes settings. All persistent configuration is in config.ini. This means there is no in-app settings UI — that is the *next planned feature*.
+**config.ini is the only settings storage.** All persistent configuration lives in config.ini; Drawer does not write it today. The old decision that a settings UI would never be built (Р6 in `docs/03-решения.md`) is **cancelled** — see Р18 in the same file. The settings window is a shell over config.ini, not a second store: it writes individual keys, never regenerates the file, saves nothing on exit or on Cancel, and verifies every write by reading it back. S1 (read-only Settings) and S2 (General editable) are implemented. S3–S5 — per-slot settings, permanent slot editing, slot type changes — are not.
 
 **Hotkeys 1–9 are fixed and non-configurable.** Only `focusHotkey` for permanent slots is configurable. The main slot hotkeys (Ctrl+Alt+N, Ctrl+Alt+Shift+N, etc.) are not exposed for remapping. Changing them requires code + recompile.
 
@@ -332,25 +413,38 @@ Stop-Process and similar WMI-based process control from guestcontrol (Session 0)
 
 ## 10. NEXT STEP
 
-**NEXT PLANNED STAGE: Settings**
+**S1 and S2 are complete.** The tray menu opens a single Settings window with three tabs. General is editable and writes `[general]` and `[dynamic]`; Slots and About remain read-only. Verified in the VM by a targeted driver: 34/34, 0 failures. Design decision is Р18 in `docs/03-решения.md`.
 
-The app currently has no in-app settings UI. All configuration is done by editing `config.ini` manually. The next stage is to design and implement a Settings interface.
+Two things were found and fixed on the way, both worth knowing:
 
-**The next Claude must NOT implement Settings immediately. Read the repo, propose architecture, get approval first.**
+- **`LoadConfig()` was not idempotent.** `apps.Push()` appended, so a second call duplicated every permanent slot (measured: 2 → 4 → 6 → 8), and `dynamicSlots` kept sections already deleted from the file. It now resets both on entry. Without this, "write → LoadConfig → apply" silently corrupts state.
+- **`base` is a reserved property name in AHK v2** (`obj.base` is the prototype); assigning a string to it throws `ObjSetBase`. The form's snapshot field is called `snap`. Same class of trap as `log` and `exp` in the test drivers.
+
+**S3 (live status column) is complete**, 2026-09-04. The Slots list shows a live "Состояние" column (`пусто` / `окно: <title>` / `выдвинут` / `припаркован` / `приложение не запущено`), polled only while the Slots tab is visible, timer stopped when Settings closes. Verified by hand in the VM — see §4 for why the automated `setstat` suite doesn't cover it yet (test-harness issue, not an S3 defect).
+
+Per-slot overrides via `[dynamicSlotN]` — behind an explicit "свои настройки" checkbox that creates and deletes the section — were originally scoped together with S3 in this doc but were **not** part of the 2026-09-04 session. Still pending.
+
+**NEXT PLANNED STAGE:** the `[dynamicSlotN]` overrides above, then permanent-slot editing / exe picker / Dynamic↔Permanent type changes (referred to as "S4" in the session that shipped the live column).
+
+### Deferred, with the reason
+
+**P2 — rebuilding `permSlots` and remapping `managed` after a config reload — is NOT implemented, and S2 does not need it.** `permSlots[slot] = index into apps` and `managed[index] = hwnd` stay correct as long as the set and order of `[slotN]` sections is unchanged, and S2 never writes those sections.
+
+The one reproducible way to break it needs an external edit: open Settings, add or remove a `[slotN]` in config.ini by hand, then press Apply. `LoadConfig` rebuilds `apps` with shifted indices while `permSlots` and `managed` keep the old ones, so a slot hotkey can move the right window with the wrong geometry, or the wrong window. No stranded windows; restarting Drawer clears it. The fix is about seven lines and belongs to S4, where `[slotN]` becomes writable and the hazard turns into an everyday one.
+
+### Rules that still apply
+
+1. **Testing.** Heavy GUI and regression runs go in the VM (`tetst`, §5). The main PC is for short smoke and manual UI checks only, and `test/run.ps1` is not to be run there without explicit permission. Full policy in §4.
+2. **No GitHub operations yet.** No push, no tags, no releases. Commits only when asked.
+3. **The invariants from Р18 are not negotiable**: `config.ini` is the single source of truth, writes are per-key, the file is never regenerated, nothing is saved on exit or on Cancel, and every write is verified by reading it back. They exist because the predecessor's settings GUI silently lost changes (О5 in `docs/06-почему-не-wtq.md`).
+4. **General means defaults for dynamic slots**, not global defaults. A permanent slot with its own `width` is not affected by the General value, because `LoadConfig` gives `[slotN]` its own literal defaults rather than inheriting from `[dynamic]`. The UI says so in plain words. Changing that inheritance would break existing configs and needs its own decision.
 
 ### What the next Claude should do
 
-1. Read `PROJECT_STATE.md` (this file).
-2. Verify actual repo state: `git log --oneline -5`, `git status`, check `src/drawer.ahk` for current version.
-3. Read the existing docs in `docs/` — they contain briefs, requirements, and design decisions from prior sessions.
-4. **Do NOT start implementing Settings automatically.**
-5. Propose Settings architecture and UX first:
-   - What can be configured in-app vs. stays in config.ini?
-   - What is the UI paradigm (tray menu? Settings window? Wizard?)?
-   - How does Settings UI interact with existing config.ini on disk?
-   - How does Drawer reload config (restart vs. hot reload)?
-6. Get explicit approval before writing any code.
-7. After implementation: use the host test harness (`test/run.ps1`) and the VM for verification. The VM currently needs 2 monitors for the full suite — this may need to be addressed first if multi-monitor settings behavior must be tested.
+1. Read this file, then verify the actual repo state: `git log --oneline -5`, `git status`, the `VERSION` line in `src/drawer.ahk`.
+2. Read the Settings block at the end of `src/drawer.ahk` — it carries its own design notes — and Р18 in `docs/03-решения.md`.
+3. Propose the S3 change before writing code, and get approval.
+4. Verify in the VM, not on the main PC.
 
 ---
 

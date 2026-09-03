@@ -114,6 +114,7 @@ $all = @(
     @{ n="load";    bench="nine";    drv="load.ahk";    kind="safe"; pid=$true }
     @{ n="restart"; bench="kromka";  drv="restart.ahk"; kind="safe"; paint=$true; pid=$true; cmdline=$true }
     @{ n="ghost";   bench="kromka";  drv="ghost.ahk";   kind="safe"; pid=$true }
+    @{ n="setstat"; bench="main";    drv="setstat.ahk"; kind="safe"; paint=$true; pid=$true; settingsHk=$true; notify=$true }
     @{ n="apps";    bench="apps";    drv="apps.ahk";    kind="apps" }
     @{ n="browser"; bench="apps";    drv="browser.ahk"; kind="apps" }
 )
@@ -165,6 +166,27 @@ foreach ($s in $want) {
             if ($new -eq $txt) { Write-Error "Не нашёл TrayTip(text, title, opt) — сборка для набора quiet не получилась." }
             $txt = $new
         }
+        if ($s.settingsHk) {
+            # У Settings нет намеренно своего хоткея (Р16) — в бою это пункт
+            # трея. Тестовые хоткеи и дамп ListView-ячейки вшиваются только в
+            # эту копию исходника, как notify вшивает лог TrayTip для quiet.
+            $marker = 'A_TrayMenu.Insert("1&", "Settings", (*) => SettingsShow())'
+            if ($txt.IndexOf($marker) -lt 0) { Write-Error "Не нашёл пункт трея Settings — сборка для набора setstat не получилась." }
+            $ins = @'
+Hotkey("$^!+F12", (*) => SettingsShow())        ; только для теста
+Hotkey("$^!+F11", (*) => SettingsTestDump())    ; только для теста
+SettingsTestDump() {
+    global setUI
+    out := ""
+    if (ui := setUI) {
+        for idx, r in ui.slotsRows
+            out .= r.n "`t" ui.slotsLv.GetText(idx, 7) "`n"
+    }
+    FileAppend(out, A_ScriptDir "\status.log", "UTF-8")
+}
+'@
+            $txt = $txt.Replace($marker, $marker + "`n" + $ins)
+        }
         [System.IO.File]::WriteAllText((Join-Path $dir "drawer.ahk"), $txt, $utf8)
         $target = $Ahk
         $targetArgs = @("`"$dir\drawer.ahk`"")
@@ -190,6 +212,7 @@ foreach ($s in $want) {
     # файлом рядом со стендом, а драйверу отдаётся только путь к папке:
     # вложенные кавычки в аргументах ломаются слишком легко.
     if ($s.cmdline) { $drvArgs += "`"$dir`"" }
+    if ($s.settingsHk) { $drvArgs += "`"$dir\status.log`"" }
     if ($s.notify) { $drvArgs += "`"$dir\notify.log`"" }
     $t = Start-Process -FilePath $Ahk -ArgumentList $drvArgs -PassThru
     if (-not $t.WaitForExit(600000)) {
