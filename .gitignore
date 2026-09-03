@@ -5,3 +5,5 @@ tmp/
 .tools/
 # build output
 dist/
+# JetBrains IDE settings
+.idea/
