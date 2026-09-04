@@ -40,8 +40,9 @@ it. With several windows of one application it takes the largest.
 
 ## config.ini
 
-Plain text next to `Drawer.exe`, read at startup and never written by
-Drawer. Every option is documented inline in the file itself.
+Plain text next to `Drawer.exe`, read at startup. Settings writes only
+keys changed through Apply/OK; closing Settings, Cancel and application
+exit do not save anything. Every option is documented inline in the file.
 
 | Setting | Where | Meaning |
 |---|---|---|
@@ -60,6 +61,10 @@ Drawer. Every option is documented inline in the file itself.
 Two traps: a `;` comment must sit on its own line — trailing comments
 become part of the value; and the file is UTF-16, so keep that encoding
 if your editor asks.
+
+Settings is available from the tray menu. General edits dynamic defaults;
+Slots can edit permanent bindings and convert slots between permanent and
+dynamic. The file remains the only persistent settings store.
 
 ## Edge handles
 
