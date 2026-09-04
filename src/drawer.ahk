@@ -34,7 +34,8 @@ animMs       := 160
 animSteps    := 14
 blurMs       := 250
 handlesOn    := true
-LoadConfig(configPath, &apps, &dynamic, &dynamicSlots, &animMs, &animSteps, &blurMs, &handlesOn)
+HANDLE_BG    := "2A2E35"
+LoadConfig(configPath, &apps, &dynamic, &dynamicSlots, &animMs, &animSteps, &blurMs, &handlesOn, &HANDLE_BG)
 ; =================================================================
 
 ; Читает config.ini в структуры программы. Числовые и строковые поля
@@ -42,7 +43,7 @@ LoadConfig(configPath, &apps, &dynamic, &dynamicSlots, &animMs, &animSteps, &blu
 ; проверяют ResolveMonitor/ComputeGeom при показе. Отдельно проверяются
 ; только activateOnShow/hideOnBlur: непустая строка "false" в AHK
 ; истинна, поэтому её нужно явно разобрать, а не просто передать дальше.
-LoadConfig(path, &apps, &dynamic, &dynamicSlots, &animMs, &animSteps, &blurMs, &handlesOn) {
+LoadConfig(path, &apps, &dynamic, &dynamicSlots, &animMs, &animSteps, &blurMs, &handlesOn, &handleBg) {
     ; Функцию должно быть можно вызвать повторно: настройки перечитывают
     ; конфиг после записи тем же вызовом, которым программа поднимается.
     ; Без сброса apps.Push() дописал бы второй комплект постоянных слотов
@@ -57,6 +58,16 @@ LoadConfig(path, &apps, &dynamic, &dynamicSlots, &animMs, &animSteps, &blurMs, &
     ; По умолчанию включено: в конфиге, написанном до появления кромок,
     ; строки нет, и поведение должно остаться таким же, как без неё.
     handlesOn := IniBool(path, "general", "handles", true)
+    ; Цвет кромки — тоже настройка теперь; умолчание то же значение, что
+    ; раньше было зашито константой, так что старый config.ini без этого
+    ; ключа ведёт себя точно как прежде. Формат проверяется так же
+    ; придирчиво, как true/false у IniBool — иначе правка руками с опечаткой
+    ; уронит HandleLighten() ниже прямо при старте.
+    handleBg := IniRead(path, "general", "accent", "2A2E35")
+    if !RegExMatch(handleBg, "^[0-9A-Fa-f]{6}$") {
+        MsgBox("config.ini: [general] accent=" handleBg " — ожидается 6 hex-цифр (RRGGBB), взято 2A2E35", "Ящик")
+        handleBg := "2A2E35"
+    }
 
     permSlotNums := Map()
     Loop 9 {
@@ -201,10 +212,35 @@ HANDLE_GAP   := 8
 HANDLE_ICON  := 18
 HANDLE_ROUND := 6
 ; Опознаётся кромка иконкой, поэтому сама плитка нарочно неяркая:
-; спокойный тёмный цвет, чуть светлее под курсором.
-HANDLE_BG     := "2A2E35"
-HANDLE_BG_HOT := "3A414D"
+; спокойный тёмный цвет, чуть светлее под курсором. Сам HANDLE_BG уже
+; загружен из config.ini выше (LoadConfig, ключ [general] accent, см.
+; Settings — там же живёт выбор цвета). HANDLE_BG_HOT в файле отдельно
+; не хранится — это HANDLE_BG, пересвеченный HandleLighten() заново
+; после каждого LoadConfig (см. её вызовы в SettingsSlotsApply и
+; SettingsSave).
+; try — HandleLighten не должен уронить каждый обычный запуск программы
+; из-за собственной арифметики; при сбое запасной оттенок — тот, что был
+; зашит константой раньше.
+try
+    HANDLE_BG_HOT := HandleLighten(HANDLE_BG, 0.10)
+catch
+    HANDLE_BG_HOT := "3A414D"
 HANDLE_FG     := "D6DAE2"
+
+; Пересвеченная копия hex-цвета (без "#") в сторону белого на долю pct
+; (0..1) на канал — единственный способ получить HANDLE_BG_HOT (и
+; безопасный для текста оттенок акцента в Settings) для ПРОИЗВОЛЬНОГО
+; выбранного цвета, а не только для того одного значения, что раньше
+; было зашито константой.
+HandleLighten(hex, pct) {
+    r := Integer("0x" SubStr(hex, 1, 2))
+    g := Integer("0x" SubStr(hex, 3, 2))
+    b := Integer("0x" SubStr(hex, 5, 2))
+    r := Round(r + (255 - r) * pct)
+    g := Round(g + (255 - g) * pct)
+    b := Round(b + (255 - b) * pct)
+    return Format("{:02X}{:02X}{:02X}", r, g, b)
+}
 ; Зона подхода: насколько курсор должен приблизиться поперёк края и
 ; насколько может отойти вдоль него.
 HANDLE_PERP  := 130
@@ -1219,6 +1255,21 @@ HandleFace(hd, t) {
     }
 }
 
+; HandleFace красит hd.gui.BackColor только на переходе наведения
+; (on != hd.hot) — уже стоящая на месте кромка в покое этот код не
+; проходит и не заметит новый HANDLE_BG сама. Вызывается сразу после
+; Settings-Apply, который поменял акцент, чтобы настройка не выглядела
+; неприменённой, пока никто не тронул мышью ни одну кромку.
+HandleRepaintAll() {
+    global handles, HANDLE_BG, HANDLE_BG_HOT
+    for n, hd in handles {
+        try {
+            hd.gui.BackColor := hd.hot ? HANDLE_BG_HOT : HANDLE_BG
+            DllCall("InvalidateRect", "Ptr", hd.gui.Hwnd, "Ptr", 0, "Int", 1)
+        }
+    }
+}
+
 HandleDestroy(n) {
     global handles
     if !handles.Has(n)
@@ -1404,6 +1455,48 @@ SettingsIsBool(key) {
     return (key = "activateOnShow" || key = "hideOnBlur")
 }
 
+SettingsFieldLabel(key) {
+    static labels := Map(
+        "name", "Имя",
+        "exe", "Файл (exe)",
+        "cls", "Класс окна",
+        "monitor", "Монитор",
+        "edge", "Край",
+        "width", "Ширина (%)",
+        "activateOnShow", "Активация",
+        "hideOnBlur", "Автоскрытие",
+        "focusHotkey", "Хоткей")
+    return labels[key]
+}
+
+; Поля панели «только чтение» (динамический слот) — короче редактируемой:
+; ни класса окна, ни «Автоскрытие» смысла показывать нет, раз их всё равно
+; нельзя тронуть, не сделав слот постоянным.
+SettingsReadOnlyFields() {
+    return ["name", "exe", "monitor", "edge", "width",
+            "activateOnShow", "focusHotkey"]
+}
+
+; Человеческое значение поля для панели «только чтение» — то же самое,
+; что редактируемые контролы (DropDownList) и так показывают текстом;
+; без этого монитор/край читались бы как сырой config-код.
+SettingsDisplayVal(cfg, key, n) {
+    if (key = "monitor") {
+        v := cfg.HasOwnProp("monitor") ? cfg.monitor : ""
+        return (v = "" || v = "cursor") ? "Следовать за курсором" : "Монитор " v
+    }
+    if (key = "edge") {
+        static edges := Map("right", "Справа", "left", "Слева", "top", "Сверху", "bottom", "Снизу")
+        v := cfg.HasOwnProp("edge") ? cfg.edge : ""
+        return edges.Has(v) ? edges[v] : SettingsVal(cfg, key)
+    }
+    if (key = "exe" && !cfg.HasOwnProp("exe"))
+        return "(пусто)"
+    if (key = "focusHotkey" && !cfg.HasOwnProp("focusHotkey"))
+        return "Ctrl + Alt + " n
+    return SettingsVal(cfg, key)
+}
+
 ; Есть ли ключ в файле. IniRead без значения по умолчанию бросает
 ; исключение — это и есть ответ.
 IniHas(path, section, key) {
@@ -1434,7 +1527,7 @@ SettingsSrc(sections, key, live, isBool) {
     if !(s := SettingsFrom(sections, key))
         return "по умолчанию"
     want := isBool ? (live ? "true" : "false") : String(live)
-    return (IniRead(configPath, s, key, "") = want) ? "[" s "]" : "[" s "] ≠ файл"
+    return (IniRead(configPath, s, key, "") = want) ? "из [" s "]" : "из [" s "] ≠ файл"
 }
 
 ; Значение поля для показа. Поля может не быть вовсе: у динамического
@@ -1449,12 +1542,14 @@ SettingsVal(cfg, key) {
     return (v = "") ? "(пусто)" : String(v)
 }
 
-; Строки списка: сначала общие настройки динамических слотов, затем
-; девять номеров. cfg — тот самый объект, который ящик спросит при
-; нажатии хоткея, поэтому показанное и работающее разойтись не могут.
+; Строки списка: девять номеров слотов. Общие настройки динамических
+; слотов (бывшая строка 0/"[dynamic]") сюда больше не входят — это не
+; слот, а конфигурация, и её место на вкладке General. cfg — тот самый
+; объект, который ящик спросит при нажатии хоткея, поэтому показанное и
+; работающее разойтись не могут.
 SettingsRows() {
-    global apps, permSlots, dynamicSlots, dynamic
-    rows := [{ n: 0, kind: "def", cfg: dynamic, sections: ["dynamic"] }]
+    global apps, permSlots, dynamicSlots
+    rows := []
     Loop 9 {
         n := A_Index
         if permSlots.Has(n) {
@@ -1470,9 +1565,18 @@ SettingsRows() {
 }
 
 SettingsKind(r) {
-    if (r.kind = "def")
-        return "[dynamic]"
-    return (r.kind = "perm") ? "постоянный" : "динамический"
+    return (r.kind = "perm") ? "Постоянный" : "Динамический"
+}
+
+; Цвет индикатора статуса в строке списка: заметно тем же языком, что и
+; сама программа отличает «выдвинут» от «припаркован» — не выдумывает
+; новую трёхцветную модель поверх SettingsSlotStatus().
+SettingsStatusColor(status) {
+    if (status = "пусто")
+        return "3A3D44"
+    if (status = "приложение не запущено")
+        return "5A5D64"
+    return "5FB37C"
 }
 
 ; Тот же поиск, что у AppWindow(), но без записи в managed: открытие
@@ -1530,18 +1634,20 @@ SettingsPickWindow() {
     result := { picked: 0 }
 
     g := Gui("+Owner" setGui.Hwnd " -MinimizeBox", "Ящик — выбор окна")
-    g.SetFont("s9", "Segoe UI")
-    g.Add("Text", "x12 y10 w460 h20",
+    g.BackColor := "17181C"
+    try DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", g.Hwnd, "Int", 20, "Int*", 1, "Int", 4)
+    g.SetFont("s9 cEDEDEF", "Segoe UI")
+    g.Add("Text", "x12 y10 w460 h20 cEDEDEF",
           cands.Length ? "Окно, которое сейчас открыто:" : "Подходящих окон не найдено.")
-    lv := g.Add("ListView", "x12 y32 w460 h280 -Multi +Report", ["Заголовок", "Процесс"])
+    lv := SettingsDarkListView(g.Add("ListView", "x12 y32 w460 h280 -Multi +Report Background1E2025", ["Заголовок", "Процесс"]))
     for c in cands
         lv.Add("", c.title, c.exe)
     lv.ModifyCol(1, 320), lv.ModifyCol(2, 130)
     if cands.Length
         lv.Modify(1, "Select Focus")
 
-    ok     := g.Add("Button", "x300 y320 w82 h28 Default", "Выбрать")
-    cancel := g.Add("Button", "x392 y320 w80 h28", "Отмена")
+    ok     := SettingsDark(g.Add("Button", "+0x8000 x300 y320 w82 h28 Default", "Выбрать"))
+    cancel := SettingsDark(g.Add("Button", "+0x8000 x392 y320 w80 h28", "Отмена"))
     ok.Enabled := cands.Length > 0
 
     finish(use) {
@@ -1599,6 +1705,26 @@ SettingsSlotStatus(r) {
     return HandleParked(hwnd) ? "припаркован" : "выдвинут"
 }
 
+; Путь к exe для иконки строки списка — только когда у слота есть
+; настоящее живое окно прямо сейчас: exe в config.ini хранится голым
+; именем файла (SettingsPickExe), без пути, а достать иконку можно
+; только по полному пути. Тот же поиск, что и у статуса — вторым
+; источником истины не заводится.
+SettingsSlotIconPath(r) {
+    global permSlots, dynSlots, apps
+    hwnd := 0
+    if (r.kind = "perm") {
+        i := permSlots[r.n]
+        hwnd := SettingsAppPeek(i, apps[i])
+    } else if (dynSlots.Has(r.n) && WinExist("ahk_id " dynSlots[r.n]))
+        hwnd := dynSlots[r.n]
+    if !hwnd
+        return ""
+    try
+        return WinGetProcessPath("ahk_id " hwnd)
+    return ""
+}
+
 ; ----------------------------- ПРАВКИ ------------------------------
 ; Буфер несохранённых правок вкладки Slots — setUI.edits, Map номер слота
 ; -> { kind: "perm", ...девять полей... } либо { kind: "dyn" } (слот
@@ -1645,9 +1771,23 @@ SettingsEditSeed(n) {
              focusHotkey: "" }
 }
 
+; Буфер правки вернулся к тому же, с чего начался SettingsEditSeed(n), —
+; сравниваются все девять полей панели «Слот».
+SettingsSlotUnchanged(e, n) {
+    seed := SettingsEditSeed(n)
+    for key in SettingsFields()
+        if (e.%key% != seed.%key%)
+            return false
+    return true
+}
+
 ; Обработчик правки одного поля панели «Слот». populating гасит вызов,
 ; пока панель сама заполняет контролы при переключении строки списка —
 ; иначе один клик по строке выглядел бы как правка всех девяти полей.
+; Если после правки буфер снова совпал с исходным SettingsEditSeed(n) —
+; запись убирается: иначе SettingsSnapshot() продолжала бы видеть слот
+; тронутым только из-за самого факта наличия записи в ui.edits, и
+; SettingsIsDirty()/пометка «не сохранено» врали бы после ручного отката.
 SettingsSlotEdited(ui, key, val) {
     if ui.populating
         return
@@ -1657,21 +1797,19 @@ SettingsSlotEdited(ui, key, val) {
     if !ui.edits.Has(n)
         ui.edits[n] := SettingsEditSeed(n)
     ui.edits[n].%key% := val
+    if SettingsSlotUnchanged(ui.edits[n], n)
+        ui.edits.Delete(n)
 }
 
-; Пересчитать колонку «Состояние» во всех строках. Слот 0 ([dynamic]) в
-; список не входит — это не слот, а общие настройки. Ошибка на одном окне
-; пропускает только его и не трогает таймер.
+; Пересчитать статус (точку и текст) во всех строках списка. Ошибка на
+; одной строке пропускает только её и не трогает таймер.
 SettingsSlotsTick() {
     global setUI
     if !(ui := setUI)
         return
-    for idx, r in ui.slotsRows {
-        if (r.kind = "def")
-            continue
+    Loop 9
         try
-            ui.slotsLv.Modify(idx, "Col7", SettingsSlotStatus(r))
-    }
+            SettingsSlotRowPaint(ui, A_Index)
 }
 
 ; Таймер живёт, только пока видна вкладка Slots — тот же приём, что у
@@ -1688,12 +1826,20 @@ SettingsSlotsTimer(active) {
 ; файл руками. Отсутствие ключа показываем честно: значение взято из
 ; умолчаний программы, и пока его не изменили, писать его в файл не
 ; будем.
+; Иконка-подсказка вместо всегда видимой строки с именем ключа: рядом со
+; свежим скриншотом стало видно, что «width»/«edge»/«monitor» голым
+; текстом под полем читаются как обрывок отладочного вывода, а не как
+; техническая подсказка. Тот же приём, что уже применён к cls в Slots —
+; по клику всплывает ToolTip, обычно поле этим никто не пользуется.
 SettingsHint(g, x, y, section, key) {
     global configPath
-    txt := key . (IniHas(configPath, section, key) ? "" : "  ·  по умолчанию")
-    g.SetFont("s8 c808080")
-    g.Add("Text", "x" x " y" (y + 2) " w172 h18", txt)
-    g.SetFont("s9 cDefault")
+    txt := "Ключ config.ini: " key
+         . (IniHas(configPath, section, key) ? "" : "  (не задан — используется значение по умолчанию)")
+    g.SetFont("s8 c9A9CA3")
+    ctl := g.Add("Text", "x" x " y" y " w14 h16 Center", "ⓘ")
+    g.SetFont("s9 cEDEDEF")
+    ctl.OnEvent("Click", (*) => (ToolTip(txt), SetTimer(() => ToolTip(), -3000)))
+    return ctl
 }
 
 ; Сторона выезда. Список закрыт четырьмя значениями, но значение из
@@ -1794,19 +1940,21 @@ SettingsAnimToggle(ui := 0) {
     ui.animSteps.Value := String(p.steps)
 }
 
-; Панель под списком: все поля выбранного слота и источник каждого.
+; Панель под списком: поля динамического слота (только чтение) и
+; источник каждого. Постоянные слоты сюда не попадают — для них
+; SettingsFillRow показывает редактируемую панель (SettingsFillEditable).
 SettingsFill(box, valc, srcc, r) {
-    box.Text := (r.kind = "def")
-              ? "Общие настройки динамических слотов — [dynamic]"
-              : (r.kind = "perm")
-              ? "Слот " r.n " — постоянный, [slot" r.n "]"
-              : "Слот " r.n " — динамический"
-    for i, key in SettingsFields() {
-        valc[i].Text := SettingsVal(r.cfg, key)
+    ; Короткий заголовок — «Слот N», без раздела/состояния: полный текст
+    ; вида «Слот N — постоянный, [slotN]» на узкой панели наезжал на
+    ; кнопку «Сделать динамическим…» рядом. Тип слота и так виден по
+    ; плашке в списке слева и по подписи самой кнопки.
+    box.Text := "Слот " r.n
+    for i, key in SettingsReadOnlyFields() {
+        valc[i].Text := SettingsDisplayVal(r.cfg, key, r.n)
         srcc[i].Text := r.cfg.HasOwnProp(key)
                       ? SettingsSrc(r.sections, key, r.cfg.%key%,
                                     SettingsIsBool(key))
-                      : "нет у слота"
+                      : (key = "focusHotkey" ? "по номеру" : "по умолчанию")
     }
 }
 
@@ -1827,8 +1975,7 @@ SettingsFillEditable(ui, ef) {
     ui.eBlur.Value  := Opt(cfg, "hideOnBlur", true) ? 1 : 0
     ui.eFocus.Value := Opt(cfg, "focusHotkey", "")
     ui.editingSlot  := ef.n
-    ui.box.Text := "Слот " ef.n " — постоянный, [slot" ef.n "]"
-                 . (ef.HasOwnProp("pending") ? "  ·  не сохранено" : "")
+    ui.box.Text := "Слот " ef.n . (ef.HasOwnProp("pending") ? "  ·  не сохранено" : "")
     ui.populating := false
 }
 
@@ -1844,11 +1991,21 @@ SettingsFillRow(ui, idx) {
         c.Visible := !editable
     for c in ui.editCtl
         c.Visible := editable
+    ui.freeNote.Visible := !editable
 
     if editable
         SettingsFillEditable(ui, ef)
     else
         SettingsFill(ui.box, ui.valc, ui.srcc, r)
+
+    if editable
+        ; DropDownList после Visible=false→true (и после программного
+        ; .Choose() внутри SettingsFillEditable) иногда не перерисовывает
+        ; сама ни стрелку, ни текст выбранного пункта — переприменить тему
+        ; и перерисовать нужно ПОСЛЕ того, как значения уже расставлены,
+        ; иначе invalidate освежит контрол ещё со старым текстом.
+        for c in ui.editCtl
+            SettingsInvalidate(SettingsDark(c))
 
     if r.n {
         ui.convert.Visible := true
@@ -1862,12 +2019,10 @@ SettingsFillRow(ui, idx) {
 ; остальной формы. При уходе в динамический показывается предупреждение:
 ; секция удаляется явной командой и с предупреждением про комментарии.
 SettingsConvertClick(ui) {
-    idx := ui.slotsLv.GetNext(0)
+    idx := ui.selectedSlot
     if !idx
         return
     r := ui.slotsRows[idx]
-    if !r.n
-        return
     ef := SettingsEffective(ui, r)
     if (ef.kind = "perm") {
         if (MsgBox("Слот " r.n " станет динамическим: секция [slot" r.n "] будет"
@@ -1879,7 +2034,7 @@ SettingsConvertClick(ui) {
     } else
         ui.edits[r.n] := SettingsEditSeed(r.n)
     SettingsFillRow(ui, idx)
-    SettingsSlotsColumns(ui, idx)
+    SettingsSlotRowPaint(ui, idx)
 }
 
 ; Обзор .exe и выбор существующего окна — оба лишь подставляют значения
@@ -1916,39 +2071,279 @@ SettingsSlotWindowPick(ui) {
         SettingsSlotEdited(ui, "name", w.title)
 }
 
-; Колонки Тип/Имя/Край/Монитор/Ширина одной строки списка — по
-; эффективному состоянию (с учётом буфера правок). Состояние (Col7) сюда
-; не входит: его считает SettingsSlotStatus() по настоящей строке, и
-; периодическое обновление использует её же.
-SettingsSlotsColumns(ui, idx) {
-    r  := ui.slotsRows[idx]
-    ef := SettingsEffective(ui, r)
-    lv := ui.slotsLv
-    lv.Modify(idx, "Col2", SettingsKind(ef))
-    lv.Modify(idx, "Col3", SettingsVal(ef.cfg, "name"))
-    lv.Modify(idx, "Col4", SettingsVal(ef.cfg, "edge"))
-    lv.Modify(idx, "Col5", SettingsVal(ef.cfg, "monitor"))
-    lv.Modify(idx, "Col6", SettingsVal(ef.cfg, "width"))
+; Иконка приложения поверх номера-аватара — только когда путь реально
+; поменялся: SettingsSlotsTick() перерисовывает все девять строк каждые
+; 400мс, а LoadPicture — файловый вызов, тратить его на одно и то же
+; каждый тик незачем. Хендл — ресурс GDI, свой на каждую строку;
+; предыдущий явно закрывается перед тем, как завести новый, и в
+; SettingsClose() — раз окно всё равно закрывается, а не только строка.
+SettingsSlotRowIcon(row, r) {
+    path := SettingsSlotIconPath(r)
+    if (path = row.iconPath)
+        return
+    if row.iconHwnd {
+        try DllCall("DestroyIcon", "Ptr", row.iconHwnd)
+        row.iconHwnd := 0
+    }
+    row.iconPath := path
+    if (path != "") {
+        try {
+            hicon := LoadPicture(path, "Icon1 w20 h20", &imgType)
+            if (hicon && imgType = 1) {
+                row.iconHwnd := hicon
+                row.icon.Value := "HICON:" hicon
+            }
+        }
+    }
+    row.icon.Visible := (row.iconHwnd != 0)
+    row.avatar.Visible := (row.iconHwnd = 0)
+}
+
+; Перерисовать одну строку своего списка слотов (аватар/имя/статус/
+; плашка) по эффективному состоянию (с учётом буфера правок) и текущему
+; акценту. Замена родных колонок ListView — Край/Монитор/Ширина сюда не
+; входят, они и так на виду в панели «Слот» справа, как только строку
+; выбрали.
+SettingsSlotRowPaint(ui, idx) {
+    row := ui.slotRow[idx]
+    r   := ui.slotsRows[idx]
+    ef  := SettingsEffective(ui, r)
+    perm := (ef.kind = "perm")
+
+    row.avatar.Text := String(idx)
+    row.avatar.Opt(perm ? "Background333640 c" HandleLighten(ui.accentVal, 0.6)
+                         : "Background1E2025 c6C6E76")
+    SettingsInvalidate(row.avatar)
+    SettingsSlotRowIcon(row, r)
+    row.name.Text := SettingsVal(ef.cfg, "name")
+
+    status := SettingsSlotStatus(r)
+    row.meta.Text := status
+    row.dot.Opt("Background" SettingsStatusColor(status))
+    SettingsInvalidate(row.dot)
+
+    row.pill.Text := SettingsKind(ef)
+    if perm
+        row.pill.Opt("Background" HandleLighten(ui.accentVal, 0.12) . " c" HandleLighten(ui.accentVal, 0.6))
+    else
+        row.pill.Opt("Background2B2D33 c9A9CA3")
+    SettingsInvalidate(row.pill)
 }
 
 ; После сохранения список мог не совпасть с диском построчно сразу в
 ; нескольких местах (типы и поля нескольких слотов) — перечитывается
 ; целиком, как при открытии окна, а не точечными правками по одной строке.
 SettingsSlotsRefreshAll(ui) {
-    rows := SettingsRows()
-    ui.slotsRows := rows
-    loop rows.Length
-        SettingsSlotsColumns(ui, A_Index)
-    for idx, r in rows
-        ui.slotsLv.Modify(idx, "Col7", SettingsSlotStatus(r))
-    sel := ui.slotsLv.GetNext(0)
-    if sel
-        SettingsFillRow(ui, sel)
+    ui.slotsRows := SettingsRows()
+    Loop 9
+        SettingsSlotRowPaint(ui, A_Index)
+    if ui.selectedSlot
+        SettingsFillRow(ui, ui.selectedSlot)
+}
+
+; Тёмная тема системного контрола — недокументированный, но широко
+; используемый приём (SetWindowTheme + DarkMode_Explorer). Ошибка молча
+; проглатывается: без поддержки контрол просто останется светлым,
+; программа не падает и не сообщает об этом пользователю (это не сбой).
+SettingsDark(ctrl) {
+    try DllCall("uxtheme\SetWindowTheme", "Ptr", ctrl.Hwnd, "Str", "DarkMode_Explorer", "Ptr", 0)
+    return ctrl
+}
+
+; Смена Background у уже показанного контрола через .Opt() Windows не
+; всегда перерисовывает сама — тот же случай, что уже решён для окон-
+; кромок в HandleRepaintAll(). Нужна там, где перекраска контрола не
+; идёт рядом со сменой Visible (та и так вызывает полную перерисовку).
+SettingsInvalidate(ctrl) {
+    try DllCall("InvalidateRect", "Ptr", ctrl.Hwnd, "Ptr", 0, "Int", 1)
+    return ctrl
+}
+
+; RRGGBB -> COLORREF (0x00BBGGRR), которого ждут GDI-вызовы ниже.
+SettingsBGR(hex) {
+    r := Integer("0x" SubStr(hex, 1, 2))
+    g := Integer("0x" SubStr(hex, 3, 2))
+    b := Integer("0x" SubStr(hex, 5, 2))
+    return (b << 16) | (g << 8) | r
+}
+
+; Закрытый DropDownList SetWindowTheme("DarkMode_Explorer") красит, а
+; вот сам выпадающий список — отдельное системное окно (листбокс) со
+; своим цветом, тему не наследует и остаётся белым с синим текстом.
+; WM_CTLCOLORLISTBOX — обычный (не own-draw) способ его перекрасить:
+; Windows перед отрисовкой спрашивает родителя, каким HBRUSH/цветом
+; текста красить, и это тот вопрос. Один раз на процесс — Drawer больше
+; нигде листбоксов/комбобоксов не показывает, ловить чужие незачем.
+SettingsDdlColors(wParam, lParam, msg, hwnd) {
+    static brush := 0
+    if !brush
+        brush := DllCall("gdi32\CreateSolidBrush", "UInt", SettingsBGR("252A31"), "Ptr")
+    DllCall("gdi32\SetTextColor", "Ptr", wParam, "UInt", SettingsBGR("EDEDEF"))
+    DllCall("gdi32\SetBkColor", "Ptr", wParam, "UInt", SettingsBGR("252A31"))
+    return brush
+}
+
+; Тёмный ListView — тому самому диалогу выбора окна (SettingsPickWindow),
+; единственному настоящему ListView, что остался в программе. Одной
+; SetWindowTheme мало: строки и фон под ней всё равно рисуются системным
+; белым, пока явно не задать LVM_SETBKCOLOR/…TEXTBKCOLOR/…TEXTCOLOR.
+SettingsDarkListView(lv) {
+    SettingsDark(lv)
+    try DllCall("uxtheme\SetWindowTheme", "Ptr", lv.Hwnd, "Str", "DarkMode_Explorer", "Ptr", 0)
+    SendMessage(0x1001, 0, SettingsBGR("1E2025"), lv)   ; LVM_SETBKCOLOR
+    SendMessage(0x1026, 0, SettingsBGR("1E2025"), lv)   ; LVM_SETTEXTBKCOLOR
+    SendMessage(0x1024, 0, SettingsBGR("EDEDEF"), lv)   ; LVM_SETTEXTCOLOR
+    return lv
+}
+
+; Обвязка для контролов Settings: тёмная тема (SettingsDark) плюс, если
+; передан список, — запись в него. panel — один из трёх списков в
+; ui.panels: вместе с остальными контролами того же списка он целиком
+; прячется/показывается в SettingsNavClick при переключении раздела.
+SettingsMk(panel, ctrl) {
+    SettingsDark(ctrl)
+    if panel
+        panel.Push(ctrl)
+    return ctrl
+}
+
+; Плоская «карточка» вместо системного GroupBox. На тёмном фоне рамка
+; обычного GroupBox остаётся бледной, системной — получается «окно
+; мастера», а не плитка из мокапа. Вместо неё — залитый прямоугольник
+; своего оттенка (--bg-card) и обычный жирный текст-заголовок поверх;
+; скруглений всё равно нет ни там, ни там — предел нативного Gui.
+; Возвращает контрол заголовка: у панели «Слот» в него потом
+; переписывается динамический текст (SettingsFill/SettingsFillEditable).
+SettingsCard(g, panel, x, y, w, h, title) {
+    bg := SettingsMk(panel, g.Add("Text", "x" x " y" y " w" w " h" h " Background1E2025 Border", ""))
+    SettingsRound(bg, w, h, 10)
+    g.SetFont("s10 bold cEDEDEF")
+    titleCtl := SettingsMk(panel, g.Add("Text", "x" (x + 18) " y" (y + 16) " w" (w - 36) " h20", title))
+    g.SetFont("s9 norm cEDEDEF")
+    return titleCtl
+}
+
+; Скруглённый контрол через SetWindowRgn — не own-draw: сам контрол
+; рисуется как обычно, регион только обрезает его до эллипса/скруглённого
+; прямоугольника, а из-под срезанных углов проступает фон окна. radius=0
+; — полный эллипс (кружок/капсула для мелких контролов), иначе —
+; скруглённый прямоугольник с этим радиусом угла. +1 к w/h компенсирует
+; то, что CreateRoundRectRgn чертит прямоугольник на пиксель уже, чем
+; заказано, — иначе скруглённая карточка на пиксель не дотягивалась бы
+; до собственного заявленного размера.
+SettingsRound(ctrl, w, h, radius := 0) {
+    try {
+        rgn := radius
+             ? DllCall("CreateRoundRectRgn", "Int", 0, "Int", 0, "Int", w + 1, "Int", h + 1, "Int", radius, "Int", radius, "Ptr")
+             : DllCall("CreateEllipticRgn", "Int", 0, "Int", 0, "Int", w, "Int", h, "Ptr")
+        DllCall("SetWindowRgn", "Ptr", ctrl.Hwnd, "Ptr", rgn, "Int", true)
+    }
+    return ctrl
+}
+
+; Пояснение про класс окна по клику рядом с полем cls. Само поле
+; (ui.eCls) остаётся настоящим и по-прежнему редактируется руками — это
+; только подсказка, вынесенная во всплывающее окно вместо отдельной
+; вечно занятой строки формы.
+SettingsClsInfo(*) {
+    ToolTip("Класс окна (ahk_class). Уточняет, какое именно окно ловить,`n"
+          . "если под этим exe их несколько. Обычно заполняется сам`n"
+          . "кнопкой «Окно…» — руками трогать нужно редко, но можно.")
+    SetTimer(() => ToolTip(), -4000)
+}
+
+; Левый навигатор заменяет верхний Tab3: показывает один из трёх
+; ui.panels, красит активный пункт акцентом, остальные — нейтрально, и
+; держит таймер живой колонки Slots точно так же, как раньше держало
+; событие Tab3 "Change", — тикает, только пока виден раздел Slots.
+; После показа Slots панель «Слот» перезаполняется явно: сама она может
+; быть скрыта целиком предыдущим переключением раздела, а какие из её
+; полей показывать — только для чтения или редактируемые — решает
+; SettingsFillRow() по текущему выбору в списке, не эта функция.
+SettingsNavClick(ui, idx, *) {
+    for panel in ui.panels
+        for c in panel
+            c.Visible := false
+    for c in ui.panels[idx]
+        c.Visible := true
+    ui.activeNav := idx
+    SettingsNavRepaint(ui)
+    if (idx = 2)
+        SettingsFillRow(ui, ui.selectedSlot ? ui.selectedSlot : 1)
+    SettingsSlotsTimer(idx = 2 ? 2 : 0)
+}
+
+SettingsNavRepaint(ui) {
+    for n in ui.nav {
+        active := (n.idx = ui.activeNav)
+        opt := (active ? ("Background" HandleLighten(ui.accentVal, 0.12)) : "Background1B1C21")
+             . " c" (active ? HandleLighten(ui.accentVal, 0.5) : "9A9CA3")
+        n.ctl.Opt(opt)
+        n.icon.Opt(opt)
+        SettingsInvalidate(n.ctl)
+        SettingsInvalidate(n.icon)
+    }
+}
+
+; Клик по образцу или свой HEX — оба ведут сюда. Отмечает галочкой
+; образец, который совпал с текущим значением, и красит мини-превью
+; плитки кромки тем же цветом, каким кромка будет закрашена на самом
+; деле — HandleCreate/HandleApply берут его из того же HANDLE_BG.
+SettingsAccentPick(ui, hex, *) {
+    ui.accentVal := hex
+    for s in ui.swatchCtl
+        s.ctl.Text := (s.hex = hex) ? "✓" : ""
+    ui.accentPreview.Opt("Background" hex)
+    SettingsInvalidate(ui.accentPreview)
+    if (ui.accentHex.Value != hex)
+        ui.accentHex.Value := hex
+    SettingsRepaintAccent(ui)
+}
+; Свой HEX подтверждается по мере ввода, а не по потере фокуса: так
+; превью и галочки образцов обновляются сразу. Неполный/неверный ввод
+; просто пока не принимается — ui.accentVal и так всегда валиден.
+SettingsAccentHexEdited(ui) {
+    hex := StrUpper(Trim(ui.accentHex.Value))
+    if RegExMatch(hex, "^[0-9A-F]{6}$")
+        SettingsAccentPick(ui, hex)
+}
+
+; Акцент красит не только образцы и мини-превью кромки: активный пункт
+; навигации, плашки «Постоянный» и подсветку выбранной строки в списке
+; слотов, и плашку-подсказку под динамическим слотом. Тот же приём, что
+; HandleRepaintAll() уже делает для настоящих окон-кромок, только для
+; контролов этого окна.
+SettingsRepaintAccent(ui) {
+    SettingsNavRepaint(ui)
+    Loop 9
+        SettingsSlotRowPaint(ui, A_Index)
+    SettingsSlotRowHighlight(ui)
+    ui.freeNote.Opt("Background" HandleLighten(ui.accentVal, 0.12) . " c" HandleLighten(ui.accentVal, 0.55))
+    SettingsInvalidate(ui.freeNote)
+}
+
+; Подсветка выбранной строки списка слотов акцентом — своя, вместо
+; системного (синего) выделения ListView.
+SettingsSlotRowHighlight(ui) {
+    for idx, row in ui.slotRow {
+        row.bg.Opt("Background" (idx = ui.selectedSlot ? HandleLighten(ui.accentVal, 0.12) : "1E2025"))
+        SettingsInvalidate(row.bg)
+    }
+}
+
+; Клик по строке своего списка слотов — обновляет подсветку и панель
+; «Слот» справа. Общий обработчик для всех контролов строки (фон,
+; аватар, имя, статус, плашка): в каждой строке их несколько, и клик по
+; любому должен выбирать строку целиком.
+SettingsSlotRowSelect(ui, idx, *) {
+    ui.selectedSlot := idx
+    SettingsSlotRowHighlight(ui)
+    SettingsFillRow(ui, idx)
 }
 
 SettingsOpen() {
     global setGui, setUI, VERSION, configPath
-    global animMs, animSteps, blurMs, handlesOn, dynamic
+    global animMs, animSteps, blurMs, handlesOn, dynamic, HANDLE_BG
 
     ; Окно одно. Повторный вызов из трея поднимает уже открытое, а не
     ; заводит второе: два окна показывали бы один и тот же файл и
@@ -1963,136 +2358,304 @@ SettingsOpen() {
         setGui := 0
     }
 
+    static ddlColorsHooked := false
+    if !ddlColorsHooked {
+        OnMessage(0x0134, SettingsDdlColors)   ; WM_CTLCOLORLISTBOX — один раз на процесс
+        ddlColorsHooked := true
+    }
+
+    ; Тёмная тема — насколько это в принципе достижимо у обычного Win32
+    ; Gui без owner-draw: тёмный фон, светлый текст, тёмная системная
+    ; тема у ListView/кнопок/полей и тёмный заголовок окна через DWM.
+    ; Скруглений, теней и градиентов из мокапа тут не будет — это уже
+    ; предел того, что даёт нативный контрол без переписывания окна на
+    ; WebView2.
     g := Gui("-MaximizeBox", "Drawer — Settings")
-    g.SetFont("s9", "Segoe UI")
-    tab := g.Add("Tab3", "x8 y8 w544 h430", ["General", "Slots", "About"])
+    g.BackColor := "17181C"
+    try DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", g.Hwnd, "Int", 20, "Int*", 1, "Int", 4)
+    g.SetFont("s9 cEDEDEF", "Segoe UI")
 
-    tab.UseTab(1)
     ui := {}
+    panelGeneral := [], panelSlots := [], panelAbout := []
+    contentX := 244
+    pad := 18
 
-    ; ---- умолчания динамических слотов: секция [dynamic] ----
+    ; ---- левый навигатор: General / Slots / About вместо Tab3 ----
+    g.Add("Text", "x0 y0 w208 h720 Background1B1C21", "")
+    g.SetFont("c9A9CA3")
+    navDefs := [["General", 1, "⚙"], ["Slots", 2, "⊞"], ["About", 3, "ⓘ"]]
+    ui.nav := []
+    for d in navDefs {
+        y := 20 + (A_Index - 1) * 40
+        g.SetFont("s11 c9A9CA3")
+        icon := g.Add("Text", "x16 y" y " w22 h30 Background1B1C21 Center", d[3])
+        g.SetFont("s9 c9A9CA3")
+        t := g.Add("Text", "x38 y" y " w154 h30 Background1B1C21", "  " d[1])
+        icon.OnEvent("Click", SettingsNavClick.Bind(ui, d[2]))
+        t.OnEvent("Click", SettingsNavClick.Bind(ui, d[2]))
+        ui.nav.Push({ ctl: t, icon: icon, idx: d[2] })
+    }
+    g.SetFont("cEDEDEF")
+
+    ; ==================== General ====================
+    g.SetFont("s13 bold")
+    panelGeneral.Push(g.Add("Text", "x" contentX " y16 w780 h24", "Общие настройки"))
+    g.SetFont("s9 norm c9A9CA3")
+    panelGeneral.Push(g.Add("Text", "x" contentX " y42 w780 h18",
+        "Поведение, внешний вид и умолчания для динамических слотов."))
+    g.SetFont("cEDEDEF")
+
+    cardW := 382, cardH := 264, gapX := 16, gapY := 16
+    c1x := contentX,              c1y := 72
+    c2x := contentX + cardW+gapX, c2y := 72
+    c3x := contentX,              c3y := 72 + cardH + gapY
+    c4x := contentX + cardW+gapX, c4y := 72 + cardH + gapY
+
+    ; -- Поведение по умолчанию: [dynamic] --
     ; Заголовок и подсказка говорят ровно то, что происходит в файле:
     ; постоянные слоты сюда не заглядывают, у них свои значения в
     ; [slotN], и менять их отсюда нельзя. Иначе первая же правка выглядит
     ; как «настройка не работает».
-    g.Add("GroupBox", "x20 y44 w520 h190", "Поведение по умолчанию")
-    g.SetFont("c606060")
-    g.Add("Text", "x36 y66 w488 h30",
-          "Действует на динамические слоты — те, что назначаются "
-        . "Ctrl+Alt+Shift+N. У постоянных слотов ([slotN] в config.ini) "
-        . "свои значения, и эти настройки их не меняют.")
-    g.SetFont("cDefault")
+    SettingsCard(g, panelGeneral, c1x, c1y, cardW, cardH, "Поведение по умолчанию")
 
-    g.Add("Text", "x36 y99 w140 h20", "Размер окна")
-    ui.width := g.Add("Edit", "x180 y96 w54 h22 Number Limit3",
-                      String(Opt(dynamic, "width", 60)))
-    g.Add("Text", "x240 y99 w120 h20", "% экрана")
-    SettingsHint(g, 364, 99, "dynamic", "width")
+    rowY := c1y + 56
+    panelGeneral.Push(g.Add("Text", "x" (c1x + pad) " y" rowY " w120 h20", "Размер окна"))
+    ui.width := SettingsMk(panelGeneral, g.Add("Edit", "-E0x200 Background252A31 x" (c1x + 150) " y" (rowY - 3) " w50 h28 Number Limit3",
+                      String(Opt(dynamic, "width", 60))))
+    panelGeneral.Push(g.Add("Text", "x" (c1x + 206) " y" rowY " w80 h20", "% экрана"))
+    panelGeneral.Push(SettingsHint(g, c1x + 292, rowY + 4, "dynamic", "width"))
 
-    g.Add("Text", "x36 y127 w140 h20", "Сторона выезда")
-    ui.edge := g.Add("DropDownList", "x180 y124 w150", SettingsEdgeItems())
+    rowY += 34
+    panelGeneral.Push(g.Add("Text", "x" (c1x + pad) " y" rowY " w120 h20", "Сторона выезда"))
+    ui.edge := SettingsMk(panelGeneral, g.Add("DropDownList", "-E0x200 x" (c1x + 150) " y" (rowY - 3) " w150 h28", SettingsEdgeItems()))
     SettingsEdgePick(ui.edge, Opt(dynamic, "edge", "right"))
-    SettingsHint(g, 364, 127, "dynamic", "edge")
+    panelGeneral.Push(SettingsHint(g, c1x + 306, rowY + 4, "dynamic", "edge"))
 
-    g.Add("Text", "x36 y155 w140 h20", "Монитор")
-    ui.mon := g.Add("DropDownList", "x180 y152 w150", SettingsMonItems())
+    rowY += 34
+    panelGeneral.Push(g.Add("Text", "x" (c1x + pad) " y" rowY " w120 h20", "Монитор"))
+    ui.mon := SettingsMk(panelGeneral, g.Add("DropDownList", "-E0x200 x" (c1x + 150) " y" (rowY - 3) " w150 h28", SettingsMonItems()))
     SettingsMonPick(ui.mon, Opt(dynamic, "monitor", "cursor"))
-    SettingsHint(g, 364, 155, "dynamic", "monitor")
+    panelGeneral.Push(SettingsHint(g, c1x + 306, rowY + 4, "dynamic", "monitor"))
 
-    ui.act := g.Add("CheckBox", "x180 y182 w344 h20", "Активировать окно при открытии")
+    rowY += 38
+    ui.act := SettingsMk(panelGeneral, g.Add("CheckBox", "x" (c1x + pad) " y" rowY " w" (cardW - 2 * pad) " h20", "Активировать окно при открытии"))
     ui.act.Value := Opt(dynamic, "activateOnShow", true) ? 1 : 0
-    ui.blur := g.Add("CheckBox", "x180 y206 w344 h20",
-                     "Убирать окно, когда фокус ушёл в другое")
+
+    rowY += 24
+    ui.blur := SettingsMk(panelGeneral, g.Add("CheckBox", "x" (c1x + pad) " y" rowY " w" (cardW - 2 * pad) " h20", "Убирать окно, когда фокус ушёл в другое"))
     ui.blur.Value := Opt(dynamic, "hideOnBlur", true) ? 1 : 0
 
-    ; ---- внешний вид: [general] handles ----
-    g.Add("GroupBox", "x20 y244 w520 h52", "Внешний вид")
-    ui.handles := g.Add("CheckBox", "x36 y266 w300 h20",
-                        "Кромки у края экрана")
+    ; -- Внешний вид: [general] handles + [general] accent --
+    SettingsCard(g, panelGeneral, c2x, c2y, cardW, cardH, "Внешний вид")
+    ui.handles := SettingsMk(panelGeneral, g.Add("CheckBox", "x" (c2x + pad) " y" (c2y + 40) " w300 h20", "Кромки у края экрана"))
     ui.handles.Value := handlesOn ? 1 : 0
-    SettingsHint(g, 364, 266, "general", "handles")
+    panelGeneral.Push(SettingsHint(g, c2x + 324, c2y + 43, "general", "handles"))
 
-    ; ---- анимация: два ключа, но выбирается одним списком ----
-    g.Add("GroupBox", "x20 y306 w520 h64", "Анимация")
-    g.Add("Text", "x36 y331 w140 h20", "Плавность")
-    ui.anim := g.Add("DropDownList", "x180 y328 w150", SettingsAnimItems())
-    ui.animMs := g.Add("Edit", "x340 y328 w52 h22 Number Limit4", String(animMs))
-    g.Add("Text", "x396 y331 w24 h20", "мс")
-    ui.animSteps := g.Add("Edit", "x424 y328 w52 h22 Number Limit3", String(animSteps))
-    g.Add("Text", "x480 y331 w56 h20", "шагов")
+    panelGeneral.Push(g.Add("Text", "x" (c2x + pad) " y" (c2y + 78) " w" (cardW - 2 * pad) " h1 Background2A2C33", ""))
+    panelGeneral.Push(g.Add("Text", "x" (c2x + pad) " y" (c2y + 92) " w150 h20", "Цвет акцента"))
+
+    palette := ["2A2E35", "332A35", "2A352E", "2A3335", "332F2A", "2E2E2E"]
+    ui.accentVal := HANDLE_BG
+    ui.swatchCtl := []
+    swY := c2y + 116
+    sx := c2x + pad
+    for hex in palette {
+        sw := SettingsMk(panelGeneral, g.Add("Text", "x" sx " y" swY " w27 h27 Background" hex " Center",
+                         (hex = HANDLE_BG) ? "✓" : ""))
+        SettingsRound(sw, 27, 27)
+        sw.OnEvent("Click", SettingsAccentPick.Bind(ui, hex))
+        ui.swatchCtl.Push({ ctl: sw, hex: hex })
+        sx += 33
+    }
+    g.SetFont("c9A9CA3")
+    panelGeneral.Push(g.Add("Text", "x" (c2x + pad) " y" (swY + 41) " w40 h20", "HEX:"))
+    g.SetFont("cEDEDEF")
+    ui.accentHex := SettingsMk(panelGeneral, g.Add("Edit", "-E0x200 Background252A31 x" (c2x + pad + 42) " y" (swY + 39) " w70 h26", HANDLE_BG))
+    ui.accentHex.OnEvent("Change", (*) => SettingsAccentHexEdited(ui))
+
+    previewW := 88, previewH := 108
+    previewX := c2x + cardW - pad - previewW
+    previewBox := SettingsMk(panelGeneral,
+        g.Add("Text", "x" previewX " y" swY " w" previewW " h" previewH " BackgroundDEE0E4", ""))
+    SettingsRound(previewBox, previewW, previewH, 10)
+    handleW := 20, handleH := 34
+    handleX := previewX + previewW - handleW
+    handleY := swY + (previewH - handleH) // 2
+    ui.accentPreview := SettingsMk(panelGeneral,
+        g.Add("Text", "x" handleX " y" handleY " w" handleW " h" handleH " Background" HANDLE_BG, ""))
+    g.SetFont("s10 bold cD6DAE2")
+    panelGeneral.Push(g.Add("Text", "x" handleX " y" (handleY + 9) " w" handleW " h16 Center BackgroundTrans", "›"))
+    g.SetFont("s9 norm cEDEDEF")
+
+    ; -- Анимация: два ключа, но выбирается одним списком --
+    SettingsCard(g, panelGeneral, c3x, c3y, cardW, cardH, "Анимация")
+    rowY := c3y + 56
+    panelGeneral.Push(g.Add("Text", "x" (c3x + pad) " y" rowY " w150 h20", "Плавность"))
+    ui.anim := SettingsMk(panelGeneral, g.Add("DropDownList", "-E0x200 x" (c3x + 182) " y" (rowY - 3) " w184 h28", SettingsAnimItems()))
+
+    rowY += 34
+    panelGeneral.Push(g.Add("Text", "x" (c3x + pad) " y" rowY " w150 h20", "Длительность (мс)"))
+    ui.animMs := SettingsMk(panelGeneral, g.Add("Edit", "-E0x200 Background252A31 x" (c3x + 182) " y" (rowY - 3) " w56 h28 Number Limit4", String(animMs)))
+
+    rowY += 34
+    panelGeneral.Push(g.Add("Text", "x" (c3x + pad) " y" rowY " w150 h20", "Шагов"))
+    ui.animSteps := SettingsMk(panelGeneral, g.Add("Edit", "-E0x200 Background252A31 x" (c3x + 182) " y" (rowY - 3) " w56 h28 Number Limit3", String(animSteps)))
+
     SettingsAnimPick(ui, animMs, animSteps)
     ui.anim.OnEvent("Change", (*) => SettingsAnimToggle())
 
-    ; ---- дополнительно: blurMs ----
-    g.Add("GroupBox", "x20 y380 w520 h50", "Дополнительно")
-    g.Add("Text", "x36 y403 w200 h20", "Проверка потери фокуса")
-    ui.blurMs := g.Add("Edit", "x240 y400 w54 h22 Number Limit5", String(blurMs))
-    g.SetFont("c606060")
-    g.Add("Text", "x300 y403 w236 h20", "мс — как часто спрашивать")
-    g.SetFont("cDefault")
+    ; -- Дополнительно: blurMs --
+    SettingsCard(g, panelGeneral, c4x, c4y, cardW, cardH, "Дополнительно")
+    rowY := c4y + 56
+    panelGeneral.Push(g.Add("Text", "x" (c4x + pad) " y" rowY " w190 h20", "Проверка потери фокуса (мс)"))
+    ui.blurMs := SettingsMk(panelGeneral, g.Add("Edit", "-E0x200 Background252A31 x" (c4x + 212) " y" (rowY - 3) " w56 h28 Number Limit5", String(blurMs)))
+    g.SetFont("c9A9CA3")
+    panelGeneral.Push(g.Add("Text", "x" (c4x + pad) " y" (rowY + 38) " w" (cardW - 2 * pad) " h48",
+        "Интервал опроса, используется только для скрытия окна, когда фокус ушёл (hideOnBlur)."))
+    g.SetFont("cEDEDEF")
 
-    tab.UseTab(2)
-    ; Под списком остаётся место для смены типа и полей выбранного слота.
-    lv := g.Add("ListView", "x20 y44 w520 h134 -Multi +Report",
-                ["Слот", "Тип", "Имя", "Край", "Монитор", "Ширина", "Состояние"])
-    rows := SettingsRows()
-    for r in rows {
-        lv.Add("", r.n ? r.n : "—", SettingsKind(r),
-               SettingsVal(r.cfg, "name"),    SettingsVal(r.cfg, "edge"),
-               SettingsVal(r.cfg, "monitor"), SettingsVal(r.cfg, "width"),
-               SettingsSlotStatus(r))
+    ; ==================== Slots ====================
+    g.SetFont("s13 bold")
+    panelSlots.Push(g.Add("Text", "x" contentX " y16 w780 h24", "Слоты Drawer"))
+    g.SetFont("s9 norm c9A9CA3")
+    panelSlots.Push(g.Add("Text", "x" contentX " y42 w780 h18", "Настройте слоты для приложений и горячие клавиши."))
+    g.SetFont("cEDEDEF")
+
+    listX := contentX, listY := 72, listW := 358, listH := 536
+    detailX := listX + listW + 18, detailY := 72, detailW := 404, detailH := 536
+
+    ; Список — свой, не системный ListView: белый native-контрол на тёмном
+    ; окне не спрятать ни SetWindowTheme, ни LVM_SETBKCOLOR целиком —
+    ; системные полосы прокрутки и выделение остаются светлыми/синими.
+    ; Девять фиксированных строк (их ровно девять всегда, SettingsRows()
+    ; это гарантирует) проще и надёжнее нарисовать самим — тем же приёмом,
+    ; что уже держит карточки и левый навигатор: залитые Text-контролы,
+    ; свои клики, подсветка выбранной строки своим акцентом.
+    listBg := g.Add("Text", "x" listX " y" listY " w" listW " h" listH " Background1E2025", "")
+    panelSlots.Push(listBg)
+    SettingsRound(listBg, listW, listH, 10)
+
+    rowH := 44
+    ui.slotRow := []
+    Loop 9 {
+        n := A_Index
+        rowY := listY + (n - 1) * rowH
+
+        bg := SettingsMk(panelSlots, g.Add("Text", "x" (listX + 1) " y" rowY " w" (listW - 2) " h" rowH " Background1E2025", ""))
+
+        avatar := SettingsMk(panelSlots, g.Add("Text", "x" (listX + 13) " y" (rowY + 8) " w28 h28 Background333640 Center", String(n)))
+        SettingsRound(avatar, 28, 28, 10)
+        ; Поверх номера — картинка иконки, когда её удаётся достать
+        ; (SettingsSlotRowPaint); номер под ней остаётся видимым запасным
+        ; вариантом для слотов без запущенного/привязанного окна.
+        icon := SettingsMk(panelSlots, g.Add("Picture", "x" (listX + 17) " y" (rowY + 12) " w20 h20 Hidden", ""))
+
+        nameX := listX + 13 + 28 + 11
+        pillW := 84
+        pillX := listX + listW - 13 - pillW
+        name := SettingsMk(panelSlots, g.Add("Text", "x" nameX " y" (rowY + 7) " w" (pillX - nameX - 8) " h16", ""))
+
+        dot := SettingsMk(panelSlots, g.Add("Text", "x" nameX " y" (rowY + 27) " w6 h6 Background5FB37C", ""))
+
+        g.SetFont("s8 c9A9CA3")
+        meta := SettingsMk(panelSlots, g.Add("Text", "x" (nameX + 11) " y" (rowY + 24) " w" (listX + listW - 13 - nameX - 11) " h16", ""))
+        g.SetFont("s9 cEDEDEF")
+
+        g.SetFont("s8 bold")
+        pill := SettingsMk(panelSlots, g.Add("Text", "x" pillX " y" (rowY + 8) " w" pillW " h16 Center", ""))
+        SettingsRound(pill, pillW, 16, 8)
+        g.SetFont("s9 norm cEDEDEF")
+
+        if (n < 9)
+            SettingsMk(panelSlots, g.Add("Text", "x" (listX + 13) " y" (rowY + rowH - 1) " w" (listW - 26) " h1 Background2A2C33", ""))
+
+        ui.slotRow.Push({ bg: bg, avatar: avatar, icon: icon, iconPath: "", iconHwnd: 0,
+                          name: name, dot: dot, meta: meta, pill: pill })
+        for c in [bg, avatar, icon, name, dot, meta, pill]
+            c.OnEvent("Click", SettingsSlotRowSelect.Bind(ui, n))
     }
-    lv.ModifyCol(1, 44), lv.ModifyCol(2, 90), lv.ModifyCol(3, 100)
-    lv.ModifyCol(4, 56), lv.ModifyCol(5, 64), lv.ModifyCol(6, 56)
-    lv.ModifyCol(7, 110)
-    ; Живая колонка: опрашивается, только пока видна эта вкладка — тот же
-    ; расчёт, что у кромок. Tab3 сам присылает свой Value в событии.
-    ui.slotsLv := lv, ui.slotsRows := rows
-    ui.edits := Map(), ui.populating := false, ui.editingSlot := 0
-    tab.OnEvent("Change", (ctrl, *) => SettingsSlotsTimer(ctrl.Value))
+    ui.slotsRows := SettingsRows()
+    ui.edits := Map(), ui.populating := false, ui.editingSlot := 0, ui.selectedSlot := 0
 
-    ui.convert := g.Add("Button", "x20 y184 w220 h24", "Сделать постоянным…")
+    box := SettingsCard(g, panelSlots, detailX, detailY, detailW, detailH, "Слот")
+    box.Move(, , detailW - 190 - 14 - pad - 10)   ; не залезать под кнопку справа
+    ui.convert := SettingsMk(panelSlots,
+        g.Add("Button", "+0x8000 x" (detailX + detailW - 190 - 14) " y" (detailY + 8) " w190 h26", "Сделать постоянным…"))
     ui.convert.OnEvent("Click", (*) => SettingsConvertClick(ui))
+    panelSlots.Push(g.Add("Text", "x" (detailX + pad) " y" (detailY + 38) " w" (detailW - 2 * pad) " h1 Background2A2C33", ""))
 
-    box  := g.Add("GroupBox", "x20 y212 w520 h208", "Слот")
-    valc := [], srcc := []
+    fx := detailX + pad, fLabelW := 130, fValX := fx + fLabelW + 8
+
+    ; Подписи редактируемой сетки (постоянный слот) — те же девять строк,
+    ; что и у ui.eName/eExe/…/eFocus ниже; показываются только вместе с
+    ; ними (уходят в ui.editCtl), иначе на местах убранных из read-only
+    ; class/hideOnBlur подписи висели бы без контрола рядом.
+    editLabels := []
     for i, key in SettingsFields() {
-        y := 234 + (i - 1) * 20
-        g.Add("Text", "x36 y" y " w118 h18", key)
-        valc.Push(g.Add("Text", "x158 y" y " w160 h18", ""))
-        g.SetFont("c606060")
-        srcc.Push(g.Add("Text", "x324 y" y " w206 h18", ""))
-        g.SetFont("cDefault")
+        y := detailY + 44 + (i - 1) * 30
+        editLabels.Push(SettingsMk(panelSlots, g.Add("Text", "x" fx " y" y " w" fLabelW " h18", SettingsFieldLabel(key))))
+    }
+
+    ; Панель «только чтение» (динамический слот) — короче редактируемой
+    ; (см. SettingsReadOnlyFields) и со своими подписями/значениями
+    ; (SettingsDisplayVal/SettingsSrc), а не сырыми config-значениями.
+    roLabels := [], valc := [], srcc := []
+    for i, key in SettingsReadOnlyFields() {
+        y := detailY + 44 + (i - 1) * 30
+        roLabels.Push(SettingsMk(panelSlots, g.Add("Text", "x" fx " y" y " w" fLabelW " h18", SettingsFieldLabel(key))))
+        valc.Push(SettingsMk(panelSlots, g.Add("Text", "x" fValX " y" y " w100 h18", "")))
+        g.SetFont("c9A9CA3")
+        srcc.Push(SettingsMk(panelSlots, g.Add("Text", "x" (fValX + 108) " y" y " w118 h18", "")))
+        g.SetFont("cEDEDEF")
     }
     ui.box := box, ui.valc := valc, ui.srcc := srcc
     ui.roCtl := []
+    for c in roLabels
+        ui.roCtl.Push(c)
     for c in valc
         ui.roCtl.Push(c)
     for c in srcc
         ui.roCtl.Push(c)
 
-    ; Те же девять полей, редактируемые — на месте valc/srcc, видны только
-    ; когда выбранный слот постоянный (или готовится им стать). yExe и
-    ; yFocus — те же y, что и у полей exe/focusHotkey в цикле выше (i=2 и
-    ; i=9), чтобы кнопки и подсказка встали в свои строки.
-    yExe := 234 + (2 - 1) * 20, yFocus := 234 + (9 - 1) * 20
-    ui.eName  := g.Add("Edit", "x158 y234 w220 h22")
-    ui.eExe   := g.Add("Edit", "x158 y" yExe " w170 h22")
-    ui.eExeBrowse := g.Add("Button", "x334 y" (yExe - 2) " w60 h24", "Обзор…")
-    ui.eExeWindow := g.Add("Button", "x398 y" (yExe - 2) " w66 h24", "Окно…")
-    ui.eCls   := g.Add("Edit", "x158 y274 w220 h22")
-    ui.eMon   := g.Add("DropDownList", "x158 y292 w150", SettingsMonItems())
-    ui.eEdge  := g.Add("DropDownList", "x158 y312 w150", SettingsEdgeItems())
-    ui.eWidth := g.Add("Edit", "x158 y334 w60 h22 Number Limit3")
-    ui.eAct   := g.Add("CheckBox", "x158 y354 w340 h20", "Активировать окно при выезде")
-    ui.eBlur  := g.Add("CheckBox", "x158 y374 w340 h20", "Убирать окно, когда фокус ушёл")
-    ui.eFocus := g.Add("Edit", "x158 y" yFocus " w220 h22")
-    g.SetFont("c808080")
-    g.Add("Text", "x384 y" (yFocus + 2) " w146 h18", "после перезапуска")
-    g.SetFont("cDefault")
+    ; Плашка под динамическим слотом: поясняет, что он свободен и живёт
+    ; общими настройками General, а не выдумывает новую настройку —
+    ; ровно то же самое давно показывает панель «Слот», просто раньше без
+    ; единого места, куда за этими настройками пойти.
+    freeNoteY := detailY + 44 + SettingsReadOnlyFields().Length * 30 + 22
+    ui.freeNote := SettingsMk(panelSlots, g.Add("Text", "x" fx " y" freeNoteY " w" (detailW - 2 * pad) " h64",
+          "Слот свободен и использует общие настройки динамических слотов "
+        . "(вкладка General). Сделайте его постоянным, чтобы задать своё "
+        . "приложение и хоткей."))
+    SettingsRound(ui.freeNote, detailW - 2 * pad, 64, 10)
 
-    ui.editCtl := [ui.eName, ui.eExe, ui.eExeBrowse, ui.eExeWindow, ui.eCls,
-                   ui.eMon, ui.eEdge, ui.eWidth, ui.eAct, ui.eBlur, ui.eFocus]
+    ; Те же девять полей, редактируемые — поверх valc/srcc, видны только
+    ; когда выбранный слот постоянный (или готовится им стать). yExe,
+    ; yCls и yFocus — те же y, что и у полей exe/cls/focusHotkey в цикле
+    ; выше (i=2,3,9), чтобы кнопки и пояснение встали в свои строки.
+    yExe := detailY + 44 + (2 - 1) * 30
+    yCls := detailY + 44 + (3 - 1) * 30
+    yFocus := detailY + 44 + (9 - 1) * 30
+    ui.eName  := SettingsMk(panelSlots, g.Add("Edit", "-E0x200 Background252A31 x" fValX " y" (detailY + 44) " w210 h26"))
+    ui.eExe   := SettingsMk(panelSlots, g.Add("Edit", "-E0x200 Background252A31 x" fValX " y" yExe " w110 h26"))
+    ui.eExeBrowse := SettingsMk(panelSlots, g.Add("Button", "+0x8000 x" (fValX + 116) " y" (yExe - 1) " w52 h26", "Обзор…"))
+    ui.eExeWindow := SettingsMk(panelSlots, g.Add("Button", "+0x8000 x" (fValX + 172) " y" (yExe - 1) " w52 h26", "Окно…"))
+    ui.eCls   := SettingsMk(panelSlots, g.Add("Edit", "-E0x200 Background252A31 x" fValX " y" yCls " w110 h26"))
+    clsInfo := SettingsMk(panelSlots,
+        g.Add("Text", "x" (fValX + 116) " y" (yCls + 3) " w20 h20 Background2B2D33 Center", "ⓘ"))
+    SettingsRound(clsInfo, 20, 20)
+    clsInfo.OnEvent("Click", SettingsClsInfo)
+    ui.eMon   := SettingsMk(panelSlots, g.Add("DropDownList", "-E0x200 x" fValX " y" (detailY + 44 + 3 * 30) " w180 h26", SettingsMonItems()))
+    ui.eEdge  := SettingsMk(panelSlots, g.Add("DropDownList", "-E0x200 x" fValX " y" (detailY + 44 + 4 * 30) " w180 h26", SettingsEdgeItems()))
+    ui.eWidth := SettingsMk(panelSlots, g.Add("Edit", "-E0x200 Background252A31 x" fValX " y" (detailY + 44 + 5 * 30) " w60 h26 Number Limit3"))
+    ui.eAct   := SettingsMk(panelSlots, g.Add("CheckBox", "x" fValX " y" (detailY + 44 + 6 * 30 + 3) " w226 h20", "Активировать окно при выезде"))
+    ui.eBlur  := SettingsMk(panelSlots, g.Add("CheckBox", "x" fValX " y" (detailY + 44 + 7 * 30 + 3) " w226 h20", "Убирать окно, когда фокус ушёл"))
+    ui.eFocus := SettingsMk(panelSlots, g.Add("Edit", "-E0x200 Background252A31 x" fValX " y" yFocus " w160 h26"))
+    g.SetFont("s8 c9A9CA3")
+    focusCaption := SettingsMk(panelSlots, g.Add("Text", "x" fValX " y" (yFocus + 27) " w160 h16", "после перезапуска"))
+    g.SetFont("s9 cEDEDEF")
+
+    ui.editCtl := [ui.eName, ui.eExe, ui.eExeBrowse, ui.eExeWindow, ui.eCls, clsInfo,
+                   ui.eMon, ui.eEdge, ui.eWidth, ui.eAct, ui.eBlur, ui.eFocus, focusCaption, editLabels*]
 
     ui.eName.OnEvent("Change",  (*) => SettingsSlotEdited(ui, "name", ui.eName.Value))
     ui.eExe.OnEvent("Change",   (*) => SettingsSlotEdited(ui, "exe", ui.eExe.Value))
@@ -2106,52 +2669,71 @@ SettingsOpen() {
     ui.eExeBrowse.OnEvent("Click", (*) => SettingsSlotExePick(ui))
     ui.eExeWindow.OnEvent("Click", (*) => SettingsSlotWindowPick(ui))
 
-    lv.OnEvent("ItemSelect",
-               (LV, item, sel) => (sel && item) ? SettingsFillRow(ui, item) : "")
-    lv.Modify(1, "Select Focus")
-    SettingsFillRow(ui, 1)
+    Loop 9
+        SettingsSlotRowPaint(ui, A_Index)
+    SettingsSlotRowSelect(ui, 1)
 
-    tab.UseTab(3)
-    g.SetFont("s12 bold")
-    g.Add("Text", "x20 y48 w520 h26", "Drawer")
-    g.SetFont("s9 norm")
-    g.Add("Text", "x20 y80 w520 h20", "версия " VERSION)
-    g.Add("Text", "x20 y118 w520 h20", "config.ini")
-    g.Add("Edit", "x20 y140 w504 h22 ReadOnly -TabStop", configPath)
-    g.SetFont("c606060")
-    g.Add("Text", "x20 y180 w504 h226",
+    ; ==================== About ====================
+    g.SetFont("s16 bold")
+    panelAbout.Push(g.Add("Text", "x" contentX " y72 w300 h30", "Drawer"))
+    g.SetFont("s9 norm c9A9CA3")
+    panelAbout.Push(g.Add("Text", "x" (contentX + 90) " y80 w200 h20", "версия " VERSION))
+    g.SetFont("cEDEDEF")
+
+    panelAbout.Push(g.Add("Text", "x" contentX " y122 w780 h20", "config.ini"))
+    ; ReadOnly-поле Win32 красит белым независимо от SetWindowTheme — в
+    ; отличие от обычных Edit выше, тут фон приходится задавать явно.
+    panelAbout.Push(SettingsMk(0, g.Add("Edit", "-E0x200 x" contentX " y144 w780 h26 ReadOnly -TabStop Background1E2025", configPath)))
+
+    g.SetFont("c9A9CA3")
+    panelAbout.Push(g.Add("Text", "x" contentX " y186 w780 h60",
           "Программа трогает этот файл только тогда, когда вы нажали "
         . "«Применить» или «ОК», и записывает ровно те строки, которые "
         . "вы изменили. Ни закрытие окна, ни выход из программы ничего "
-        . "не сохраняют.`n`n"
-        . "github.com/nerzar/Drawer  ·  лицензия MIT`n`n"
-        . "Хоткеи слотов заданы номером и не настраиваются:`n"
-        . "Ctrl+Alt+1…9  —  выдвинуть или убрать окно слота`n"
-        . "Ctrl+Alt+Shift+1…9  —  назначить активное окно слоту`n"
-        . "Ctrl+Alt+0  —  очистить динамические слоты`n"
-        . "Ctrl+Alt+Shift+0  —  выход, окна возвращаются на места")
-    g.SetFont("cDefault")
+        . "не сохраняют."))
+    g.SetFont("cEDEDEF")
+    panelAbout.Push(g.Add("Text", "x" contentX " y254 w780 h20", "github.com/nerzar/Drawer  ·  лицензия MIT"))
 
-    tab.UseTab(0)
+    g.SetFont("s9 bold")
+    panelAbout.Push(g.Add("Text", "x" contentX " y292 w300 h20", "Горячие клавиши"))
+    g.SetFont("s9 norm")
+    hk := [["Ctrl+Alt+1…9", "Выдвинуть / убрать окно слота"],
+           ["Ctrl+Alt+Shift+1…9", "Назначить активное окно слоту"],
+           ["Ctrl+Alt+0", "Очистить динамические слоты"],
+           ["Ctrl+Alt+Shift+0", "Выход, окна возвращаются на места"]]
+    for row in hk {
+        y := 320 + (A_Index - 1) * 26
+        panelAbout.Push(g.Add("Text", "x" contentX " y" y " w220 h20", row[1]))
+        g.SetFont("c9A9CA3")
+        panelAbout.Push(g.Add("Text", "x" (contentX + 226) " y" y " w400 h20", row[2]))
+        g.SetFont("cEDEDEF")
+    }
+
+    ; ==================== подвал: всегда виден ====================
     ; Строка состояния — единственное место, где окно говорит об ошибке
     ; записи. TrayTip для этого не годится: уведомления пересчитывает
     ; набор quiet, и новые ломают его.
-    ui.status := g.Add("Text", "x20 y444 w520 h20", "")
-    ui.ok     := g.Add("Button", "x236 y474 w92 h28 Default", "ОК")
-    ui.cancel := g.Add("Button", "x338 y474 w92 h28", "Отмена")
-    ui.apply  := g.Add("Button", "x440 y474 w92 h28", "Применить")
+    footerY := 624
+    ui.status := SettingsMk(0, g.Add("Text", "x" contentX " y" footerY " w460 h20", ""))
+    btnY := footerY + 30
+    ui.cancel := SettingsMk(0, g.Add("Button", "+0x8000 x748 y" btnY " w92 h32", "Отмена"))
+    ui.apply  := SettingsMk(0, g.Add("Button", "+0x8000 x846 y" btnY " w92 h32", "Применить"))
+    ui.ok     := SettingsMk(0, g.Add("Button", "+0x8000 x944 y" btnY " w92 h32 Default", "ОК"))
     ui.ok.OnEvent("Click",     (*) => SettingsSave(true))
     ui.apply.OnEvent("Click",  (*) => SettingsSave(false))
     ui.cancel.OnEvent("Click", (*) => SettingsClose())
     g.OnEvent("Close",  (*) => SettingsClose())
     g.OnEvent("Escape", (*) => SettingsClose())
 
+    ui.panels := [panelGeneral, panelSlots, panelAbout]
+    SettingsNavClick(ui, 1)
+
     ; Окно объявляется своим ДО показа: иначе первый же его кадр успел бы
     ; стать передним планом обычного окна и увести за собой hideOnBlur.
     setUI  := ui
     SettingsRebase()
     setGui := g
-    g.Show("w560 h514")
+    g.Show("w1060 h720")
 }
 
 ; Закрытие само по себе ничего не сохраняет — ни крестиком, ни Escape,
@@ -2166,9 +2748,15 @@ SettingsClose(force := false) {
             return true    ; событиям Close и Escape ненулевое значение
     }                      ; означает «окно не закрывать»
     g := setGui
+    ui := setUI
     setGui := 0        ; сначала забыть, потом рушить: IsServiceWindow не
     setUI  := 0        ; должен спрашивать у уже разрушенного окна
     SetTimer(SettingsSlotsTick, 0)   ; иначе таймер живой колонки переживёт закрытие
+    if ui {
+        for row in ui.slotRow
+            if row.iconHwnd
+                try DllCall("DestroyIcon", "Ptr", row.iconHwnd)
+    }
     try g.Destroy()
 }
 
@@ -2241,6 +2829,7 @@ SettingsCollect(&err) {
         out.Push({ sec: "general", key: "animMs",     val: String(ms) })
     out.Push({ sec: "general", key: "animSteps",      val: String(steps) })
     out.Push({ sec: "general", key: "blurMs",         val: String(b) })
+    out.Push({ sec: "general", key: "accent",         val: ui.accentVal })
     return out
 }
 
@@ -2249,7 +2838,7 @@ SettingsCollect(&err) {
 ; меняли, остаётся ненаписанным сам собой — умолчания живут в
 ; LoadConfig, и дублировать их здесь не приходится.
 SettingsLive(sec, key) {
-    global dynamic, animMs, animSteps, blurMs, handlesOn
+    global dynamic, animMs, animSteps, blurMs, handlesOn, HANDLE_BG
     if (sec = "dynamic") {
         v := Opt(dynamic, key, "")
         return (key = "activateOnShow" || key = "hideOnBlur")
@@ -2260,6 +2849,7 @@ SettingsLive(sec, key) {
     case "animSteps": return String(animSteps)
     case "blurMs":    return String(blurMs)
     case "handles":   return handlesOn ? "true" : "false"
+    case "accent":    return HANDLE_BG
     }
     return ""
 }
@@ -2360,7 +2950,7 @@ SettingsSlotsCollect(&err) {
 ;    соседних постоянных слотов.
 SettingsSlotsApply(plan, &err) {
     global configPath, apps, managed, permSlots, dynSlots, dynamicSlots
-    global animMs, animSteps, blurMs, handlesOn, dynamic
+    global animMs, animSteps, blurMs, handlesOn, dynamic, HANDLE_BG, HANDLE_BG_HOT
     err := ""
 
     for n in plan.touched {
@@ -2416,7 +3006,12 @@ SettingsSlotsApply(plan, &err) {
     }
 
     LoadConfig(configPath, &apps, &dynamic, &dynamicSlots,
-               &animMs, &animSteps, &blurMs, &handlesOn)
+               &animMs, &animSteps, &blurMs, &handlesOn, &HANDLE_BG)
+    try
+        HANDLE_BG_HOT := HandleLighten(HANDLE_BG, 0.10)
+    catch
+        HANDLE_BG_HOT := "3A414D"
+    HandleRepaintAll()
 
     permSlots.Clear()
     for i, a in apps
@@ -2449,7 +3044,7 @@ SettingsSnapshot() {
     s := ui.width.Value "|" ui.edge.Value "|" ui.mon.Value "|"
        . ui.act.Value "|" ui.blur.Value "|" ui.handles.Value "|"
        . ui.anim.Value "|" ui.animMs.Value "|" ui.animSteps.Value "|"
-       . ui.blurMs.Value
+       . ui.blurMs.Value "|" ui.accentVal
     ; Буфер правок Slots — та же строка-снимок, только по номерам
     ; слотов: dirty должен видеть и незаписанную правку постоянного слота.
     for n, e in ui.edits {
@@ -2487,7 +3082,7 @@ SettingsStatus(text, bad := false) {
 ; а окно с несохранёнными правками, чтобы их можно было повторить.
 SettingsSave(closeAfter) {
     global setUI, configPath
-    global apps, dynamic, dynamicSlots, animMs, animSteps, blurMs, handlesOn
+    global apps, dynamic, dynamicSlots, animMs, animSteps, blurMs, handlesOn, HANDLE_BG, HANDLE_BG_HOT
     if !setUI
         return
     err := ""
@@ -2555,7 +3150,12 @@ SettingsSave(closeAfter) {
         SettingsSlotsRefreshAll(setUI)
     } else {
         LoadConfig(configPath, &apps, &dynamic, &dynamicSlots,
-                   &animMs, &animSteps, &blurMs, &handlesOn)
+                   &animMs, &animSteps, &blurMs, &handlesOn, &HANDLE_BG)
+        try
+            HANDLE_BG_HOT := HandleLighten(HANDLE_BG, 0.10)
+        catch
+            HANDLE_BG_HOT := "3A414D"
+        HandleRepaintAll()
         SetTimer(HandlesSync, -1)
     }
 
