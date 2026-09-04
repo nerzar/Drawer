@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "settings-ui",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "settings-ui", "run", "dev", "--", "--host", "127.0.0.1"],
+      "port": 5173
+    }
+  ]
+}
