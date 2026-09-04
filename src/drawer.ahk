@@ -216,7 +216,7 @@ HANDLE_ROUND := 6
 ; загружен из config.ini выше (LoadConfig, ключ [general] accent, см.
 ; Settings — там же живёт выбор цвета). HANDLE_BG_HOT в файле отдельно
 ; не хранится — это HANDLE_BG, пересвеченный HandleLighten() заново
-; после каждого LoadConfig (см. её вызовы в SettingsSlotsApply и
+; после каждого LoadConfig (см. её вызовы в SettingsReconcileRuntime и
 ; SettingsSave).
 ; try — HandleLighten не должен уронить каждый обычный запуск программы
 ; из-за собственной арифметики; при сбое запасной оттенок — тот, что был
@@ -2799,38 +2799,69 @@ SettingsMonVal(ddl) {
     return (v >= 2 && v <= MonitorGetCount() + 1) ? String(v - 1) : ""
 }
 
-; Что сейчас в форме, в том виде, в каком оно ляжет в файл.
+; validate/plan для General: семантический вход (не GUI controls, не setUI),
+; сравнение с текущим runtime и точечная запись — тот же семантический DTO,
+; которым позже сможет пользоваться WebView-порт (см.
+; spikes/webview2-settings/docs/settings-integration-layer.md,
+; DrawerSettingsPort.Save). Без side effects: ни IniWrite, ни LoadConfig.
+SettingsGeneralPlan(input, &err) {
+    err := ""
+    w := SettingsNum(input.width, 5, 100, "Размер окна", &err)
+    ; «Без анимации» меняет только число шагов: при нуле шагов
+    ; длительность ни на что не влияет, и трогать её незачем.
+    ms := input.noAnim ? 0
+        : SettingsNum(input.animMs, 0, 5000, "Длительность анимации", &err)
+    steps := SettingsNum(input.animSteps, 0, 200, "Шагов анимации", &err)
+    b := SettingsNum(input.blurMs, 10, 60000, "Проверка потери фокуса", &err)
+    if (err != "")
+        return 0
+
+    cand := []
+    if (input.edge != "")
+        cand.Push({ sec: "dynamic", key: "edge", val: input.edge })
+    if (input.monitor != "")
+        cand.Push({ sec: "dynamic", key: "monitor", val: input.monitor })
+    cand.Push({ sec: "dynamic", key: "width",          val: String(w) })
+    cand.Push({ sec: "dynamic", key: "activateOnShow", val: input.activateOnShow ? "true" : "false" })
+    cand.Push({ sec: "dynamic", key: "hideOnBlur",     val: input.hideOnBlur ? "true" : "false" })
+    cand.Push({ sec: "general", key: "handles",        val: input.handlesEnabled ? "true" : "false" })
+    if !input.noAnim
+        cand.Push({ sec: "general", key: "animMs",     val: String(ms) })
+    cand.Push({ sec: "general", key: "animSteps",      val: String(steps) })
+    cand.Push({ sec: "general", key: "blurMs",         val: String(b) })
+    cand.Push({ sec: "general", key: "accent",         val: input.accent })
+
+    out := []
+    for c in cand {
+        if (SettingsLive(c.sec, c.key) = c.val)
+            continue
+        out.Push(c)
+    }
+    return out
+}
+
+; UI-adapter: только читает setUI и переводит DropDownList в смысловые
+; значения. Валидацию и сравнение с runtime делает SettingsGeneralPlan —
+; backend-seam controls/GUI не видит.
 SettingsCollect(&err) {
     global setUI
     err := ""
     if !(ui := setUI)
         return 0
-    out := []
-
-    w := SettingsNum(ui.width.Value, 5, 100, "Размер окна", &err)
-    if (e := SettingsEdgeVal(ui.edge))
-        out.Push({ sec: "dynamic", key: "edge", val: e })
-    if (m := SettingsMonVal(ui.mon))
-        out.Push({ sec: "dynamic", key: "monitor", val: m })
-    ; «Без анимации» меняет только число шагов: при нуле шагов
-    ; длительность ни на что не влияет, и трогать её незачем.
-    ms := (ui.anim.Value = 1) ? 0
-        : SettingsNum(ui.animMs.Value, 0, 5000, "Длительность анимации", &err)
-    steps := SettingsNum(ui.animSteps.Value, 0, 200, "Шагов анимации", &err)
-    b := SettingsNum(ui.blurMs.Value, 10, 60000, "Проверка потери фокуса", &err)
-    if (err != "")
-        return 0
-
-    out.Push({ sec: "dynamic", key: "width",          val: String(w) })
-    out.Push({ sec: "dynamic", key: "activateOnShow", val: ui.act.Value ? "true" : "false" })
-    out.Push({ sec: "dynamic", key: "hideOnBlur",     val: ui.blur.Value ? "true" : "false" })
-    out.Push({ sec: "general", key: "handles",        val: ui.handles.Value ? "true" : "false" })
-    if (ui.anim.Value != 1)
-        out.Push({ sec: "general", key: "animMs",     val: String(ms) })
-    out.Push({ sec: "general", key: "animSteps",      val: String(steps) })
-    out.Push({ sec: "general", key: "blurMs",         val: String(b) })
-    out.Push({ sec: "general", key: "accent",         val: ui.accentVal })
-    return out
+    input := {
+        width: ui.width.Value,
+        edge: SettingsEdgeVal(ui.edge),
+        monitor: SettingsMonVal(ui.mon),
+        activateOnShow: ui.act.Value,
+        hideOnBlur: ui.blur.Value,
+        handlesEnabled: ui.handles.Value,
+        noAnim: (ui.anim.Value = 1),
+        animMs: ui.animMs.Value,
+        animSteps: ui.animSteps.Value,
+        blurMs: ui.blurMs.Value,
+        accent: ui.accentVal
+    }
+    return SettingsGeneralPlan(input, &err)
 }
 
 ; Чем программа пользуется прямо сейчас. Сравнивать надо именно с этим,
@@ -2908,101 +2939,180 @@ SettingsSlotWrites(n, e, &err) {
     return out
 }
 
-; Весь буфер setUI.edits в дисковый вид. Та же дисциплина, что у
-; SettingsCollect(): первая ошибка отменяет всё, наполовину не пишем.
-SettingsSlotsCollect(&err) {
-    global setUI
+; validate/plan для Slots: тот же семантический вход/выход, каким сможет
+; пользоваться WebView-порт (slotEdits DTO) — Map номер слота -> правка,
+; без обращения к setUI. Внутри переиспользует существующие
+; SettingsSlotValidate/SettingsSlotWrites. Та же дисциплина, что у
+; SettingsGeneralPlan(): первая ошибка отменяет весь план, наполовину не
+; пишем. Плюс read-only снимок текущих identity/bindings — он нужен
+; SettingsReconcileRuntime() уже ПОСЛЕ диска, а не для записи здесь.
+SettingsSlotsPlan(edits, &err) {
+    global apps, managed
     err := ""
     writes := [], deletes := [], touched := Map()
-    if !(ui := setUI) || !ui.edits.Count
-        return { writes: writes, deletes: deletes, touched: touched }
-    for n, e in ui.edits {
-        if (e.kind = "dyn") {
-            deletes.Push(n)
+    if edits {
+        for n, e in edits {
+            if (e.kind = "dyn") {
+                deletes.Push(n)
+                touched[n] := true
+                continue
+            }
+            got := SettingsSlotWrites(n, e, &err)
+            if (err != "")
+                return { writes: [], deletes: [], touched: Map(), oldBySlot: Map(), oldIdent: Map() }
+            for w in got
+                writes.Push(w)
             touched[n] := true
-            continue
-        }
-        got := SettingsSlotWrites(n, e, &err)
-        if (err != "")
-            return { writes: [], deletes: [], touched: Map() }
-        for w in got
-            writes.Push(w)
-        touched[n] := true
-    }
-    return { writes: writes, deletes: deletes, touched: touched }
-}
-
-; Применяет накопленные правки Slots. Порядок жёсткий, как у SettingsSave:
-; сначала диск, сверка, и только потом работающая программа. Отдельно —
-; то, что не покрывает точечная запись сама по себе:
-;
-;  - слот, теряющий постоянную привязку или меняющий exe/cls, не должен
-;    остаться без хозяина: Release() возвращает окно на исходное место,
-;    как при выходе и Ctrl+Alt+0 — и то же самое окно никогда не
-;    трогается, если его exe/cls не изменились;
-;  - динамическая привязка того же номера отменяется явно: постоянный и
-;    динамический не бывают одним слотом одновременно нигде в программе;
-;  - [dynamicSlotN], оставшийся от прежней динамической настройки,
-;    удаляется при переходе в постоянные — иначе LoadConfig будет
-;    показывать про него предупреждение при каждом следующем запуске;
-;  - permSlots и managed переиндексируются ПО НОМЕРУ СЛОТА, а не по
-;    индексу в apps[]: добавление или удаление [slotN] сдвигает индексы
-;    соседних постоянных слотов.
-SettingsSlotsApply(plan, &err) {
-    global configPath, apps, managed, permSlots, dynSlots, dynamicSlots
-    global animMs, animSteps, blurMs, handlesOn, dynamic, HANDLE_BG, HANDLE_BG_HOT
-    err := ""
-
-    for n in plan.touched {
-        if dynSlots.Has(n) {
-            Release(dynSlots[n])
-            dynSlots.Delete(n)
         }
     }
-
-    delSet := Map()
-    for n in plan.deletes
-        delSet[n] := true
-
-    for n in plan.deletes {
-        try
-            IniDelete(configPath, "slot" n)
-        catch as e {
-            err := "Не удалить [slot" n "]: " e.Message
-            return
-        }
-    }
-    for n in plan.touched {
-        if !delSet.Has(n)
-            try
-                IniDelete(configPath, "dynamicSlot" n)
-    }
-
-    done := 0
-    for w in plan.writes {
-        try
-            IniWrite(w.val, configPath, w.sec, w.key)
-        catch as e {
-            err := "Не записалось: [" w.sec "] " w.key " — " e.Message
-                 . (done ? ".  До сбоя записано строк: " done : "")
-            return
-        }
-        done++
-    }
-    for w in plan.writes {
-        got := IniRead(configPath, w.sec, w.key, "")
-        if (got != w.val) {
-            err := "Проверка не прошла: [" w.sec "] " w.key
-                 . " — в файле «" got "», ожидалось «" w.val "»"
-            return
-        }
-    }
-
+    ; Снимок берём независимо от того, есть ли правки слотов вообще:
+    ; General-only Save тоже проходит через reconciliation (ниже), и без
+    ; этого снимка она обнулила бы managed вместо того, чтобы оставить
+    ; его как есть.
     oldBySlot := Map(), oldIdent := Map()
     for i, a in apps {
         if managed.Has(i)
             oldBySlot[a.slot] := managed[i]
         oldIdent[a.slot] := { exe: a.exe, cls: a.cls }
+    }
+    return { writes: writes, deletes: deletes, touched: touched,
+             oldBySlot: oldBySlot, oldIdent: oldIdent }
+}
+
+; UI-adapter: тонкая обёртка над буфером setUI.edits.
+SettingsSlotsCollect(&err) {
+    global setUI
+    err := ""
+    return SettingsSlotsPlan(setUI ? setUI.edits : 0, &err)
+}
+
+; -------- ОБЩИЙ SEAM: persistence+verify -> runtime reconciliation --------
+; Три стадии из ADR (settings-integration-layer.md): validate/plan уже
+; сделаны выше (SettingsGeneralPlan/SettingsSlotsPlan) и не имеют side
+; effects; дальше — только диск (эта функция) и, отдельно, только runtime
+; (следующая). Ни эта функция, ни её вызывающая сторона не знают про
+; GUI-controls: вход — уже готовые списки {sec,key,val} и slotPlan.
+
+; Секция удалена, если повторное чтение подтверждает её отсутствие.
+; IniDelete(Filename, Section) без Key стирает секцию целиком, поэтому
+; IniRead(path, sec) без Key либо перечислит оставшиеся ключи, либо
+; бросит исключение — секции больше нет.
+SettingsVerifyDeleted(path, sec) {
+    try {
+        IniRead(path, sec)
+        return false
+    } catch {
+        return true
+    }
+}
+
+; Только диск: пишет, удаляет и сверяет General и Slots одним проходом.
+; Не вызывает Release()/LoadConfig() ни при успехе, ни при ошибке — про
+; runtime знает только SettingsReconcileRuntime(), и только после того,
+; как эта функция полностью отработала (успешно или нет).
+SettingsPersistVerified(generalWrites, slotPlan, &outcome) {
+    global configPath
+    outcome := { ok: true, err: "", mayHavePersisted: false }
+
+    gDone := 0
+    for v in generalWrites {
+        try
+            IniWrite(v.val, configPath, v.sec, v.key)
+        catch as e {
+            outcome.ok := false
+            outcome.err := "Не записалось: [" v.sec "] " v.key " — " e.Message
+                         . (gDone ? ".  До сбоя записано строк: " gDone : "")
+            return
+        }
+        gDone++
+        outcome.mayHavePersisted := true
+    }
+    for v in generalWrites {
+        got := IniRead(configPath, v.sec, v.key, "")
+        if (got != v.val) {
+            outcome.ok := false
+            outcome.err := "Проверка не прошла: [" v.sec "] " v.key
+                         . " — в файле «" got "», ожидалось «" v.val "»"
+            return
+        }
+    }
+
+    delSet := Map()
+    for n in slotPlan.deletes
+        delSet[n] := true
+
+    for n in slotPlan.deletes {
+        try
+            IniDelete(configPath, "slot" n)
+        catch as e {
+            outcome.ok := false
+            outcome.err := "Не удалить [slot" n "]: " e.Message
+            return
+        }
+        outcome.mayHavePersisted := true
+    }
+    for n in slotPlan.deletes {
+        if !SettingsVerifyDeleted(configPath, "slot" n) {
+            outcome.ok := false
+            outcome.err := "Проверка не прошла: [slot" n "] не удалился"
+            return
+        }
+    }
+    for n in slotPlan.touched {
+        if !delSet.Has(n)
+            try
+                IniDelete(configPath, "dynamicSlot" n)
+    }
+
+    sDone := 0
+    for w in slotPlan.writes {
+        try
+            IniWrite(w.val, configPath, w.sec, w.key)
+        catch as e {
+            outcome.ok := false
+            outcome.mayHavePersisted := true
+            outcome.err := "Не записалось: [" w.sec "] " w.key " — " e.Message
+                         . (sDone ? ".  До сбоя записано строк: " sDone : "")
+            return
+        }
+        sDone++
+        outcome.mayHavePersisted := true
+    }
+    for w in slotPlan.writes {
+        got := IniRead(configPath, w.sec, w.key, "")
+        if (got != w.val) {
+            outcome.ok := false
+            outcome.err := "Проверка не прошла: [" w.sec "] " w.key
+                         . " — в файле «" got "», ожидалось «" w.val "»"
+            return
+        }
+    }
+}
+
+; Только runtime, только после SettingsPersistVerified — при полном
+; успехе и при partial failure одинаково (best-effort отражение того, что
+; фактически осталось в config.ini). Release() живёт только здесь:
+;
+;  - слот, теряющий постоянную привязку или меняющий exe/cls, не должен
+;    остаться без хозяина: Release() возвращает окно на исходное место,
+;    как при выходе и Ctrl+Alt+0 — и то же самое окно никогда не
+;    трогается, если его exe/cls не изменились;
+;  - динамическая привязка номера, который правил пользователь, снимается
+;    явно: постоянный и динамический не бывают одним слотом одновременно;
+;  - permSlots и managed переиндексируются ПО НОМЕРУ СЛОТА, а не по
+;    индексу в apps[]: добавление или удаление [slotN] сдвигает индексы
+;    соседних постоянных слотов;
+;  - snapshot oldBySlot/oldIdent берётся из slotPlan, то есть сделан ДО
+;    любой дисковой операции — а не после, как было бы багом.
+SettingsReconcileRuntime(slotPlan) {
+    global configPath, apps, managed, permSlots, dynSlots, dynamicSlots
+    global animMs, animSteps, blurMs, handlesOn, dynamic, HANDLE_BG, HANDLE_BG_HOT
+
+    for n in slotPlan.touched {
+        if dynSlots.Has(n) {
+            Release(dynSlots[n])
+            dynSlots.Delete(n)
+        }
     }
 
     LoadConfig(configPath, &apps, &dynamic, &dynamicSlots,
@@ -3018,10 +3128,11 @@ SettingsSlotsApply(plan, &err) {
         permSlots[a.slot] := i
 
     managed.Clear()
+    oldBySlot := slotPlan.oldBySlot
     for i, a in apps {
         if !oldBySlot.Has(a.slot)
             continue
-        ident := oldIdent[a.slot]
+        ident := slotPlan.oldIdent[a.slot]
         if (ident.exe = a.exe && ident.cls = a.cls)
             managed[i] := oldBySlot[a.slot]
         else
@@ -3032,6 +3143,33 @@ SettingsSlotsApply(plan, &err) {
         Release(hwnd)
 
     SetTimer(HandlesSync, -1)
+}
+
+; Строгая последовательность validate/plan (уже выполнен вызывающей
+; стороной) -> persistence+verify -> runtime reconciliation. Единственная
+; точка, которая решает, нужна ли реконсиляция: она нужна, если диск хоть
+; немного тронут, — успешно или нет. Native Settings — первый клиент;
+; DrawerSettingsPort (WebView) станет вторым клиентом этой же функции, не
+; получая при этом ни setUI, ни HWND, ни INI-секции напрямую.
+SettingsApplyPlan(generalWrites, slotPlan, &outcome) {
+    hasSlotWork := slotPlan.writes.Length || slotPlan.deletes.Length
+    outcome := { saved: false, err: "", changedWrites: 0, changedDeletes: 0 }
+    if (!generalWrites.Length && !hasSlotWork)
+        return
+
+    persist := ""
+    SettingsPersistVerified(generalWrites, slotPlan, &persist)
+
+    if persist.mayHavePersisted
+        SettingsReconcileRuntime(slotPlan)
+
+    if !persist.ok {
+        outcome.err := persist.err
+        return
+    }
+    outcome.saved := true
+    outcome.changedWrites := generalWrites.Length + slotPlan.writes.Length
+    outcome.changedDeletes := slotPlan.deletes.Length
 }
 
 ; Состояние формы одной строкой — этого хватает, чтобы понять, трогал ли
@@ -3077,12 +3215,12 @@ SettingsStatus(text, bad := false) {
     setUI.status.Redraw()
 }
 
-; Применить: диск, сверка, и только потом работающая программа. Порядок
-; жёсткий — если запись не удалась, ящик остаётся с прежними настройками,
-; а окно с несохранёнными правками, чтобы их можно было повторить.
+; Применить: собрать план (validate/plan), отдать его общему seam
+; (persistence+verify -> runtime reconciliation) и обновить только native
+; UI по результату. Сам порядок стадий и Release() внутри — забота
+; SettingsApplyPlan()/SettingsReconcileRuntime(), не этой функции.
 SettingsSave(closeAfter) {
-    global setUI, configPath
-    global apps, dynamic, dynamicSlots, animMs, animSteps, blurMs, handlesOn, HANDLE_BG, HANDLE_BG_HOT
+    global setUI
     if !setUI
         return
     err := ""
@@ -3100,13 +3238,14 @@ SettingsSave(closeAfter) {
     }
     hasSlotWork := slotPlan.writes.Length || slotPlan.deletes.Length
 
-    todo := []
-    for v in vals {
-        if (SettingsLive(v.sec, v.key) = v.val)
-            continue
-        todo.Push(v)
+    outcome := ""
+    SettingsApplyPlan(vals, slotPlan, &outcome)
+
+    if (outcome.err != "") {
+        SettingsStatus(outcome.err, true)
+        return
     }
-    if (!todo.Length && !hasSlotWork) {
+    if !outcome.saved {
         SettingsRebase()
         SettingsStatus("Менять нечего: всё уже так")
         if closeAfter
@@ -3114,54 +3253,14 @@ SettingsSave(closeAfter) {
         return
     }
 
-    done := 0
-    for v in todo {
-        try
-            IniWrite(v.val, configPath, v.sec, v.key)
-        catch as e {
-            SettingsStatus("Не записалось: [" v.sec "] " v.key " — " e.Message
-                         . (done ? ".  До сбоя записано строк: " done : ""), true)
-            return
-        }
-        done++
-    }
-
-    ; Читаем записанное обратно и сравниваем до сообщения об успехе.
-    for v in todo {
-        got := IniRead(configPath, v.sec, v.key, "")
-        if (got != v.val) {
-            SettingsStatus("Проверка не прошла: [" v.sec "] " v.key
-                         . " — в файле «" got "», ожидалось «" v.val "»", true)
-            return
-        }
-    }
-
-    ; [dynamic]/[general] уже на диске и сверены — то, что ниже, трогает
-    ; только [slotN]/[dynamicSlotN] и не может отменить уже совершившийся
-    ; факт записи General; LoadConfig в обеих ветках подхватит и его.
     if hasSlotWork {
-        slotErr := ""
-        SettingsSlotsApply(slotPlan, &slotErr)   ; сама делает LoadConfig и переиндексацию
-        if (slotErr != "") {
-            SettingsStatus(slotErr, true)
-            return
-        }
         setUI.edits := Map()
         SettingsSlotsRefreshAll(setUI)
-    } else {
-        LoadConfig(configPath, &apps, &dynamic, &dynamicSlots,
-                   &animMs, &animSteps, &blurMs, &handlesOn, &HANDLE_BG)
-        try
-            HANDLE_BG_HOT := HandleLighten(HANDLE_BG, 0.10)
-        catch
-            HANDLE_BG_HOT := "3A414D"
-        HandleRepaintAll()
-        SetTimer(HandlesSync, -1)
     }
 
     SettingsRebase()
-    SettingsStatus("Сохранено. Изменённых строк: " (todo.Length + slotPlan.writes.Length)
-                 . (slotPlan.deletes.Length ? ", удалено секций: " slotPlan.deletes.Length : ""))
+    SettingsStatus("Сохранено. Изменённых строк: " outcome.changedWrites
+                 . (outcome.changedDeletes ? ", удалено секций: " outcome.changedDeletes : ""))
     if closeAfter
         SettingsClose(true)
 }
