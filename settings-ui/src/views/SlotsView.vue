@@ -116,7 +116,7 @@ function statusFor(slot) {
                 </svg>
               </button>
               <div class="info-ico" tabindex="0">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="transform: translate(3%, 2%);">
                   <circle cx="12" cy="12" r="9" />
                   <line x1="12" y1="11" x2="12" y2="16" />
                   <circle cx="12" cy="8" r="1" fill="currentColor" stroke="none" />
@@ -373,7 +373,7 @@ select.dd {
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
-  width: 188px;
+  width: 212px;
   padding-right: 32px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239A9CA3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
@@ -381,7 +381,7 @@ select.dd {
   background-size: 15px 15px;
 }
 .in-name {
-  width: 208px;
+  width: 212px;
 }
 .in-exe {
   width: 118px;

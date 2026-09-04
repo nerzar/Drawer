@@ -55,9 +55,9 @@ function pickCustomAccent(event) {
 
       <div class="card">
         <h3>Внешний вид</h3>
-        <div class="check-row" style="margin-bottom: 14px">
-          <input type="checkbox" v-model="g.handles" />
-          <span>Кромки у края экрана</span>
+        <div class="row">
+          <label>Отступ между кромками (px)</label>
+          <div class="field"><input class="num-sm" type="text" v-model="g.handleGap" /></div>
         </div>
 
         <div class="row">
@@ -68,10 +68,12 @@ function pickCustomAccent(event) {
             <input class="num-sm" type="text" v-model="g.handleHeight" />
           </div>
         </div>
-        <div class="row">
-          <label>Отступ между кромками (px)</label>
-          <div class="field"><input class="num-sm" type="text" v-model="g.handleGap" /></div>
+
+        <div class="check-row" style="margin-bottom: 14px">
+          <input type="checkbox" v-model="g.handles" />
+          <span>Кромки у края экрана</span>
         </div>
+
 
         <div class="divider"></div>
 
