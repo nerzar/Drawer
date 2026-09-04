@@ -133,6 +133,7 @@ handleMode := 0      ; режим опроса кромок: 0 нет, 1 ред�
 handleSync := 0      ; тактов до следующей полной пересборки кромок
 setGui    := 0       ; окно настроек, пока оно открыто
 setUI     := 0       ; его контролы и значения, с которыми окно открылось
+setPickerGui := 0    ; окно выбора существующего окна (S4), пока оно открыто
 foreWnd   := WinExist("A")     ; текущее окно переднего плана
 lastFore  := 0                 ; окно, которое было активно до него
 
@@ -1360,8 +1361,14 @@ HandleClick(wParam, lParam, msg, hwnd) {
 ; так нельзя — это обычное окно с заголовком и фокусом, иначе им нельзя
 ; пользоваться. Значит исключение приходится назвать явно.
 IsServiceWindow(hwnd) {
-    global setGui
-    if (!hwnd || !setGui)
+    global setGui, setPickerGui
+    if !hwnd
+        return false
+    ; Диалог выбора окна (S4) — тоже своё окно ящика: иначе фокус на нём
+    ; мог бы попасть в PickActive() и привязаться Ctrl+Alt+Shift+N.
+    if (setPickerGui && hwnd = setPickerGui.Hwnd)
+        return true
+    if !setGui
         return false
     try {
         if (hwnd = setGui.Hwnd)
@@ -1478,6 +1485,99 @@ SettingsAppPeek(i, a) {
     return (managed.Has(i) && WinExist("ahk_id " managed[i])) ? managed[i] : FindWindow(a)
 }
 
+; ---------------------------- S4: выбор ----------------------------
+; Окна-кандидаты для постоянного слота: тот же отбор, что уже применяют
+; PickActive()/FindWindow() к одному окну, — здесь по всем сразу. Второго
+; критерия «годится/не годится» не заводится.
+SettingsWindowCandidates() {
+    out := []
+    for hwnd in WinGetList() {
+        try {
+            if IsServiceWindow(hwnd)
+                continue
+            if !(WinGetStyle("ahk_id " hwnd) & 0x10000000)      ; WS_VISIBLE
+                continue
+            if (WinGetExStyle("ahk_id " hwnd) & 0x00000080)     ; WS_EX_TOOLWINDOW
+                continue
+            title := WinGetTitle("ahk_id " hwnd)
+            if (title = "")
+                continue
+            cls := WinGetClass("ahk_id " hwnd)
+            if (cls = "Progman" || cls = "WorkerW"
+                || cls = "Shell_TrayWnd" || cls = "Shell_SecondaryTrayWnd"
+                || cls = "XamlExplorerHostIslandWindow" || cls = "MultitaskingViewFrame")
+                continue
+            WinGetPos(, , &w, &h, "ahk_id " hwnd)
+            if (WinGetMinMax("ahk_id " hwnd) = 0 && (w < 200 || h < 200))
+                continue
+            out.Push({ hwnd: hwnd, title: title, exe: WinGetProcessName("ahk_id " hwnd), cls: cls })
+        }
+    }
+    return out
+}
+
+; Диалог выбора окна для постоянного слота. Только подставляет exe/cls в
+; текстовые поля — привязка постоянного слота остаётся по процессу (Р12),
+; диалог не запоминает hwnd и не заводит нового способа биндинга.
+; Возвращает {exe,cls,title} или 0 при отмене.
+;
+; Модальность условная: хоткеи ящика — глобальный хук, кликом их не
+; запереть, поэтому пока диалог открыт, он зарегистрирован как служебное
+; окно через setPickerGui — иначе Ctrl+Alt+Shift+N мог бы привязать сам
+; диалог вместо того окна, которое пользователь пришёл выбирать.
+SettingsPickWindow() {
+    global setPickerGui, setGui
+    cands := SettingsWindowCandidates()
+    result := { picked: 0 }
+
+    g := Gui("+Owner" setGui.Hwnd " -MinimizeBox", "Ящик — выбор окна")
+    g.SetFont("s9", "Segoe UI")
+    g.Add("Text", "x12 y10 w460 h20",
+          cands.Length ? "Окно, которое сейчас открыто:" : "Подходящих окон не найдено.")
+    lv := g.Add("ListView", "x12 y32 w460 h280 -Multi +Report", ["Заголовок", "Процесс"])
+    for c in cands
+        lv.Add("", c.title, c.exe)
+    lv.ModifyCol(1, 320), lv.ModifyCol(2, 130)
+    if cands.Length
+        lv.Modify(1, "Select Focus")
+
+    ok     := g.Add("Button", "x300 y320 w82 h28 Default", "Выбрать")
+    cancel := g.Add("Button", "x392 y320 w80 h28", "Отмена")
+    ok.Enabled := cands.Length > 0
+
+    finish(use) {
+        global setPickerGui
+        if use {
+            row := lv.GetNext(0)
+            if (row && row <= cands.Length)
+                result.picked := cands[row]
+        }
+        setPickerGui := 0
+        g.Destroy()
+    }
+    ok.OnEvent("Click", (*) => finish(true))
+    cancel.OnEvent("Click", (*) => finish(false))
+    lv.OnEvent("DoubleClick", (*) => finish(true))
+    g.OnEvent("Close", (*) => finish(false))
+    g.OnEvent("Escape", (*) => finish(false))
+
+    setPickerGui := g
+    g.Show("w484 h360")
+    WinWaitClose("ahk_id " g.Hwnd)
+    return result.picked
+}
+
+; Диалог выбора .exe. Возвращает голое имя файла с расширением — ровно
+; то, что ожидает exe= и с чем WinGetProcessName/ahk_exe сравнивают
+; строкой; полный путь для этого поля не годится.
+SettingsPickExe() {
+    path := FileSelect("1", A_ProgramFiles, "Ящик — выбор приложения", "Исполняемые файлы (*.exe)")
+    if (path = "")
+        return ""
+    SplitPath(path, &fileName)
+    return fileName
+}
+
 ; Статус слота — те же признаки, на которых стоит остальная программа
 ; (HandleManaged/HandleParked, Р4), просто текстом. Второго источника
 ; истины не заводится: постоянный слот ищется как для хоткея, но
@@ -1498,6 +1598,66 @@ SettingsSlotStatus(r) {
     if !HandleManaged(hwnd)
         return "окно: " WinGetTitle("ahk_id " hwnd)
     return HandleParked(hwnd) ? "припаркован" : "выдвинут"
+}
+
+; --------------------------- S4: правки ----------------------------
+; Буфер несохранённых правок вкладки Slots — setUI.edits, Map номер слота
+; -> { kind: "perm", ...девять полей... } либо { kind: "dyn" } (слот
+; готовится лишиться [slotN]). Ничего из этого не пишется в файл до
+; «Применить»/«ОК» — тот же принцип, что уже держит форму General.
+;
+; Состояние (Р4/S3) эта правка не трогает: SettingsSlotStatus() по-прежнему
+; спрашивает permSlots/dynSlots/managed напрямую, а не буфер, — колонка
+; «Состояние» показывает, что происходит на самом деле, а не то, что
+; вот-вот будет записано.
+
+; Строка с учётом несохранённых правок: то, что показывает панель «Слот»
+; и колонки Тип/Имя/Край/Монитор/Ширина. Без правки — сама r без изменений.
+; Берёт ui параметром, а не глобальным setUI: во время самого открытия
+; окна (SettingsOpen -> SettingsFillRow(ui,1)) setUI ещё не присвоен.
+SettingsEffective(ui, r) {
+    global dynamicSlots
+    if !r.n || !ui.edits.Has(r.n)
+        return r
+    e := ui.edits[r.n]
+    if (e.kind = "dyn")
+        return { n: r.n, kind: "dyn", cfg: SlotCfg(r.n),
+                 sections: dynamicSlots.Has(r.n) ? ["dynamicSlot" r.n, "dynamic"] : ["dynamic"],
+                 pending: true }
+    return { n: r.n, kind: "perm", cfg: e, sections: ["slot" r.n], pending: true }
+}
+
+; Первая правка поля слота n заводит буфер, заполненный ТЕКУЩИМ
+; состоянием слота — дальше в нём меняется только то поле, которое
+; действительно тронули, а не всё сразу.
+SettingsEditSeed(n) {
+    global permSlots, apps
+    if permSlots.Has(n) {
+        a := apps[permSlots[n]]
+        return { kind: "perm", name: a.name, exe: a.exe, cls: a.cls,
+                 monitor: a.monitor, edge: a.edge, width: a.width,
+                 activateOnShow: a.activateOnShow, hideOnBlur: a.hideOnBlur,
+                 focusHotkey: a.focusHotkey }
+    }
+    d := SlotCfg(n)
+    return { kind: "perm", name: "Слот " n, exe: "", cls: "",
+             monitor: d.monitor, edge: d.edge, width: d.width,
+             activateOnShow: d.activateOnShow, hideOnBlur: d.hideOnBlur,
+             focusHotkey: "" }
+}
+
+; Обработчик правки одного поля панели «Слот». populating гасит вызов,
+; пока панель сама заполняет контролы при переключении строки списка —
+; иначе один клик по строке выглядел бы как правка всех девяти полей.
+SettingsSlotEdited(ui, key, val) {
+    if ui.populating
+        return
+    n := ui.editingSlot
+    if !n
+        return
+    if !ui.edits.Has(n)
+        ui.edits[n] := SettingsEditSeed(n)
+    ui.edits[n].%key% := val
 }
 
 ; Пересчитать колонку «Состояние» во всех строках. Слот 0 ([dynamic]) в
@@ -1651,6 +1811,142 @@ SettingsFill(box, valc, srcc, r) {
     }
 }
 
+; Те же девять полей, но в редактируемых контролах панели «Слот» —
+; только для постоянного (или готовящегося им стать) слота. populating
+; гасит Change на время программного заполнения, чтобы переключение
+; строки списка не выглядело как правка каждого поля.
+SettingsFillEditable(ui, ef) {
+    cfg := ef.cfg
+    ui.populating := true
+    ui.eName.Value := Opt(cfg, "name", "")
+    ui.eExe.Value  := Opt(cfg, "exe", "")
+    ui.eCls.Value  := Opt(cfg, "cls", "")
+    SettingsEdgePick(ui.eEdge, Opt(cfg, "edge", "right"))
+    SettingsMonPick(ui.eMon, Opt(cfg, "monitor", "cursor"))
+    ui.eWidth.Value := String(Opt(cfg, "width", 60))
+    ui.eAct.Value   := Opt(cfg, "activateOnShow", true) ? 1 : 0
+    ui.eBlur.Value  := Opt(cfg, "hideOnBlur", true) ? 1 : 0
+    ui.eFocus.Value := Opt(cfg, "focusHotkey", "")
+    ui.editingSlot  := ef.n
+    ui.box.Text := "Слот " ef.n " — постоянный, [slot" ef.n "]"
+                 . (ef.HasOwnProp("pending") ? "  ·  не сохранено" : "")
+    ui.populating := false
+}
+
+; Показывает панель «Слот» для строки idx: постоянному (или готовящемуся
+; им стать) слоту — редактируемые поля, иначе — прежний вид только для
+; чтения, без единой правки исходного пути SettingsFill().
+SettingsFillRow(ui, idx) {
+    r  := ui.slotsRows[idx]
+    ef := SettingsEffective(ui, r)
+    editable := r.n && (ef.kind = "perm")
+
+    for c in ui.roCtl
+        c.Visible := !editable
+    for c in ui.editCtl
+        c.Visible := editable
+
+    if editable
+        SettingsFillEditable(ui, ef)
+    else
+        SettingsFill(ui.box, ui.valc, ui.srcc, r)
+
+    if r.n {
+        ui.convert.Visible := true
+        ui.convert.Text := editable ? "Сделать динамическим…" : "Сделать постоянным…"
+    } else
+        ui.convert.Visible := false
+}
+
+; Кнопка смены типа слота. Само переключение только готовит буфер правок
+; (ui.edits) — на диск ничего не уходит до «Применить»/«ОК», как и у
+; остальной формы. Предупреждение при уходе в динамический — по Р18:
+; секция удаляется явной командой и с предупреждением про комментарии.
+SettingsConvertClick(ui) {
+    idx := ui.slotsLv.GetNext(0)
+    if !idx
+        return
+    r := ui.slotsRows[idx]
+    if !r.n
+        return
+    ef := SettingsEffective(ui, r)
+    if (ef.kind = "perm") {
+        if (MsgBox("Слот " r.n " станет динамическим: секция [slot" r.n "] будет"
+                  . " удалена вместе с комментариями внутри неё, если они там были."
+                  . " Действие войдёт в силу после «Применить» или «ОК». Продолжить?",
+                  "Ящик", 0x24) != "Yes")
+            return
+        ui.edits[r.n] := { kind: "dyn" }
+    } else
+        ui.edits[r.n] := SettingsEditSeed(r.n)
+    SettingsFillRow(ui, idx)
+    SettingsSlotsColumns(ui, idx)
+}
+
+; Обзор .exe и выбор существующего окна — оба лишь подставляют значения
+; в поля exe/cls (и, если имя ещё не тронуто, в name); привязка
+; постоянного слота остаётся по процессу (Р12), никакого hwnd не хранится.
+SettingsSlotExePick(ui) {
+    if ui.populating || !ui.editingSlot
+        return
+    exe := SettingsPickExe()
+    if (exe = "")
+        return
+    ui.populating := true
+    ui.eExe.Value := exe
+    ui.populating := false
+    SettingsSlotEdited(ui, "exe", exe)
+}
+SettingsSlotWindowPick(ui) {
+    if ui.populating || !ui.editingSlot
+        return
+    w := SettingsPickWindow()
+    if !w
+        return
+    n := ui.editingSlot
+    auto := (Trim(ui.eName.Value) = "" || Trim(ui.eName.Value) = "Слот " n)
+    ui.populating := true
+    ui.eExe.Value := w.exe
+    ui.eCls.Value := w.cls
+    if auto
+        ui.eName.Value := w.title
+    ui.populating := false
+    SettingsSlotEdited(ui, "exe", w.exe)
+    SettingsSlotEdited(ui, "cls", w.cls)
+    if auto
+        SettingsSlotEdited(ui, "name", w.title)
+}
+
+; Колонки Тип/Имя/Край/Монитор/Ширина одной строки списка — по
+; эффективному состоянию (с учётом буфера правок). Состояние (Col7) сюда
+; не входит: его считает SettingsSlotStatus() по настоящей строке, тик
+; S3 её же и обновляет.
+SettingsSlotsColumns(ui, idx) {
+    r  := ui.slotsRows[idx]
+    ef := SettingsEffective(ui, r)
+    lv := ui.slotsLv
+    lv.Modify(idx, "Col2", SettingsKind(ef))
+    lv.Modify(idx, "Col3", SettingsVal(ef.cfg, "name"))
+    lv.Modify(idx, "Col4", SettingsVal(ef.cfg, "edge"))
+    lv.Modify(idx, "Col5", SettingsVal(ef.cfg, "monitor"))
+    lv.Modify(idx, "Col6", SettingsVal(ef.cfg, "width"))
+}
+
+; После сохранения список мог не совпасть с диском построчно сразу в
+; нескольких местах (типы и поля нескольких слотов) — перечитывается
+; целиком, как при открытии окна, а не точечными правками по одной строке.
+SettingsSlotsRefreshAll(ui) {
+    rows := SettingsRows()
+    ui.slotsRows := rows
+    loop rows.Length
+        SettingsSlotsColumns(ui, A_Index)
+    for idx, r in rows
+        ui.slotsLv.Modify(idx, "Col7", SettingsSlotStatus(r))
+    sel := ui.slotsLv.GetNext(0)
+    if sel
+        SettingsFillRow(ui, sel)
+}
+
 SettingsOpen() {
     global setGui, setUI, VERSION, configPath
     global animMs, animSteps, blurMs, handlesOn, dynamic
@@ -1737,7 +2033,10 @@ SettingsOpen() {
     g.SetFont("cDefault")
 
     tab.UseTab(2)
-    lv := g.Add("ListView", "x20 y44 w520 h160 -Multi +Report",
+    ; Высота списка уменьшена против S3 (было 160) — освобождённая полоса
+    ; ниже него отдана кнопке смены типа слота (S4), панель «Слот» и её
+    ; расположение по y не тронуты вовсе.
+    lv := g.Add("ListView", "x20 y44 w520 h134 -Multi +Report",
                 ["Слот", "Тип", "Имя", "Край", "Монитор", "Ширина", "Состояние"])
     rows := SettingsRows()
     for r in rows {
@@ -1752,7 +2051,11 @@ SettingsOpen() {
     ; Живая колонка: опрашивается, только пока видна эта вкладка — тот же
     ; расчёт, что у кромок. Tab3 сам присылает свой Value в событии.
     ui.slotsLv := lv, ui.slotsRows := rows
+    ui.edits := Map(), ui.populating := false, ui.editingSlot := 0
     tab.OnEvent("Change", (ctrl, *) => SettingsSlotsTimer(ctrl.Value))
+
+    ui.convert := g.Add("Button", "x20 y184 w220 h24", "Сделать постоянным…")
+    ui.convert.OnEvent("Click", (*) => SettingsConvertClick(ui))
 
     box  := g.Add("GroupBox", "x20 y212 w520 h208", "Слот")
     valc := [], srcc := []
@@ -1764,12 +2067,52 @@ SettingsOpen() {
         srcc.Push(g.Add("Text", "x324 y" y " w206 h18", ""))
         g.SetFont("cDefault")
     }
+    ui.box := box, ui.valc := valc, ui.srcc := srcc
+    ui.roCtl := []
+    for c in valc
+        ui.roCtl.Push(c)
+    for c in srcc
+        ui.roCtl.Push(c)
+
+    ; Те же девять полей, редактируемые — на месте valc/srcc, видны только
+    ; когда выбранный слот постоянный (или готовится им стать). yExe и
+    ; yFocus — те же y, что и у полей exe/focusHotkey в цикле выше (i=2 и
+    ; i=9), чтобы кнопки и подсказка встали в свои строки.
+    yExe := 234 + (2 - 1) * 20, yFocus := 234 + (9 - 1) * 20
+    ui.eName  := g.Add("Edit", "x158 y234 w220 h22")
+    ui.eExe   := g.Add("Edit", "x158 y" yExe " w170 h22")
+    ui.eExeBrowse := g.Add("Button", "x334 y" (yExe - 2) " w60 h24", "Обзор…")
+    ui.eExeWindow := g.Add("Button", "x398 y" (yExe - 2) " w66 h24", "Окно…")
+    ui.eCls   := g.Add("Edit", "x158 y274 w220 h22")
+    ui.eMon   := g.Add("DropDownList", "x158 y292 w150", SettingsMonItems())
+    ui.eEdge  := g.Add("DropDownList", "x158 y312 w150", SettingsEdgeItems())
+    ui.eWidth := g.Add("Edit", "x158 y334 w60 h22 Number Limit3")
+    ui.eAct   := g.Add("CheckBox", "x158 y354 w340 h20", "Активировать окно при выезде")
+    ui.eBlur  := g.Add("CheckBox", "x158 y374 w340 h20", "Убирать окно, когда фокус ушёл")
+    ui.eFocus := g.Add("Edit", "x158 y" yFocus " w220 h22")
+    g.SetFont("c808080")
+    g.Add("Text", "x384 y" (yFocus + 2) " w146 h18", "после перезапуска")
+    g.SetFont("cDefault")
+
+    ui.editCtl := [ui.eName, ui.eExe, ui.eExeBrowse, ui.eExeWindow, ui.eCls,
+                   ui.eMon, ui.eEdge, ui.eWidth, ui.eAct, ui.eBlur, ui.eFocus]
+
+    ui.eName.OnEvent("Change",  (*) => SettingsSlotEdited(ui, "name", ui.eName.Value))
+    ui.eExe.OnEvent("Change",   (*) => SettingsSlotEdited(ui, "exe", ui.eExe.Value))
+    ui.eCls.OnEvent("Change",   (*) => SettingsSlotEdited(ui, "cls", ui.eCls.Value))
+    ui.eMon.OnEvent("Change",   (*) => SettingsSlotEdited(ui, "monitor", SettingsMonVal(ui.eMon)))
+    ui.eEdge.OnEvent("Change",  (*) => SettingsSlotEdited(ui, "edge", SettingsEdgeVal(ui.eEdge)))
+    ui.eWidth.OnEvent("Change", (*) => SettingsSlotEdited(ui, "width", ui.eWidth.Value))
+    ui.eAct.OnEvent("Click",    (*) => SettingsSlotEdited(ui, "activateOnShow", ui.eAct.Value))
+    ui.eBlur.OnEvent("Click",   (*) => SettingsSlotEdited(ui, "hideOnBlur", ui.eBlur.Value))
+    ui.eFocus.OnEvent("Change", (*) => SettingsSlotEdited(ui, "focusHotkey", ui.eFocus.Value))
+    ui.eExeBrowse.OnEvent("Click", (*) => SettingsSlotExePick(ui))
+    ui.eExeWindow.OnEvent("Click", (*) => SettingsSlotWindowPick(ui))
+
     lv.OnEvent("ItemSelect",
-               (LV, item, sel) => (sel && item)
-                                  ? SettingsFill(box, valc, srcc, rows[item])
-                                  : "")
+               (LV, item, sel) => (sel && item) ? SettingsFillRow(ui, item) : "")
     lv.Modify(1, "Select Focus")
-    SettingsFill(box, valc, srcc, rows[1])
+    SettingsFillRow(ui, 1)
 
     tab.UseTab(3)
     g.SetFont("s12 bold")
@@ -1858,13 +2201,15 @@ SettingsNum(raw, lo, hi, label, &err) {
 ; Пустая строка означает «этот ключ писать не надо»: в списке выбран
 ; посторонний пункт «в файле: …», то есть значение чужое и менять его
 ; программа не бралась.
-SettingsEdgeVal(ui) {
+; Принимает сам DropDownList, а не всю ui, — им пользуются и General
+; (ui.edge/ui.mon), и панель «Слот» на вкладке Slots (S4, ui.eEdge/ui.eMon).
+SettingsEdgeVal(ddl) {
     keys := SettingsEdgeKeys()
-    v := ui.edge.Value
+    v := ddl.Value
     return (v >= 1 && v <= keys.Length) ? keys[v] : ""
 }
-SettingsMonVal(ui) {
-    v := ui.mon.Value
+SettingsMonVal(ddl) {
+    v := ddl.Value
     if (v = 1)
         return "cursor"
     return (v >= 2 && v <= MonitorGetCount() + 1) ? String(v - 1) : ""
@@ -1879,9 +2224,9 @@ SettingsCollect(&err) {
     out := []
 
     w := SettingsNum(ui.width.Value, 5, 100, "Размер окна", &err)
-    if (e := SettingsEdgeVal(ui))
+    if (e := SettingsEdgeVal(ui.edge))
         out.Push({ sec: "dynamic", key: "edge", val: e })
-    if (m := SettingsMonVal(ui))
+    if (m := SettingsMonVal(ui.mon))
         out.Push({ sec: "dynamic", key: "monitor", val: m })
     ; «Без анимации» меняет только число шагов: при нуле шагов
     ; длительность ни на что не влияет, и трогать её незачем.
@@ -1923,6 +2268,182 @@ SettingsLive(sec, key) {
     return ""
 }
 
+; ------------------------ S4: запись [slotN] ------------------------
+; То же правило точечной записи (Р18), что и SettingsLive() — только для
+; постоянного слота: если слот сейчас не постоянный или у него нет этого
+; поля, сравнивать не с чем, и значение считается новым безусловно.
+SettingsLiveSlot(n, key) {
+    global permSlots, apps
+    if !permSlots.Has(n)
+        return ""
+    cfg := apps[permSlots[n]]
+    if !cfg.HasOwnProp(key)
+        return ""
+    v := cfg.%key%
+    return SettingsIsBool(key) ? (v ? "true" : "false") : String(v)
+}
+
+; Постоянному слоту нужен exe — без него нечего искать по процессу.
+; Остальные поля свободны, как и у [dynamic].
+SettingsSlotValidate(n, e, &err) {
+    if (err != "")
+        return
+    if (Trim(e.exe) = "")
+        err := "Слот " n ": exe обязателен для постоянного слота"
+}
+
+; Буфер правки слота n в дисковый вид, за вычетом ключей, уже совпадающих
+; с текущими значениями, — точечная запись (Р18) остаётся в силе и для
+; [slotN], не только для [dynamic]. Первая же ошибка отменяет весь разбор
+; этого слота — записывать половину полей нельзя.
+SettingsSlotWrites(n, e, &err) {
+    SettingsSlotValidate(n, e, &err)
+    if (err != "")
+        return []
+    w := SettingsNum(String(e.width), 5, 100, "Слот " n ": размер окна", &err)
+    if (err != "")
+        return []
+    name := Trim(e.name) = "" ? "Слот " n : e.name
+    cand := [{ key: "name", val: name },
+             { key: "exe",  val: Trim(e.exe) },
+             { key: "cls",  val: e.cls },
+             { key: "monitor", val: String(e.monitor) },
+             { key: "edge", val: e.edge },
+             { key: "width", val: String(w) },
+             { key: "activateOnShow", val: e.activateOnShow ? "true" : "false" },
+             { key: "hideOnBlur", val: e.hideOnBlur ? "true" : "false" },
+             { key: "focusHotkey", val: e.focusHotkey }]
+    out := []
+    for c in cand {
+        if (SettingsLiveSlot(n, c.key) = c.val)
+            continue
+        out.Push({ sec: "slot" n, key: c.key, val: c.val })
+    }
+    return out
+}
+
+; Весь буфер setUI.edits в дисковый вид. Та же дисциплина, что у
+; SettingsCollect(): первая ошибка отменяет всё, наполовину не пишем.
+SettingsSlotsCollect(&err) {
+    global setUI
+    err := ""
+    writes := [], deletes := [], touched := Map()
+    if !(ui := setUI) || !ui.edits.Count
+        return { writes: writes, deletes: deletes, touched: touched }
+    for n, e in ui.edits {
+        if (e.kind = "dyn") {
+            deletes.Push(n)
+            touched[n] := true
+            continue
+        }
+        got := SettingsSlotWrites(n, e, &err)
+        if (err != "")
+            return { writes: [], deletes: [], touched: Map() }
+        for w in got
+            writes.Push(w)
+        touched[n] := true
+    }
+    return { writes: writes, deletes: deletes, touched: touched }
+}
+
+; Применяет накопленные правки Slots. Порядок жёсткий, как у SettingsSave:
+; сначала диск, сверка, и только потом работающая программа. Отдельно —
+; то, что не покрывает точечная запись сама по себе:
+;
+;  - слот, теряющий постоянную привязку или меняющий exe/cls, не должен
+;    остаться без хозяина: Release() возвращает окно на исходное место,
+;    как при выходе и Ctrl+Alt+0 (N4) — и то же самое окно никогда не
+;    трогается, если его exe/cls не изменились;
+;  - динамическая привязка того же номера отменяется явно: постоянный и
+;    динамический не бывают одним слотом одновременно нигде в программе;
+;  - [dynamicSlotN], оставшийся от прежней динамической настройки,
+;    удаляется при переходе в постоянные — иначе LoadConfig будет
+;    показывать про него предупреждение при каждом следующем запуске;
+;  - permSlots и managed переиндексируются ПО НОМЕРУ СЛОТА, а не по
+;    индексу в apps[] — добавление или удаление [slotN] сдвигает индексы
+;    соседних постоянных слотов (P2 в PROJECT_STATE.md); раз эта вкладка
+;    теперь пишет [slotN], сдвиг стал повседневным, а не гипотетическим.
+SettingsSlotsApply(plan, &err) {
+    global configPath, apps, managed, permSlots, dynSlots, dynamicSlots
+    global animMs, animSteps, blurMs, handlesOn, dynamic
+    err := ""
+
+    for n in plan.touched {
+        if dynSlots.Has(n) {
+            Release(dynSlots[n])
+            dynSlots.Delete(n)
+        }
+    }
+
+    delSet := Map()
+    for n in plan.deletes
+        delSet[n] := true
+
+    for n in plan.deletes {
+        try
+            IniDelete(configPath, "slot" n)
+        catch as e {
+            err := "Не удалить [slot" n "]: " e.Message
+            return
+        }
+    }
+    for n in plan.touched {
+        if !delSet.Has(n)
+            try
+                IniDelete(configPath, "dynamicSlot" n)
+    }
+
+    done := 0
+    for w in plan.writes {
+        try
+            IniWrite(w.val, configPath, w.sec, w.key)
+        catch as e {
+            err := "Не записалось: [" w.sec "] " w.key " — " e.Message
+                 . (done ? ".  До сбоя записано строк: " done : "")
+            return
+        }
+        done++
+    }
+    for w in plan.writes {
+        got := IniRead(configPath, w.sec, w.key, "")
+        if (got != w.val) {
+            err := "Проверка не прошла: [" w.sec "] " w.key
+                 . " — в файле «" got "», ожидалось «" w.val "»"
+            return
+        }
+    }
+
+    oldBySlot := Map(), oldIdent := Map()
+    for i, a in apps {
+        if managed.Has(i)
+            oldBySlot[a.slot] := managed[i]
+        oldIdent[a.slot] := { exe: a.exe, cls: a.cls }
+    }
+
+    LoadConfig(configPath, &apps, &dynamic, &dynamicSlots,
+               &animMs, &animSteps, &blurMs, &handlesOn)
+
+    permSlots.Clear()
+    for i, a in apps
+        permSlots[a.slot] := i
+
+    managed.Clear()
+    for i, a in apps {
+        if !oldBySlot.Has(a.slot)
+            continue
+        ident := oldIdent[a.slot]
+        if (ident.exe = a.exe && ident.cls = a.cls)
+            managed[i] := oldBySlot[a.slot]
+        else
+            Release(oldBySlot[a.slot])
+        oldBySlot.Delete(a.slot)
+    }
+    for n, hwnd in oldBySlot     ; слот больше не тот же постоянный — окно домой
+        Release(hwnd)
+
+    SetTimer(HandlesSync, -1)
+}
+
 ; Состояние формы одной строкой — этого хватает, чтобы понять, трогал ли
 ; её пользователь. Значение из файла может быть невалидным (width=999), и
 ; полноценный разбор для такого вопроса не годится.
@@ -1930,10 +2451,19 @@ SettingsSnapshot() {
     global setUI
     if !(ui := setUI)
         return ""
-    return ui.width.Value "|" ui.edge.Value "|" ui.mon.Value "|"
-         . ui.act.Value "|" ui.blur.Value "|" ui.handles.Value "|"
-         . ui.anim.Value "|" ui.animMs.Value "|" ui.animSteps.Value "|"
-         . ui.blurMs.Value
+    s := ui.width.Value "|" ui.edge.Value "|" ui.mon.Value "|"
+       . ui.act.Value "|" ui.blur.Value "|" ui.handles.Value "|"
+       . ui.anim.Value "|" ui.animMs.Value "|" ui.animSteps.Value "|"
+       . ui.blurMs.Value
+    ; Буфер правок Slots (S4) — та же строка-снимок, только по номерам
+    ; слотов: dirty должен видеть и незаписанную правку постоянного слота.
+    for n, e in ui.edits {
+        s .= "|s" n ":" e.kind
+        if (e.kind = "perm")
+            s .= "," e.name "," e.exe "," e.cls "," e.monitor "," e.edge ","
+               . e.width "," e.activateOnShow "," e.hideOnBlur "," e.focusHotkey
+    }
+    return s
 }
 ; Имя поля — snap, а не base: base у любого объекта AHK занято под
 ; прототип, и присваивание туда строки падает на ObjSetBase. Ровно та же
@@ -1970,6 +2500,15 @@ SettingsSave(closeAfter) {
         SettingsStatus(err, true)
         return
     }
+    ; Slots (S4) собираются и проверяются тем же проходом, что и General:
+    ; одна ошибка в любой вкладке отменяет запись обеих — наполовину не
+    ; сохраняем.
+    slotPlan := SettingsSlotsCollect(&err)
+    if (err != "") {
+        SettingsStatus(err, true)
+        return
+    }
+    hasSlotWork := slotPlan.writes.Length || slotPlan.deletes.Length
 
     todo := []
     for v in vals {
@@ -1977,7 +2516,7 @@ SettingsSave(closeAfter) {
             continue
         todo.Push(v)
     }
-    if !todo.Length {
+    if (!todo.Length && !hasSlotWork) {
         SettingsRebase()
         SettingsStatus("Менять нечего: всё уже так")
         if closeAfter
@@ -2009,11 +2548,27 @@ SettingsSave(closeAfter) {
         }
     }
 
-    LoadConfig(configPath, &apps, &dynamic, &dynamicSlots,
-               &animMs, &animSteps, &blurMs, &handlesOn)
-    SetTimer(HandlesSync, -1)
+    ; [dynamic]/[general] уже на диске и сверены — то, что ниже, трогает
+    ; только [slotN]/[dynamicSlotN] и не может отменить уже совершившийся
+    ; факт записи General; LoadConfig в обеих ветках подхватит и его.
+    if hasSlotWork {
+        slotErr := ""
+        SettingsSlotsApply(slotPlan, &slotErr)   ; сама делает LoadConfig и переиндексацию
+        if (slotErr != "") {
+            SettingsStatus(slotErr, true)
+            return
+        }
+        setUI.edits := Map()
+        SettingsSlotsRefreshAll(setUI)
+    } else {
+        LoadConfig(configPath, &apps, &dynamic, &dynamicSlots,
+                   &animMs, &animSteps, &blurMs, &handlesOn)
+        SetTimer(HandlesSync, -1)
+    }
+
     SettingsRebase()
-    SettingsStatus("Сохранено. Изменённых строк: " todo.Length)
+    SettingsStatus("Сохранено. Изменённых строк: " (todo.Length + slotPlan.writes.Length)
+                 . (slotPlan.deletes.Length ? ", удалено секций: " slotPlan.deletes.Length : ""))
     if closeAfter
         SettingsClose(true)
 }
