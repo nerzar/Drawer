@@ -25,6 +25,13 @@
 ;
 ; Точка 4 (C1): статическая проверка, что apps-index-идентичности в
 ; src/drawer.ahk больше нет — ни в регистрации хоткея, ни в ключах managed.
+;
+; Точка 5 (C2, реестр служебных окон): копия IsServiceWindow с
+; подставленными вместо WinExist/класса параметрами. Проверяются снятие
+; мёртвой записи (hwnd переиспользуется) и правило собственного диалога.
+;
+; Точка 6 (C2): статическая проверка, что ядро не знает имён окон
+; настроек и что регистрация снимается на всех путях разрушения.
 
 drawerPath := A_ScriptDir "\..\..\src\drawer.ahk"
 
@@ -176,6 +183,109 @@ if !FileExist(drawerPath) {
         StrSplit(src4, "apps[permSlots[n]]").Length = 2
      && InStr(src4, "apps[permSlots[r.n]]") = 0
      && InStr(src4, "apps[i]") = 0)
+}
+
+; ---------------------------------------------------------------
+; Точка 5 (C2): реестр служебных окон. Правило снятия мёртвой записи и
+; условие «пока ящик не открыл ничего своего, чужой диалог ему не
+; принадлежит» проверяются на копии IsServiceWindow, где обращения к
+; настоящим окнам заменены параметрами: настоящие WinExist/WinGetClass
+; требовали бы окон и фокуса, а проверяется здесь не они, а само правило.
+; ---------------------------------------------------------------
+
+; Копия ServiceWindowAdd/Drop из src/drawer.ahk.
+SvcAdd(reg, hwnd) {
+    if hwnd
+        reg[hwnd] := true
+}
+SvcDrop(reg, hwnd) {
+    if reg.Has(hwnd)
+        reg.Delete(hwnd)
+}
+; Копия IsServiceWindow: alive заменяет WinExist, ownDialog — проверку
+; «#32770 нашего процесса». Порядок ветвей повторён один в один.
+SvcIs(reg, hwnd, alive, ownDialog := false) {
+    if !hwnd
+        return false
+    if reg.Has(hwnd) {
+        if (alive.Has(hwnd) && alive[hwnd])
+            return true
+        reg.Delete(hwnd)
+    }
+    if !reg.Count
+        return false
+    return ownDialog
+}
+
+reg := Map(), alive := Map()
+alive[1001] := true, alive[1002] := true
+
+Assert("5a: пустой реестр — своих окон нет",
+    SvcIs(reg, 1001, alive) = false)
+
+SvcAdd(reg, 1001)
+Assert("5b: зарегистрированное живое окно — служебное",
+    SvcIs(reg, 1001, alive) = true)
+Assert("5c: чужое окно служебным не становится",
+    SvcIs(reg, 1002, alive) = false)
+
+; Второе своё окно (диалог выбора; на его месте окажется host WebView2):
+; ядро не меняется, регистрируется ещё один hwnd.
+SvcAdd(reg, 1002)
+Assert("5d: второе своё окно тоже служебное, ядро не правилось",
+    SvcIs(reg, 1002, alive) = true)
+SvcDrop(reg, 1002)
+Assert("5e: снятое с учёта окно перестаёт быть служебным",
+    SvcIs(reg, 1002, alive) = false && SvcIs(reg, 1001, alive) = true)
+
+; hwnd переиспользуется Windows: мёртвая запись обязана сняться, иначе
+; чужое окно с тем же номером молча считалось бы своим.
+alive[1001] := false
+Assert("5f: запись о мёртвом окне снимается при первом же вопросе",
+    SvcIs(reg, 1001, alive) = false && reg.Has(1001) = false)
+alive[1001] := true
+Assert("5g: тот же hwnd после переиспользования уже не служебный",
+    SvcIs(reg, 1001, alive) = false)
+
+; Правило собственного диалога (MsgBox о несохранённых правках) работает
+; только пока у ящика открыто хоть одно своё окно — это условие было и
+; до C2, в виде «нет окна настроек, значит нет».
+regEmpty := Map()
+Assert("5h: при пустом реестре свой диалог служебным не считается",
+    SvcIs(regEmpty, 2001, alive, true) = false)
+regOpen := Map(), SvcAdd(regOpen, 1001)
+alive[1001] := true
+Assert("5i: при открытом своём окне свой диалог считается служебным",
+    SvcIs(regOpen, 2001, alive, true) = true)
+Assert("5j: чужой диалог при открытом своём окне служебным не считается",
+    SvcIs(regOpen, 2001, alive, false) = false)
+
+; ---------------------------------------------------------------
+; Точка 6 (C2): ядро больше не знает имён окон настроек, а каждое своё
+; окно регистрируется и снимается с учёта.
+; ---------------------------------------------------------------
+if !FileExist(drawerPath) {
+    Assert("6: src/drawer.ahk найден рядом с test/narrow", false)
+} else {
+    src6 := FileRead(drawerPath, "UTF-8")
+    posIs := InStr(src6, "IsServiceWindow(hwnd) {")
+    bodyIs := posIs ? SubStr(src6, posIs, 1200) : ""
+    Assert("6a: IsServiceWindow найдена", posIs > 0)
+    Assert("6b: IsServiceWindow не знает setGui/setPickerGui",
+        InStr(bodyIs, "setGui") = 0 && InStr(bodyIs, "setPickerGui") = 0)
+    Assert("6c: IsServiceWindow спрашивает реестр",
+        InStr(bodyIs, "serviceWindows.Has(hwnd)") > 0)
+    Assert("6d: мёртвая запись снимается внутри IsServiceWindow",
+        InStr(bodyIs, "serviceWindows.Delete(hwnd)") > 0)
+    Assert("6e: глобального setPickerGui больше нет нигде",
+        InStr(src6, "setPickerGui") = 0)
+    ; Окно настроек и диалог выбора: по регистрации на каждое и по
+    ; снятию на каждый путь разрушения (штатный, повторное открытие
+    ; после исчезнувшего окна, снос диалога вместе с родителем).
+    Assert("6f: свои окна регистрируются (настройки + диалог выбора)",
+        StrSplit(src6, "ServiceWindowAdd(").Length - 1 >= 3)
+    Assert("6g: регистрация снимается на всех путях разрушения",
+        StrSplit(src6, "ServiceWindowDrop(").Length - 1 >= 4)
 }
 
 ; ---------------------------------------------------------------

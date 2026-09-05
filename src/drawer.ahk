@@ -143,7 +143,7 @@ handleMode := 0      ; режим опроса кромок: 0 нет, 1 ред�
 handleSync := 0      ; тактов до следующей полной пересборки кромок
 setGui    := 0       ; окно настроек, пока оно открыто
 setUI     := 0       ; его контролы и значения, с которыми окно открылось
-setPickerGui := 0    ; окно выбора существующего окна (S4), пока оно открыто
+serviceWindows := Map()   ; hwnd своего окна -> true, пока оно живо
 foreWnd   := WinExist("A")     ; текущее окно переднего плана
 lastFore  := 0                 ; окно, которое было активно до него
 
@@ -291,6 +291,65 @@ Notify(text, title := "Ящик", opt := 1) {
 ; писать короткой, не перечисляя всё.
 Opt(cfg, name, def) {
     return cfg.HasOwnProp(name) ? cfg.%name% : def
+}
+
+; ========================= СЛУЖЕБНЫЕ ОКНА =========================
+; Часть окон ящик открывает сам: настройки, диалог выбора окна, позже —
+; host WebView2. Для остального кода это не окна пользователя: в слот их
+; привязать нельзя, фокус вместо припаркованного окна им не отдают, и
+; переход в них не считается потерей фокуса (Р18).
+;
+; Кромкам такая отметка не нужна: у них пустой заголовок и ToolWindow,
+; и отборы ящика отсеивают их сами. Окно настроек — обычное окно с
+; заголовком и фокусом, иначе им нельзя пользоваться, поэтому исключение
+; приходится назвать явно.
+;
+; Это именно реестр, а не пара известных переменных. Ядру нечего знать
+; о том, как называется окно настроек и сколько у него диалогов: кто
+; окно открыл, тот его и объявляет — ServiceWindowAdd() перед показом,
+; ServiceWindowDrop() перед разрушением. Поэтому следующее своё окно
+; (WebView2 host) включается в те же пять отборов одной строкой
+; регистрации, а не правкой каждого из них.
+
+ServiceWindowAdd(hwnd) {
+    global serviceWindows
+    if hwnd
+        serviceWindows[hwnd] := true
+}
+
+ServiceWindowDrop(hwnd) {
+    global serviceWindows
+    if serviceWindows.Has(hwnd)
+        serviceWindows.Delete(hwnd)
+}
+
+; Своё ли это окно. Запись об умершем окне снимается прямо здесь:
+; Windows переиспользует hwnd, и забытая запись однажды назвала бы
+; служебным чужое окно пользователя — молчаливый отказ, который потом
+; не воспроизвести.
+IsServiceWindow(hwnd) {
+    global serviceWindows
+    if !hwnd
+        return false
+    if serviceWindows.Has(hwnd) {
+        if WinExist("ahk_id " hwnd)
+            return true
+        serviceWindows.Delete(hwnd)
+    }
+    ; Пока ящик не открыл ничего своего, диалоги ему не принадлежат —
+    ; это условие было и раньше, в виде «нет окна настроек, значит нет».
+    if !serviceWindows.Count
+        return false
+    ; Собственный диалог: вопрос про несохранённые правки, MsgBox из
+    ; LoadConfig и подобное. Для ящика это продолжение того же служебного
+    ; окна — пока висит вопрос, пользователь никуда не уходил, и
+    ; выдвинутый слот уезжать не должен. Без этого WatchBlur, который
+    ; тикает и во время MsgBox, видит обычное окно переднего плана и
+    ; убирает слот. Свой диалог отличается от чужого процессом.
+    try
+        return WinGetClass("ahk_id " hwnd) = "#32770"
+            && WinGetPID("ahk_id " hwnd) = DllCall("GetCurrentProcessId", "UInt")
+    return false
 }
 
 ; Ошибка на одном окне не должна ронять программу целиком.
@@ -1424,39 +1483,10 @@ HandleClick(wParam, lParam, msg, hwnd) {
 ; появляется. Разобранные значения по-прежнему приходят только из
 ; LoadConfig; у файла спрашивается ровно «есть такой ключ или нет».
 ;
-; Связь с остальным ящиком — пять вызовов IsServiceWindow(): в
+; Связь с остальным ящиком — одна: свои окна объявляются служебными
+; через ServiceWindowAdd()/ServiceWindowDrop(). Сам отбор живёт в ядре
+; (IsServiceWindow) и о настройках ничего не знает; пользуются им
 ; PickActive, TrackedFore, FocusCandidate, StillFocused и FindWindow.
-; Больше про настройки код ящика ничего не знает.
-
-; Своё окно настроек. Кромки обходятся без такой проверки: у них пустой
-; заголовок и ToolWindow, и отборы ящика отсеивают их сами. Настройкам
-; так нельзя — это обычное окно с заголовком и фокусом, иначе им нельзя
-; пользоваться. Значит исключение приходится назвать явно.
-IsServiceWindow(hwnd) {
-    global setGui, setPickerGui
-    if !hwnd
-        return false
-    ; Диалог выбора окна — тоже своё окно ящика: иначе фокус на нём
-    ; мог бы попасть в PickActive() и привязаться Ctrl+Alt+Shift+N.
-    if (setPickerGui && hwnd = setPickerGui.Hwnd)
-        return true
-    if !setGui
-        return false
-    try {
-        if (hwnd = setGui.Hwnd)
-            return true
-        ; Собственный диалог настроек — вопрос про несохранённые правки.
-        ; Для ящика это продолжение того же служебного окна: пока висит
-        ; вопрос, пользователь никуда не уходил, и выдвинутый слот уезжать
-        ; не должен. Без этого WatchBlur, который тикает и во время
-        ; MsgBox, видит обычное окно переднего плана и убирает слот.
-        ; Свой диалог отличается от чужого процессом: окно настроек по
-        ; определению наше, значит и сравнивать не с чем иным.
-        return WinGetClass("ahk_id " hwnd) = "#32770"
-            && WinGetPID("ahk_id " hwnd) = WinGetPID("ahk_id " setGui.Hwnd)
-    }
-    return false
-}
 
 ; Ошибка в настройках не должна ронять ящик — та же защита, что у
 ; хоткеев.
@@ -1647,11 +1677,11 @@ SettingsWindowCandidates() {
 ; Возвращает {exe,cls,title} или 0 при отмене.
 ;
 ; Модальность условная: хоткеи ящика — глобальный хук, кликом их не
-; запереть, поэтому пока диалог открыт, он зарегистрирован как служебное
-; окно через setPickerGui — иначе Ctrl+Alt+Shift+N мог бы привязать сам
+; запереть, поэтому пока диалог открыт, он объявлен служебным окном
+; (ServiceWindowAdd) — иначе Ctrl+Alt+Shift+N мог бы привязать сам
 ; диалог вместо того окна, которое пользователь пришёл выбирать.
 SettingsPickWindow() {
-    global setPickerGui, setGui
+    global setGui
     cands := SettingsWindowCandidates()
     result := { picked: 0 }
 
@@ -1673,13 +1703,12 @@ SettingsPickWindow() {
     ok.Enabled := cands.Length > 0
 
     finish(use) {
-        global setPickerGui
         if use {
             row := lv.GetNext(0)
             if (row && row <= cands.Length)
                 result.picked := cands[row]
         }
-        setPickerGui := 0
+        ServiceWindowDrop(g.Hwnd)   ; сначала забыть, потом рушить
         g.Destroy()
     }
     ok.OnEvent("Click", (*) => finish(true))
@@ -1688,9 +1717,15 @@ SettingsPickWindow() {
     g.OnEvent("Close", (*) => finish(false))
     g.OnEvent("Escape", (*) => finish(false))
 
-    setPickerGui := g
+    ; hwnd запоминается отдельно: если диалог снесут вместе с окном
+    ; настроек, finish() не выполнится, а g.Hwnd у разрушенного Gui уже
+    ; не спросить — а снять регистрацию всё равно надо, иначе номер
+    ; hwnd, переиспользованный Windows, останется помечен служебным.
+    pickHwnd := g.Hwnd
+    ServiceWindowAdd(pickHwnd)
     g.Show("w484 h360")
-    WinWaitClose("ahk_id " g.Hwnd)
+    WinWaitClose("ahk_id " pickHwnd)
+    ServiceWindowDrop(pickHwnd)
     return result.picked
 }
 
@@ -2375,6 +2410,10 @@ SettingsOpen() {
                 return
             }
         }
+        ; Окно исчезло мимо SettingsClose. Регистрацию снимаем явно:
+        ; полагаться на то, что мёртвую запись однажды подчистит
+        ; IsServiceWindow, нельзя — hwnd могли уже переиспользовать.
+        try ServiceWindowDrop(setGui.Hwnd)
         setGui := 0
     }
 
@@ -2753,6 +2792,7 @@ SettingsOpen() {
     setUI  := ui
     SettingsRebase()
     setGui := g
+    ServiceWindowAdd(g.Hwnd)
     g.Show("w1060 h720")
 }
 
@@ -2771,6 +2811,8 @@ SettingsClose(force := false) {
     ui := setUI
     setGui := 0        ; сначала забыть, потом рушить: IsServiceWindow не
     setUI  := 0        ; должен спрашивать у уже разрушенного окна
+    if g
+        ServiceWindowDrop(g.Hwnd)
     SetTimer(SettingsSlotsTick, 0)   ; иначе таймер живой колонки переживёт закрытие
     if ui {
         for row in ui.slotRow
