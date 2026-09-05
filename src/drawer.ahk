@@ -318,6 +318,7 @@ Opt(cfg, name, def) {
 ; семантический порт. Ни одной строки записи в config.ini здесь нет —
 ; порт зовёт те же SettingsGeneralPlan/SettingsApplyPlan, что и native.
 ; Контракт: docs/settings-integration-layer.md.
+#Include webview\SettingsWebAssets.ahk
 #Include webview\Json.ahk
 #Include webview\SettingsWebView.ahk
 #Include webview\SettingsJsonBridge.ahk

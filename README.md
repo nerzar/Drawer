@@ -13,6 +13,9 @@ Fewer than expected means another program already holds some of them.
 Launching again replaces the running instance — no need to exit first.
 
 `Drawer.exe` is self-contained; AutoHotkey is not required. Windows 10/11.
+The WebView2 settings window additionally needs the Microsoft Edge WebView2
+Runtime, which Windows 11 ships and Edge installs on Windows 10; without it
+Drawer says so and the classic settings window still works.
 If `config.ini` is missing next to the exe, Drawer says so and stops
 rather than starting half-configured.
 
@@ -97,6 +100,8 @@ Set `handles=false` in `[general]` to turn this off entirely.
 ## Development
 
 `src/drawer.ahk` runs directly under [AutoHotkey v2](https://www.autohotkey.com/);
-`build/build.ps1` compiles the exe with [Ahk2Exe](https://github.com/AutoHotkey/Ahk2Exe/releases).
+`build/build.ps1` builds the settings frontend from `settings-ui/` (Node.js)
+and compiles the exe with [Ahk2Exe](https://github.com/AutoHotkey/Ahk2Exe/releases),
+embedding the frontend and `WebView2Loader.dll` into it.
 `test/` is the test bench — see `test/README.md`. Design notes and the
 requirement history live in `docs/`, in Russian.

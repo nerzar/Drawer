@@ -29,15 +29,24 @@ SettingsWebOpen() {
         return
     }
 
-    webDir := A_ScriptDir "\webview\web"
+    ; Рантайм проверяем до создания окружения: иначе вместо понятного
+    ; «поставьте компонент» человек получит код ошибки DllCall.
+    if !SettingsWebRuntimeFound()
+        throw Error("не установлен Microsoft Edge WebView2 Runtime."
+                  . " Скачать: https://go.microsoft.com/fwlink/p/?LinkId=2124703")
+
+    webDir := SettingsWebPageDir()
+    loader := SettingsWebLoaderPath()
     if !FileExist(webDir "\index.html")
         throw Error("нет собранного фронтенда: " webDir "\index.html")
+    if !FileExist(loader)
+        throw Error("нет WebView2Loader.dll: " loader)
 
     ; Профиль WebView2 — свой на процесс: два экземпляра ящика не должны
     ; драться за одну папку данных браузера.
     dataDir := A_Temp "\Drawer-WebView2-" DllCall("GetCurrentProcessId", "UInt")
 
-    webAdapter := SettingsWebViewAdapter("Ящик — настройки", webDir, dataDir,
+    webAdapter := SettingsWebViewAdapter("Ящик — настройки", webDir, loader, dataDir,
         SettingsWebJson, SettingsWebCloseRequested, SettingsWebDestroyed)
     webBridge := SettingsJsonBridge(webAdapter, DrawerSettingsPort(), 5000, SettingsWebTrace)
     webHwnd := webAdapter.Hwnd

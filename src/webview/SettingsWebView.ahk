@@ -16,19 +16,17 @@
 ; принято, — иначе несохранённый черновик исчезал бы молча.
 
 class SettingsWebViewAdapter {
-    __New(Title, WebDir, DataDir, OnJson, OnCloseRequested, OnDestroyed) {
+    ; WebDir и LoaderPath приходят снаружи готовыми: где лежат файлы —
+    ; вопрос упаковки (SettingsWebAssets.ahk), а не транспорта. В
+    ; несобранном виде это дерево репозитория, в собранном — распакованная
+    ; временная папка, и адаптеру эта разница не видна.
+    __New(Title, WebDir, LoaderPath, DataDir, OnJson, OnCloseRequested, OnDestroyed) {
         this._closed := false
         this._onJson := OnJson
         this._onCloseRequested := OnCloseRequested
         this._onDestroyed := OnDestroyed
 
-        loaderPath := A_ScriptDir "\webview\vendor\webviewtoo\64bit\WebView2Loader.dll"
-        if A_IsCompiled {
-            WebViewCtrl.CreateFileFromResource("64bit\WebView2Loader.dll", WebViewCtrl.TempDir)
-            loaderPath := WebViewCtrl.TempDir "\64bit\WebView2Loader.dll"
-        }
-
-        settings := { DllPath: loaderPath,
+        settings := { DllPath: LoaderPath,
                       DataDir: DataDir,
                       DefaultWidth: 980,
                       DefaultHeight: 620 }

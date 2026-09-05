@@ -10,7 +10,15 @@
 # Apply пишет во временный config.ini, а не в рабочий. Инструментация
 # вшивается в копию, как это делает test/run.ps1 для набора setstat.
 #
+#   -Compiled  собрать копию тем же Ahk2Exe, что и релиз, и прогнать
+#              полученный exe в папке БЕЗ webview\: ни фронтенда, ни
+#              вендора, ни DLL рядом. Это и есть проверка упаковки —
+#              всё, что нужно, обязано приехать внутри exe.
+#
 # Запуск:  pwsh -File test\narrow\webview-slice.ps1
+#          pwsh -File test\narrow\webview-slice.ps1 -Compiled
+
+param([switch]$Compiled)
 
 $ErrorActionPreference = "Stop"
 $repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -34,8 +42,11 @@ function Check([string]$name, [bool]$ok) {
 $dir = Join-Path ([IO.Path]::GetTempPath()) ("drawer-webview-slice-" + [guid]::NewGuid().ToString("N").Substring(0, 8))
 New-Item -ItemType Directory -Path $dir | Out-Null
 try {
-    Copy-Item (Join-Path $repo "src\config.ini") (Join-Path $dir "config.ini")
-    Copy-Item (Join-Path $repo "src\webview") (Join-Path $dir "webview") -Recurse
+    # Копируется всё дерево src\ целиком, а не перечисленные файлы:
+    # drawer.ahk включает соседние модули (SettingsWebAssets.ahk,
+    # webview\*), и список пришлось бы править при каждом новом файле —
+    # причём молча, потому что копия просто не загрузилась бы.
+    Copy-Item (Join-Path $repo "src\*") $dir -Recurse
     Copy-Item (Join-Path $PSScriptRoot "webview-slice.js") (Join-Path $dir "webview-slice.js")
 
     $marker = 'A_TrayMenu.Insert("2&", "Settings (WebView2)", (*) => SettingsWebShow())'
@@ -93,12 +104,41 @@ SmokeWatch() {
 '@
     [IO.File]::WriteAllText((Join-Path $dir "drawer.ahk"), $src.Replace($marker, $marker + "`r`n" + $inject), $utf8)
 
-    $cfg = Join-Path $dir "config.ini"
+    # --- при -Compiled: собрать exe и увести его в чистую папку ------
+    $runDir = $dir
+    if ($Compiled) {
+        $ahk2exe = Join-Path $repo ".tools\Ahk2Exe\Ahk2Exe.exe"
+        if (-not (Test-Path $ahk2exe)) {
+            throw "Не найден $ahk2exe. Скачайте релиз Ahk2Exe и распакуйте в .tools\Ahk2Exe\"
+        }
+        $runDir = Join-Path $dir "release"
+        New-Item -ItemType Directory -Path $runDir | Out-Null
+        $exe = Join-Path $runDir "Drawer.exe"
+        $c = Start-Process -FilePath $ahk2exe -PassThru -Wait -NoNewWindow -ArgumentList @(
+            '/in', (Join-Path $dir "drawer.ahk"),
+            '/out', $exe,
+            '/icon', (Join-Path $repo "assets\icon.ico"),
+            '/base', $ahk
+        )
+        Check "0c: Ahk2Exe собрал exe" (($c.ExitCode -eq 0) -and (Test-Path $exe))
+        if (-not (Test-Path $exe)) { throw "Ahk2Exe не собрал $exe (код $($c.ExitCode))" }
+
+        # Рядом с exe не остаётся ничего от дерева исходников: ни
+        # webview\web, ни вендора с WebView2Loader.dll.
+        Move-Item (Join-Path $dir "config.ini") $runDir
+        Move-Item (Join-Path $dir "webview-slice.js") $runDir
+        Check "0d: рядом с exe нет ни фронтенда, ни вендора" `
+            (-not (Test-Path (Join-Path $runDir "webview")))
+    }
+
+    $cfg = Join-Path $runDir "config.ini"
     $before = [IO.File]::ReadAllText($cfg, [Text.Encoding]::Unicode)
     Check "0a: во временном config.ini blurMs=250 до запуска" ($before -match '(?m)^blurMs=250\s*$')
 
     # --- прогон ------------------------------------------------------
-    $p = Start-Process -FilePath $ahk -ArgumentList @("`"$dir\drawer.ahk`"") -PassThru
+    $target = if ($Compiled) { Join-Path $runDir "Drawer.exe" } else { $ahk }
+    $targetArgs = if ($Compiled) { @() } else { @("`"$dir\drawer.ahk`"") }
+    $p = Start-Process -FilePath $target -ArgumentList $targetArgs -PassThru
     if (-not $p.WaitForExit(90000)) {
         try { $p.Kill() } catch {}
         Check "0b: приложение завершилось само" $false
@@ -106,7 +146,7 @@ SmokeWatch() {
         Check "0b: приложение завершилось само" $true
     }
 
-    $logPath = Join-Path $dir "bridge.log"
+    $logPath = Join-Path $runDir "bridge.log"
     $log = if (Test-Path $logPath) { [IO.File]::ReadAllText($logPath, [Text.Encoding]::UTF8) } else { "" }
 
     # --- транскрипт моста -------------------------------------------
@@ -124,6 +164,26 @@ SmokeWatch() {
 
     Check "4a: окно WebView уничтожено на выходе" ($log -match 'webview-destroyed')
 
+    if ($Compiled) {
+        # Ассеты приехали внутрь exe и распаковались во временную папку
+        # версии — именно оттуда их взял виртуальный хост и DllCall.
+        $ver = ([IO.File]::ReadAllText((Join-Path $repo "src\drawer.ahk")) `
+                | Select-String -Pattern '(?m)^VERSION\s*:=\s*"([^"]+)"').Matches[0].Groups[1].Value
+        $unpack = Join-Path ([IO.Path]::GetTempPath()) "Drawer-WebView-$ver"
+        # Только на существование проверять нельзя: Ahk2Exe, не увидев
+        # FileInstall, оставляет ассет за бортом, и распаковка создаёт
+        # файл нулевой длины — существующий и бесполезный.
+        foreach ($a in @(
+            @{ n = "6a"; file = "index.html";         src = "src\webview\web\index.html" },
+            @{ n = "6b"; file = "WebView2Loader.dll"; src = "src\webview\vendor\webviewtoo\64bit\WebView2Loader.dll" }
+        )) {
+            $dst = Join-Path $unpack $a.file
+            $want = (Get-Item (Join-Path $repo $a.src)).Length
+            $got = if (Test-Path $dst) { (Get-Item $dst).Length } else { -1 }
+            Check "$($a.n): $($a.file) распакован из exe байт в байт ($got из $want)" ($got -eq $want)
+        }
+    }
+
     # --- сам файл ----------------------------------------------------
     $after = [IO.File]::ReadAllText($cfg, [Text.Encoding]::Unicode)
     Check "5a: в config.ini записалось blurMs=300" ($after -match '(?m)^blurMs=300\s*$')
@@ -131,6 +191,8 @@ SmokeWatch() {
     Check "5c: соседние ключи не переписаны" ($after -match '(?m)^animMs=160\s*$' -and $after -match '(?m)^animSteps=14\s*$')
     Check "5d: секция [dynamic] цела" ($after -match '(?m)^width=70\s*$' -and $after -match '(?m)^edge=right\s*$')
 
+    $mode = if ($Compiled) { "собранный exe" } else { "исходник" }
+    "режим: $mode"
     $ok = $true
     foreach ($r in $results) {
         $ok = $ok -and $r.Ok

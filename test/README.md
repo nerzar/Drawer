@@ -117,6 +117,9 @@ narrow/webview-slice.ps1   end-to-end первого WebView-слайса: getIn
                            папке, поэтому рабочий config.ini не трогает.
                            Требует собранного фронтенда:
                            cd settings-ui && npm run build
+                           -Compiled: собрать копию тем же Ahk2Exe, что и
+                           релиз, и прогнать exe в папке без webview\ —
+                           проверка упаковки ассетов в exe.
 ```
 
 Окно WebView2 во втором случае на несколько секунд появляется на экране —
