@@ -105,7 +105,12 @@ export function resetToShared(d: SlotDraft, shared: SlotBehavior): void {
   Object.assign(d, behaviorFields(shared))
 }
 
-const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+// JSON objects have no key order; AHK's Map serializes in a different
+// order from the draft. Compare fields so an unchanged slot stays clean.
+function same<T extends object>(a: T, b: T): boolean {
+  return (Object.keys(a) as (keyof T)[]).every((key) =>
+    JSON.stringify(a[key]) === JSON.stringify(b[key]))
+}
 
 // Правки, которые уедут в Save. Слот попадает в список, если сменил род
 // или если его значения разошлись с применёнными: сравнение идёт с

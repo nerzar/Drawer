@@ -222,3 +222,14 @@ test('динамический слот без правок в Save не еде�
   const canonical = state(perm(1), dyn(2), dyn(3))
   assert.deepEqual(slotEditsToWire(slotDraftsFromState(canonical), canonical), [])
 })
+
+test('AHK key order does not make unchanged permanent or dynamic slots dirty', () => {
+  const canonical = JSON.parse(JSON.stringify(state(perm(1), dyn(2)), (_key, value) =>
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)))
+      : value)) as SettingsState
+  const drafts = slotDraftsFromState(canonical)
+  assert.deepEqual(slotEditsToWire(drafts, canonical), [])
+  drafts[2]!.widthPercent = '35'
+  assert.deepEqual(slotEditsToWire(drafts, canonical).map((edit) => edit.number), [2])
+})

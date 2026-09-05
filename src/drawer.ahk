@@ -1,4 +1,6 @@
 #Requires AutoHotkey v2.0
+; GDI+ хранит token/bitmap между DllCall: DLL должна оставаться загруженной.
+#DllLoad gdiplus.dll
 #SingleInstance Force
 Persistent()
 SetWinDelay(-1)
@@ -723,12 +725,46 @@ WindowAppName(hwnd) {
     try path := ProcessGetPath(WinGetPID("ahk_id " hwnd))
     if (path != "") {
         try {
-            desc := Trim(FileGetVersionInfo(path, "FileDescription"))
+            desc := Trim(WindowFileDescription(path))
             if (desc != "")
                 return desc
         }
     }
     return RegExReplace(exe, "i)\.exe$")
+}
+
+; Ресурс FileDescription читается через WinAPI; встроенной функции
+; FileGetVersionInfo в AHK v2 нет. Кэш по пути не привязан к reuse HWND.
+WindowFileDescription(path) {
+    static descriptions := Map()
+    if descriptions.Has(path)
+        return descriptions[path]
+    desc := ""
+    size := DllCall("version\GetFileVersionInfoSizeW", "Str", path, "Ptr", 0, "UInt")
+    if size {
+        data := Buffer(size, 0)
+        if DllCall("version\GetFileVersionInfoW", "Str", path, "UInt", 0,
+                   "UInt", size, "Ptr", data, "Int") {
+            translations := 0, bytes := 0
+            if DllCall("version\VerQueryValueW", "Ptr", data, "Str", "\VarFileInfo\Translation",
+                       "Ptr*", &translations, "UInt*", &bytes, "Int") {
+                Loop bytes // 4 {
+                    offset := (A_Index - 1) * 4
+                    key := Format("\StringFileInfo\{:04X}{:04X}\FileDescription",
+                        NumGet(translations, offset, "UShort"), NumGet(translations, offset + 2, "UShort"))
+                    value := 0, chars := 0
+                    if DllCall("version\VerQueryValueW", "Ptr", data, "Str", key,
+                               "Ptr*", &value, "UInt*", &chars, "Int") && chars > 1 {
+                        desc := Trim(StrGet(value, chars - 1, "UTF-16"))
+                        if desc != ""
+                            break
+                    }
+                }
+            }
+        }
+    }
+    descriptions[path] := desc
+    return desc
 }
 
 ; Иконка окна как data-URI PNG — в WebView2 картинку иначе не передать.

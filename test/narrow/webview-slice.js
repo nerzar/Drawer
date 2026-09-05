@@ -160,6 +160,7 @@
       post('smoke.slots-ready')
       await wait(() => q('slot-1').dataset.status === 'available', 5000)
       await wait(() => text('slot-title') === 'Slots smoke title', 5000)
+      await wait(() => q('slot-1').querySelector('img')?.naturalWidth > 0, 5000)
       post('smoke.slots-available')
       await wait(() => text('slot-title') === 'slots smoke title', 5000)
       eq('edit-name', 'Unsaved slot')
@@ -235,8 +236,8 @@
       const relAgain = await rpc('slot.release', { slot: 4 })
       if (relAgain.ok || relAgain.error?.code !== 'not_bound') throw new Error('release-again-not-bound')
 
-      post('smoke.bind-release-done')
-      post('smoke.bind-release-verified')
+      await rpc('smoke.bind-release-done')
+      await rpc('smoke.bind-release-verified')
 
       // Slot-only dirty-close survives tab changes and invalid drafts.
       q('slot-1').click()
@@ -255,7 +256,7 @@
       // значения и с другой вкладки.
       setText('edit-widthPercent', '')
       q('slot-5').click()
-      await wait(() => !q('edit-widthPercent'), 5000)
+      await wait(() => q('slot-5').getAttribute('aria-pressed') === 'true' && val('edit-widthPercent') === '43', 5000)
       await apply(() => /слот 1, размер окна/.test(text('status')))
       if (/slots\.1\.widthPercent/.test(text('status'))) throw new Error('machine-path-shown')
       await wait(() => q('slot-1').getAttribute('aria-pressed') === 'true', 5000)
@@ -264,7 +265,7 @@
       // Границу значения проверяет backend, и адрес поля называет он же.
       setText('edit-widthPercent', '3')
       q('slot-5').click()
-      await wait(() => !q('edit-widthPercent'), 5000)
+      await wait(() => q('slot-5').getAttribute('aria-pressed') === 'true' && val('edit-widthPercent') === '43', 5000)
       await apply(() => /допустимо от 5 до 100/.test(text('status')))
       await wait(() => q('slot-1').getAttribute('aria-pressed') === 'true', 5000)
       if (!q('edit-widthPercent').className.includes('field-bad')) throw new Error('range-field-error')

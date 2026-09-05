@@ -215,16 +215,18 @@ SmokeWatch() {
     # -ArgumentList не принимает пустой список: у собранного exe своих
     # аргументов нет, и вызов должен идти вовсе без параметра. Windows
     # PowerShell 5.1 на @() падает, а README зовёт запускать именно им.
+    $stderr = Join-Path $runDir "ahk-errors.log"
     $p = if ($Compiled) {
         Start-Process -FilePath (Join-Path $runDir "Drawer.exe") -PassThru -WindowStyle Hidden
     } else {
-        Start-Process -FilePath $ahk -ArgumentList "`"$dir\drawer.ahk`"" -PassThru -WindowStyle Hidden
+        Start-Process -FilePath $ahk -ArgumentList "/ErrorStdOut `"$dir\drawer.ahk`"" -PassThru -WindowStyle Hidden -RedirectStandardError $stderr
     }
     if (-not $p.WaitForExit(90000)) {
         try { $p.Kill() } catch {}
         Check "0b: приложение завершилось само" $false
     } else {
-        Check "0b: приложение завершилось само" $true
+        Check "0b: приложение завершилось без ошибки (exit=$($p.ExitCode))" ($p.ExitCode -eq 0)
+        if (Test-Path $stderr) { Get-Content $stderr }
     }
 
     $logPath = Join-Path $runDir "bridge.log"
