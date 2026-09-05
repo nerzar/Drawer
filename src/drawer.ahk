@@ -2994,16 +2994,20 @@ SettingsSlotsCollect(&err) {
 ; GUI-controls: вход — уже готовые списки {sec,key,val} и slotPlan.
 
 ; Секция удалена, если повторное чтение подтверждает её отсутствие.
-; IniDelete(Filename, Section) без Key стирает секцию целиком, поэтому
-; IniRead(path, sec) без Key либо перечислит оставшиеся ключи, либо
-; бросит исключение — секции больше нет.
+; IniDelete(Filename, Section) без Key стирает секцию целиком; IniRead с
+; Default вместо Key возвращает список оставшихся ключей или сам Default,
+; если секции нет, — без исключения в обоих случаях. Специально НЕ читаем
+; через голое "throws if absent" (IniRead(path, sec) без Default): тогда
+; любое исключение при чтении — хоть блокировка файла, хоть чужая ошибка —
+; неотличимо от «секции нет» и ложно засчиталось бы как подтверждённое
+; удаление. Здесь же исключение при самом чтении означает «не смогли
+; сверить», а не «удалено», и намеренно возвращает false — сверка не
+; прошла, а не наоборот.
 SettingsVerifyDeleted(path, sec) {
-    try {
-        IniRead(path, sec)
+    try
+        return IniRead(path, sec, , "") = ""
+    catch
         return false
-    } catch {
-        return true
-    }
 }
 
 ; Только диск: пишет, удаляет и сверяет General и Slots одним проходом.
@@ -3103,17 +3107,16 @@ SettingsPersistVerified(generalWrites, slotPlan, &outcome) {
 ;    индексу в apps[]: добавление или удаление [slotN] сдвигает индексы
 ;    соседних постоянных слотов;
 ;  - snapshot oldBySlot/oldIdent берётся из slotPlan, то есть сделан ДО
-;    любой дисковой операции — а не после, как было бы багом.
+;    любой дисковой операции — а не после, как было бы багом;
+;  - dynSlots для тронутых номеров освобождается только если ФАКТИЧЕСКИ
+;    перезагруженный config.ini подтверждает переход в постоянные
+;    (permSlots.Has(n) уже после LoadConfig), а не по одному намерению
+;    правки: если запись слота n не долетела до диска (partial failure),
+;    слот n остаётся динамическим и на диске, и в рантайме — отпускать
+;    в этом случае активную привязку было бы неверно.
 SettingsReconcileRuntime(slotPlan) {
     global configPath, apps, managed, permSlots, dynSlots, dynamicSlots
     global animMs, animSteps, blurMs, handlesOn, dynamic, HANDLE_BG, HANDLE_BG_HOT
-
-    for n in slotPlan.touched {
-        if dynSlots.Has(n) {
-            Release(dynSlots[n])
-            dynSlots.Delete(n)
-        }
-    }
 
     LoadConfig(configPath, &apps, &dynamic, &dynamicSlots,
                &animMs, &animSteps, &blurMs, &handlesOn, &HANDLE_BG)
@@ -3126,6 +3129,13 @@ SettingsReconcileRuntime(slotPlan) {
     permSlots.Clear()
     for i, a in apps
         permSlots[a.slot] := i
+
+    for n in slotPlan.touched {
+        if (dynSlots.Has(n) && permSlots.Has(n)) {
+            Release(dynSlots[n])
+            dynSlots.Delete(n)
+        }
+    }
 
     managed.Clear()
     oldBySlot := slotPlan.oldBySlot
