@@ -1,10 +1,10 @@
-# Узкий end-to-end smoke первого WebView-слайса:
-#   getInitialState -> General.blurCheckMs -> правка -> Apply ->
-#   SettingsApplyPlan -> канонический state обратно во Vue.
+# Узкий end-to-end smoke вкладки General через WebView:
+#   getInitialState -> правка полей -> Apply -> SettingsApplyPlan ->
+#   канонический state обратно во Vue -> Отмена с dirty-подтверждением.
 #
 # Окнами, мышью и фокусом не управляет, поэтому VM не нужна — но окно
-# WebView2 на несколько секунд появляется на экране, это неизбежно: слайс
-# и есть окно.
+# WebView2 на несколько секунд появляется на экране, это неизбежно:
+# проверяется само окно.
 #
 # Работает на КОПИИ src/ во временной папке: A_ScriptDir там свой, значит
 # Apply пишет во временный config.ini, а не в рабочий. Инструментация
@@ -59,9 +59,11 @@ try {
 smokeJs := FileRead(A_ScriptDir "\webview-slice.js", "UTF-8")
 smokeTries := 0
 smokeWaited := 0
+smokeNativeDone := false
 SetTimer(SmokeOpen, -800)
 SetTimer(SmokeDrive, 700)
 SetTimer(SmokeWatch, 500)
+SetTimer(SmokeNativeClose, 400)
 
 ; webTrace задаётся здесь, а не рядом с вставкой: вставка стоит выше
 ; #Include webview\SettingsWebHost.ahk, и его собственное
@@ -88,6 +90,24 @@ SmokeDrive() {
     try webAdapter.ExecuteScript(smokeJs)
 }
 
+; Системный крестик драйвер нажать не может: он живёт внутри страницы.
+; Зовём тот же путь, которым его зовёт адаптер, — так проверяется, что
+; грязный черновик переживает закрытие ОКНОМ, а не только кнопкой, и что
+; пятисекундный timeout решения не срабатывает, пока человек думает.
+SmokeNativeClose() {
+    global webBridge, webTrace, smokeNativeDone
+    log := ""
+    try log := FileRead(webTrace, "UTF-8")
+    if (smokeNativeDone || !InStr(log, "smoke.dirty-guarded") || !IsObject(webBridge))
+        return
+    smokeNativeDone := true
+    SetTimer(SmokeNativeClose, 0)
+    webBridge.NativeCloseRequested()
+}
+
+; Ждём не только конца сценария, но и уничтожения окна: последний шаг —
+; закрытие по «Отмене» из формы, и выйти раньше значило бы проверить
+; закрытие выходом ящика, а не тем, что проверяется.
 SmokeWatch() {
     global webTrace, smokeWaited
     smokeWaited += 500
@@ -95,7 +115,7 @@ SmokeWatch() {
     try log := FileRead(webTrace, "UTF-8")
     if (smokeWaited > 60000)
         SettingsWebTrace("request smoke.failed:watchdog")
-    else if !InStr(log, "smoke.done")
+    else if !(InStr(log, "smoke.done") && InStr(log, "webview-destroyed"))
         return
     SetTimer(SmokeDrive, 0)
     SetTimer(SmokeWatch, 0)
@@ -152,17 +172,24 @@ SmokeWatch() {
     # --- транскрипт моста -------------------------------------------
     Check "1a: мост принял settings.getInitialState" ($log -match 'request settings\.getInitialState')
     Check "1b: и ответил успехом" ($log -match 'response settings\.getInitialState ok=true')
-    Check "1c: форма показала значение из config.ini (250)" ($log -match 'request smoke\.loaded-250')
+    Check "1c: форма заполнена из config.ini целиком, а не умолчаниями" ($log -match 'request smoke\.loaded-full')
 
-    Check "2a: Apply с blurCheckMs=5 дошёл до backend" ($log -match 'request settings\.apply')
-    Check "2b: и вернулся structured validation_error" ($log -match 'response settings\.apply ok=false code=validation_error')
-    Check "2c: Vue показала текст ошибки backend, canonical не сдвинулся" ($log -match 'request smoke\.rejected-5')
+    Check "2a: Apply дошёл до backend" ($log -match 'request settings\.apply')
+    Check "2b: пустое поле вернулось structured validation_error" ($log -match 'response settings\.apply ok=false code=validation_error')
+    Check "2c: форма подсветила поле по имени из ответа" ($log -match 'request smoke\.field-error')
+    Check "2d: границу значения проверил backend, текст доехал в форму" ($log -match 'request smoke\.range-error')
 
-    Check "3a: Apply с blurCheckMs=300 вернулся успехом" ($log -match 'response settings\.apply ok=true')
-    Check "3b: канонический state вернулся во Vue и заменил baseline" ($log -match 'request smoke\.saved-300')
+    Check "3a: Apply четырёх полей разом вернулся успехом" ($log -match 'response settings\.apply ok=true')
+    Check "3b: канонический state вернулся во Vue и заменил baseline" ($log -match 'request smoke\.saved')
     Check "3c: драйвер не сообщил ни одного провала" (-not ($log -match 'smoke\.failed'))
 
-    Check "4a: окно WebView уничтожено на выходе" ($log -match 'webview-destroyed')
+    Check "4a: Отмена с грязным черновиком спросила, а не закрыла" ($log -match 'request smoke\.dirty-guarded')
+    Check "4b: системный крестик спросил тем же путём" `
+        (($log -match 'native-close-requested') -and ($log -match 'request smoke\.native-guarded'))
+    Check "4c: отказ вернул мост в open, окно осталось" `
+        (($log -match 'close-denied') -and -not ($log -match 'native-close-timeout'))
+    Check "4d: Отмена без изменений закрыла окно сама" ($log -match 'settings-closed reason=cancel origin=frontend')
+    Check "4e: окно WebView уничтожено" ($log -match 'webview-destroyed')
 
     if ($Compiled) {
         # Ассеты приехали внутрь exe и распаковались во временную папку
@@ -186,10 +213,14 @@ SmokeWatch() {
 
     # --- сам файл ----------------------------------------------------
     $after = [IO.File]::ReadAllText($cfg, [Text.Encoding]::Unicode)
-    Check "5a: в config.ini записалось blurMs=300" ($after -match '(?m)^blurMs=300\s*$')
-    Check "5b: файл остался UTF-16 LE с комментариями пользователя" ($after -match 'Ящик' -and $after -match 'Настройки читаются заново')
-    Check "5c: соседние ключи не переписаны" ($after -match '(?m)^animMs=160\s*$' -and $after -match '(?m)^animSteps=14\s*$')
-    Check "5d: секция [dynamic] цела" ($after -match '(?m)^width=70\s*$' -and $after -match '(?m)^edge=right\s*$')
+    Check "5a: в [general] записались blurMs, handles и пресет анимации" `
+        (($after -match '(?m)^blurMs=300\s*$') -and ($after -match '(?m)^handles=false\s*$') `
+         -and ($after -match '(?m)^animMs=100\s*$') -and ($after -match '(?m)^animSteps=10\s*$'))
+    Check "5b: accent появился ключом, которого в файле не было" ($after -match '(?m)^accent=332A35\s*$')
+    Check "5c: в [dynamic] записался width=80, соседние ключи целы" `
+        (($after -match '(?m)^width=80\s*$') -and ($after -match '(?m)^edge=right\s*$') `
+         -and ($after -match '(?m)^monitor=cursor\s*$') -and ($after -match '(?m)^hideOnBlur=true\s*$'))
+    Check "5d: файл остался UTF-16 LE с комментариями пользователя" ($after -match 'Ящик' -and $after -match 'Настройки читаются заново')
 
     $mode = if ($Compiled) { "собранный exe" } else { "исходник" }
     "режим: $mode"

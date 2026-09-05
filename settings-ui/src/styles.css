@@ -9,9 +9,6 @@ body {
 }
 
 body {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   min-height: 100vh;
 }
 
@@ -32,15 +29,16 @@ body {
   --accent-fg: color-mix(in srgb, var(--accent) 45%, white);
   --accent-fg-hover: color-mix(in srgb, var(--accent) 60%, white);
   --accent-tint: color-mix(in srgb, var(--accent-fg) 16%, transparent);
-  width: 1060px;
-  height: 720px;
+  /* Страница живёт в настоящем окне WebView2 и занимает его целиком.
+     Фиксированные 1060×720 остались от макета, который смотрели в
+     браузере: в окне поменьше они давали две полосы прокрутки, и кнопки
+     Применить/ОК уезжали под нижний край. */
+  width: 100%;
+  height: 100vh;
   background: var(--bg-app);
-  border-radius: 12px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--border-strong);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
 }
 
 .app a {

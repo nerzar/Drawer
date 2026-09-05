@@ -99,25 +99,33 @@ C5 сделал загрузку конфига пригодной для headle
 диск тронут, а перечитать его не удалось. Удаление `[dynamicSlotN]` теперь
 сверяется чтением, как и удаление `[slotN]`.
 
-### WebView Settings: первый vertical slice
+### WebView Settings: вкладка General
 
-Подключён рабочий путь `getInitialState → правка General.blurCheckMs →
-Apply → SettingsApplyPlan → канонический state обратно во Vue`. Код лежит
-в `src/webview/`: транспорт (`SettingsWebView.ahk` поверх вендоренного
-WebViewToo), протокол (`SettingsJsonBridge.ahk`), codec (`Json.ahk`),
-семантический порт (`SettingsPort.ahk`) и склейка с рантаймом
-(`SettingsWebHost.ahk`). Порт зовёт тот же backend C1–C5; второй
-реализации записи нет.
+Код лежит в `src/webview/`: транспорт (`SettingsWebView.ahk` поверх
+вендоренного WebViewToo), протокол (`SettingsJsonBridge.ahk`), codec
+(`Json.ahk`), семантический порт (`SettingsPort.ahk`) и склейка с
+рантаймом (`SettingsWebHost.ahk`). Порт зовёт тот же backend C1–C5;
+второй реализации записи нет.
 
-Фронтенд `settings-ui/` работает через типизированный клиент
-(`src/bridge/`), а не через mock: `settings.getInitialState` и
-`settings.apply` ходят по настоящему каналу WebView2 с корреляцией по
-`id`. Mock остался только там, куда slice не дошёл: заголовок окна,
-вкладки Slots и About.
+Через мост проходит вся вкладка General — те же десять ключей, что
+правит native: `[dynamic]` width/edge/monitor/activateOnShow/hideOnBlur и
+`[general]` handles/animMs/animSteps/blurMs/accent. Черновиком владеет
+Vue (`settings-ui/src/bridge/general.ts`), применённым состоянием — AHK:
+успешный Apply/ОК возвращает канонический state, и он же становится новым
+baseline. Неудачный Save черновик не трогает — заново набирать не
+приходится.
 
-Native Settings остаётся первым пунктом трея и полноценным путём.
-Правка слотов, picker, bind/release и watchStatus через WebView отвечают
-`unsupported_action`.
+Dirty-семантика вся на настоящем пути. Отмена и системный крестик
+присылают черновик, порт сравнивает его с применённым состоянием тем же
+`SettingsGeneralPlan`, которым делает Save, и отвечает `closed:false`,
+если терять есть что. Вопрос задаёт страница, а не MsgBox из моста:
+модальное окно на стороне AHK остановило бы очередь сообщений WebView и
+дало бы сработать таймауту решения.
+
+Mock остался только там, куда перенос не дошёл: заголовок окна и вкладки
+Slots, About. Native Settings остаётся первым пунктом трея и полноценным
+путём. Правка слотов, picker, bind/release и watchStatus через WebView
+отвечают `unsupported_action`.
 
 ## Инварианты
 
@@ -185,8 +193,8 @@ VM-оркестратор находится в `test/vm/` и используе
 артефакты вернулись на хост, VM выключилась штатно. `apps`/`all` в этой
 VM не подтверждены.
 
-`test/narrow/webview-slice.ps1` — end-to-end smoke WebView-слайса: 16/16 на
-исходнике и 20/20 в режиме `-Compiled`. Гоняет копию `src/` во временной
+`test/narrow/webview-slice.ps1` — end-to-end smoke вкладки General: 21/21
+на исходнике и 25/25 в режиме `-Compiled`. Гоняет копию `src/` во временной
 папке, поэтому Apply пишет во временный `config.ini`. Окнами, мышью и
 фокусом не управляет; окно WebView2 на несколько секунд появляется на
 экране. Требует собранного фронтенда: `cd settings-ui && npm run build`.
@@ -266,9 +274,9 @@ bridge, после него выполняется C6 native picker parity fix.
 
 ## Ближайшие задачи
 
-1. C1–C5 и первый WebView-слайс выполнены. Расширить bridge на правку
-   слотов, picker, bind/release и watchStatus, проверить S4 целевыми
-   сценариями; затем закрыть C6 native picker parity fix.
+1. C1–C5, упаковка и вкладка General выполнены. Расширить bridge на
+   правку слотов, picker, bind/release и watchStatus, проверить S4
+   целевыми сценариями; затем закрыть C6 native picker parity fix.
 3. Завершить структурное разделение, затем перейти к произвольным слотам
    и новым UI-командам.
 4. Закрывать долг тестового стенда из `docs/05-план-работ.md` отдельно от

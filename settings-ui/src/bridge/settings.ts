@@ -3,9 +3,10 @@
 // Vue, владелец canonical — AHK; успешный Apply возвращает новый
 // canonical, и он же становится новым baseline.
 //
-// Slice правит одно поле — General.blurCheckMs. Остальные поля General
-// уезжают в Apply теми значениями, что пришли из AHK, поэтому точечная
-// запись backend не находит в них изменений и ничего не пишет.
+// Вкладка General ходит этим путём целиком: все её поля читаются из
+// canonical, правятся в draft и уезжают одним settings.apply/ok. Slots
+// пока живут на mock-state и в draft не попадают — их правки поедут
+// отдельным slotEdits, когда придёт их очередь.
 
 import { reactive } from 'vue'
 import {
@@ -14,7 +15,8 @@ import {
   hasWebViewTransport,
   webViewTransport,
 } from './client'
-import type { GeneralSettings, SettingsState } from './protocol'
+import { draftFromState, draftToWire, type GeneralDraft } from './general'
+import type { SettingsState } from './protocol'
 
 type Status = 'idle' | 'loading' | 'ready' | 'saving' | 'error'
 
@@ -22,14 +24,18 @@ export const settings = reactive({
   status: 'idle' as Status,
   connected: false,
   canonical: null as SettingsState | null,
-  // blurCheckMs правится через input, а он отдаёт строку. Держим её как
-  // есть и приводим к числу только на границе с wire: иначе «300abc»
-  // молча стало бы 300 ещё до валидации.
-  blurCheckMs: '' as string,
+  draft: null as GeneralDraft | null,
   message: '',
   bad: false,
+  // Путь поля из ответа — «general.blurCheckMs» и т. п. Подсвечивает
+  // форма, сопоставляя его со своим контролом.
   field: '' as string,
   diagnostics: [] as string[],
+  restartRequired: [] as string[],
+  // Порт ответил closed:false — в черновике есть несохранённое. Вопрос
+  // задаёт страница: MsgBox из моста заблокировал бы очередь сообщений
+  // WebView на всё время раздумий.
+  confirmDiscard: false,
 })
 
 let client: SettingsClient | null = null
@@ -71,33 +77,49 @@ export async function okSettings(): Promise<void> {
   await save('settings.ok')
 }
 
-export async function cancelSettings(): Promise<void> {
+export async function applySettings(): Promise<void> {
+  await save('settings.apply')
+}
+
+// discard=false — «закрой, если терять нечего»: порт сравнит черновик с
+// применённым состоянием и ответит closed:false, если есть что терять.
+// Согласие человека приезжает вторым таким же запросом.
+export async function cancelSettings(discard = false): Promise<void> {
   const api = settingsClient()
   if (!api) return
   try {
-    await api.request('settings.cancel', {})
+    // Черновика нет — состояние не успело загрузиться, терять нечего.
+    const payload = settings.draft
+      ? { draft: buildDraft(), discardChanges: discard }
+      : { discardChanges: true }
+    const result = await api.request('settings.cancel', payload)
+    settings.confirmDiscard = !result.closed
   } catch (e) {
     fail(e)
   }
 }
 
-export async function applySettings(): Promise<void> {
-  await save('settings.apply')
+export function keepEditing(): void {
+  settings.confirmDiscard = false
 }
 
 async function save(action: 'settings.apply' | 'settings.ok'): Promise<void> {
   const api = settingsClient()
-  if (!api || !settings.canonical) return
+  if (!api || !settings.draft) return
   settings.status = 'saving'
   settings.message = 'Сохраняем…'
   settings.bad = false
   settings.field = ''
+  settings.confirmDiscard = false
   try {
     const result = await api.request(action, { draft: buildDraft() })
     // Канонический state приходит от AHK и заменяет baseline целиком:
-    // Vue не вычисляет, что применилось, — он это узнаёт.
+    // Vue не вычисляет, что применилось, — он это узнаёт. Здесь же
+    // черновик перестаёт быть грязным, потому что заводится заново из
+    // того, что теперь действует.
     adopt(result.state)
     settings.diagnostics = result.diagnostics ?? []
+    settings.restartRequired = result.restartRequiredFields ?? []
     settings.status = 'ready'
     settings.message = result.saved
       ? `Сохранено. Изменённых строк: ${result.changedFields}`
@@ -108,22 +130,12 @@ async function save(action: 'settings.apply' | 'settings.ok'): Promise<void> {
 }
 
 function buildDraft() {
-  const general = settings.canonical!.general
-  const blur = Number(settings.blurCheckMs)
-  return {
-    general: {
-      ...general,
-      // NaN уедет как null и вернётся структурированной ошибкой поля —
-      // это правильнее, чем чинить ввод за пользователя.
-      blurCheckMs: Number.isFinite(blur) ? blur : Number.NaN,
-    } satisfies GeneralSettings,
-    slotEdits: [],
-  }
+  return { general: draftToWire(settings.draft!), slotEdits: [] }
 }
 
 function adopt(state: SettingsState): void {
   settings.canonical = state
-  settings.blurCheckMs = String(state.general.blurCheckMs)
+  settings.draft = draftFromState(state.general)
 }
 
 function fail(e: unknown): void {
@@ -133,10 +145,25 @@ function fail(e: unknown): void {
     settings.message = e.message
     settings.field = e.field ?? ''
     // Частичная запись с успешным reload приносит актуальный canonical:
-    // baseline надо заменить, а draft — сохранить.
+    // baseline надо заменить, а draft — сохранить. Поэтому здесь не
+    // adopt(): человек не должен второй раз набирать то, что не уехало.
     if (e.state) settings.canonical = e.state
     return
   }
   settings.field = ''
   settings.message = e instanceof Error ? e.message : String(e)
+}
+
+// Поля, которые начнут действовать только после перезапуска Ящика.
+// General таких не содержит: реконсиляция перечитывает config.ini и
+// применяет все его ключи сразу. Список приходит от AHK, а не
+// вычисляется здесь, и пока его наполняет только focusHotkey слотов.
+export function restartHint(): string {
+  if (!settings.restartRequired.length) return ''
+  const slots = settings.restartRequired
+    .map((f) => /^slots\.(\d)\./.exec(f)?.[1])
+    .filter((n): n is string => Boolean(n))
+  return slots.length
+    ? `Хоткей фокуса (слот${slots.length > 1 ? 'ы' : ''} ${slots.join(', ')}) заработает после перезапуска Ящика.`
+    : 'Часть изменений заработает после перезапуска Ящика.'
 }

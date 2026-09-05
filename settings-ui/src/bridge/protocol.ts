@@ -37,11 +37,14 @@ export type SlotBehavior = {
   hideOnBlur: boolean
 }
 
+// steps: 0 — анимации нет; отдельного «выключено» на wire не нужно.
+// accent — шесть hex-цифр без «#», как в config.ini; «#» добавляет CSS.
 export type GeneralSettings = {
   dynamicDefaults: SlotBehavior
   handlesEnabled: boolean
   animation: { durationMs: number; steps: number }
   blurCheckMs: number
+  accent: string
 }
 
 export type PermanentSlotValue = SlotBehavior & {
@@ -123,8 +126,12 @@ export type RequestMap = {
     payload: { draft: SettingsDraft }
     result: SaveResult & { closing: true }
   }
+  // Закрытие без записи. Сравнивает draft с применённым состоянием AHK:
+  // closed:false означает «в черновике есть несохранённое, окно пока не
+  // закрываю». Согласие человека выбросить правки приезжает вторым таким
+  // же запросом с discardChanges: спрашивает WebView, решает порт.
   'settings.cancel': {
-    payload: { draft?: SettingsDraft }
+    payload: { draft?: SettingsDraft; discardChanges?: boolean }
     result: { closed: boolean }
   }
 }

@@ -111,10 +111,11 @@ narrow/settings-seam.ahk   seam Settings: копии чистых функций
                            значений на временном INI, статические проверки
                            исходника. Запуск: AutoHotkey64.exe этот файл,
                            код возврата 0 — всё зелено.
-narrow/webview-slice.ps1   end-to-end первого WebView-слайса: getInitialState,
-                           правка General.blurCheckMs, Apply, канонический
-                           state обратно. Гоняет копию src/ во временной
-                           папке, поэтому рабочий config.ini не трогает.
+narrow/webview-slice.ps1   end-to-end вкладки General: getInitialState,
+                           правка полей, ошибка формы и границы значения,
+                           Apply, канонический state обратно, Отмена с
+                           подтверждением и без. Гоняет копию src/ во
+                           временной папке, рабочий config.ini не трогает.
                            Требует собранного фронтенда:
                            cd settings-ui && npm run build
                            -Compiled: собрать копию тем же Ahk2Exe, что и

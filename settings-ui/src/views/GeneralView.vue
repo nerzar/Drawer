@@ -1,24 +1,39 @@
 <script setup>
 import { computed } from 'vue'
-import { state, EDGE_OPTIONS, MONITOR_OPTIONS, ANIM_OPTIONS } from '../mock/state'
 import { settings } from '../bridge/settings'
+import {
+  ACCENT_PALETTE,
+  ANIM_PRESETS,
+  EDGE_OPTIONS,
+  animPreset,
+  applyAnimPreset,
+} from '../bridge/general'
 
-const g = state.general
+// Форма правит только черновик. Значения в нём — из canonical state
+// AHK, и вернуться туда они могут единственным путём: Применить/ОК.
+const d = computed(() => settings.draft)
+const loaded = computed(() => settings.draft !== null)
 
-// Единственное поле slice: значение приходит из AHK и туда же уезжает.
-// Остальные контролы этой вкладки пока сидят на mock-state — их
-// сопоставление с backend не входит в первый vertical slice.
-const applied = computed(() => settings.canonical?.general.blurCheckMs ?? null)
-const badField = computed(() => settings.field === 'general.blurCheckMs')
+// Что действует прямо сейчас. Меняется только из ответа AHK, поэтому
+// расходится с полем ровно тогда, когда правка ещё не сохранена.
+const applied = computed(() => settings.canonical?.general ?? null)
 
-const animPreset = computed(() => ANIM_OPTIONS.find((o) => o.value === g.animEasing) ?? ANIM_OPTIONS[1])
+const bad = (path) => settings.field === path
+
+const preset = computed({
+  get: () => (settings.draft ? animPreset(settings.draft) : 'normal'),
+  set: (v) => settings.draft && applyAnimPreset(settings.draft, v),
+})
+const customAnim = computed(() => preset.value === 'custom')
+
+const accentCss = computed(() => '#' + (settings.draft?.accent ?? '2A2E35'))
 
 function pickAccent(hex) {
-  state.accent = hex
+  if (settings.draft) settings.draft.accent = hex
 }
 
 function pickCustomAccent(event) {
-  state.accent = event.target.value
+  if (settings.draft) settings.draft.accent = event.target.value.slice(1).toUpperCase()
 }
 </script>
 
@@ -27,7 +42,9 @@ function pickCustomAccent(event) {
     <h1 class="page-title">Общие настройки</h1>
     <p class="page-sub">Поведение, внешний вид и умолчания для динамических слотов.</p>
 
-    <div class="grid2">
+    <div v-if="!loaded" class="card empty">Настройки ещё не прочитаны.</div>
+
+    <div v-else class="grid2">
       <div class="card">
         <h3>Поведение по умолчанию</h3>
         <p class="hint">
@@ -35,71 +52,98 @@ function pickCustomAccent(event) {
           поменять.
         </p>
         <div class="row">
-          <label>Размер окна (% экрана)</label>
-          <div class="field"><input class="num-sm" type="text" v-model="g.sizePercent" /></div>
+          <label>Размер окна</label>
+          <div class="field">
+            <input
+              class="num-sm"
+              :class="{ 'field-bad': bad('general.dynamicDefaults.widthPercent') }"
+              type="text"
+              data-testid="widthPercent"
+              v-model="d.widthPercent"
+            />
+            <span class="unit">% экрана</span>
+          </div>
         </div>
         <div class="row">
           <label>Сторона выезда</label>
-          <select class="dd" v-model="g.edge">
+          <select class="dd" data-testid="edge" v-model="d.edge">
             <option v-for="o in EDGE_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
           </select>
         </div>
         <div class="row">
           <label>Монитор</label>
-          <select class="dd" v-model="g.monitor">
-            <option v-for="o in MONITOR_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
-          </select>
+          <div class="field">
+            <select
+              class="dd"
+              :class="{ narrow: d.monitorKind === 'number' }"
+              data-testid="monitorKind"
+              v-model="d.monitorKind"
+            >
+              <option value="cursor">Следовать за курсором</option>
+              <option value="number">Номер монитора</option>
+              <!-- Значение из файла, которого не бывает у контролов.
+                   Пункт есть, пока его не заменили: подменить его на
+                   cursor значило бы поменять настройку молча. -->
+              <option v-if="d.monitorKind === 'invalid'" value="invalid">
+                в файле: {{ d.monitorRaw }}
+              </option>
+            </select>
+            <input
+              v-if="d.monitorKind === 'number'"
+              class="num-sm"
+              :class="{ 'field-bad': bad('general.dynamicDefaults.monitor.number') }"
+              type="text"
+              data-testid="monitorNumber"
+              v-model="d.monitorNumber"
+            />
+          </div>
         </div>
         <div class="check-row">
-          <input type="checkbox" v-model="g.activateOnShow" />
+          <input type="checkbox" data-testid="activateOnShow" v-model="d.activateOnShow" />
           <span>Активировать окно при открытии</span>
         </div>
         <div class="check-row">
-          <input type="checkbox" v-model="g.hideOnBlur" />
+          <input type="checkbox" data-testid="hideOnBlur" v-model="d.hideOnBlur" />
           <span>Убирать окно, когда фокус ушёл в другое</span>
         </div>
       </div>
 
       <div class="card">
         <h3>Внешний вид</h3>
-        <div class="row">
-          <label>Отступ между кромками (px)</label>
-          <div class="field"><input class="num-sm" type="text" v-model="g.handleGap" /></div>
-        </div>
-
-        <div class="row">
-          <label>Размер кромки (px)</label>
-          <div class="field">
-            <input class="num-sm" type="text" v-model="g.handleWidth" />
-            <span class="unit">×</span>
-            <input class="num-sm" type="text" v-model="g.handleHeight" />
-          </div>
-        </div>
-
         <div class="check-row" style="margin-bottom: 14px">
-          <input type="checkbox" v-model="g.handles" />
+          <input type="checkbox" data-testid="handlesEnabled" v-model="d.handlesEnabled" />
           <span>Кромки у края экрана</span>
         </div>
-
 
         <div class="divider"></div>
 
         <div class="row" style="margin-bottom: 10px">
           <label>Цвет акцента</label>
+          <div class="field">
+            <span class="unit">HEX</span>
+            <input
+              class="num-hex"
+              type="text"
+              data-testid="accent"
+              maxlength="6"
+              v-model="d.accent"
+            />
+          </div>
         </div>
         <div style="display: flex; align-items: center; gap: 16px">
           <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 1">
             <button
-              v-for="hex in state.accentPalette"
+              v-for="hex in ACCENT_PALETTE"
               :key="hex"
               class="swatch"
               type="button"
-              :style="{ background: hex }"
+              :data-testid="'swatch-' + hex"
+              :style="{ background: '#' + hex }"
               :aria-label="hex"
               @click="pickAccent(hex)"
             >
               <svg
-                v-if="hex.toLowerCase() === state.accent.toLowerCase()"
+                v-if="hex.toLowerCase() === d.accent.toLowerCase()"
                 width="12"
                 height="12"
                 viewBox="0 0 24 24"
@@ -117,11 +161,11 @@ function pickCustomAccent(event) {
                 <line x1="12" y1="5" x2="12" y2="19" />
                 <line x1="5" y1="12" x2="19" y2="12" />
               </svg>
-              <input type="color" :value="state.accent" @input="pickCustomAccent" hidden />
+              <input type="color" :value="accentCss" @input="pickCustomAccent" hidden />
             </label>
           </div>
           <div class="preview-box">
-            <div class="preview-handle" :style="{ background: state.accent }">
+            <div class="preview-handle" :style="{ background: accentCss }">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#D6DAE2" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="9 6 15 12 9 18" />
               </svg>
@@ -132,19 +176,42 @@ function pickCustomAccent(event) {
 
       <div class="card">
         <h3>Анимация</h3>
+        <p class="hint">
+          Плавность — способ показа тех же двух чисел. «Своя» открывает их для правки.
+        </p>
         <div class="row">
           <label>Плавность</label>
-          <select class="dd" v-model="g.animEasing">
-            <option v-for="o in ANIM_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
+          <select class="dd" data-testid="animPreset" v-model="preset">
+            <option value="none">Без анимации</option>
+            <option v-for="o in ANIM_PRESETS" :key="o.id" :value="o.id">{{ o.label }}</option>
+            <option value="custom">Своя</option>
           </select>
         </div>
         <div class="row">
           <label>Длительность (мс)</label>
-          <div class="field"><input class="num-sm disabled-field" type="text" :value="animPreset.ms" disabled /></div>
+          <div class="field">
+            <input
+              class="num-sm"
+              :class="{ 'disabled-field': !customAnim }"
+              type="text"
+              data-testid="animMs"
+              :disabled="!customAnim"
+              v-model="d.animMs"
+            />
+          </div>
         </div>
         <div class="row">
           <label>Шагов</label>
-          <div class="field"><input class="num-sm disabled-field" type="text" :value="animPreset.steps" disabled /></div>
+          <div class="field">
+            <input
+              class="num-sm"
+              :class="{ 'disabled-field': !customAnim }"
+              type="text"
+              data-testid="animSteps"
+              :disabled="!customAnim"
+              v-model="d.animSteps"
+            />
+          </div>
         </div>
       </div>
 
@@ -155,18 +222,17 @@ function pickCustomAccent(event) {
           <div class="field">
             <input
               class="num-sm"
-              :class="{ 'field-bad': badField }"
+              :class="{ 'field-bad': bad('general.blurCheckMs') }"
               type="text"
               data-testid="blurCheckMs"
-              :disabled="settings.canonical === null"
-              v-model="settings.blurCheckMs"
+              v-model="d.blurCheckMs"
             />
           </div>
         </div>
         <p class="hint" style="margin-top: 12px; margin-bottom: 0">
           Интервал опроса, используется для скрытия окна, когда фокус ушёл.
-          <span v-if="applied !== null" data-testid="blurApplied">
-            Применено сейчас: {{ applied }} мс.
+          <span v-if="applied" data-testid="blurApplied">
+            Применено сейчас: {{ applied.blurCheckMs }} мс.
           </span>
         </p>
       </div>
@@ -203,6 +269,10 @@ function pickCustomAccent(event) {
   padding: 20px;
   display: flex;
   flex-direction: column;
+}
+.card.empty {
+  color: var(--text-2);
+  font-size: 13px;
 }
 .card h3 {
   font-size: 13px;
@@ -258,9 +328,16 @@ select.dd {
   background-position: right 10px center;
   background-size: 15px 15px;
 }
+select.dd.narrow {
+  width: 128px;
+}
 .num-sm {
   width: 52px;
   text-align: right;
+}
+.num-hex {
+  width: 76px;
+  text-transform: uppercase;
 }
 .unit {
   font-size: 12.5px;

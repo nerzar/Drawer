@@ -1,6 +1,5 @@
 <script setup>
 import { computed, onMounted } from 'vue'
-import { state } from './mock/state'
 import { settings, loadSettings } from './bridge/settings'
 import TitleBar from './components/TitleBar.vue'
 import Sidebar from './components/Sidebar.vue'
@@ -21,10 +20,15 @@ const currentView = computed(() => {
 // Первый запрос к Ящику. До ответа форма показывает «Читаем настройки…»
 // и ничего не выдумывает: canonical принадлежит AHK.
 onMounted(loadSettings)
+
+// Акцент берётся из черновика, а не из применённого: выбранный цвет
+// виден сразу всему окну — тот же предпросмотр, что и у native, только
+// не в одном квадратике. До загрузки — цвет по умолчанию из config.ini.
+const accent = computed(() => '#' + (settings.draft?.accent ?? '2A2E35'))
 </script>
 
 <template>
-  <div class="app" :style="{ '--accent': state.accent }">
+  <div class="app" :style="{ '--accent': accent }">
     <TitleBar />
     <div class="body-row">
       <Sidebar v-model:active="activeTab" />

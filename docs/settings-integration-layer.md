@@ -89,7 +89,8 @@ General использует смысловые имена:
   },
   "handlesEnabled": true,
   "animation": { "durationMs": 160, "steps": 8 },
-  "blurCheckMs": 250
+  "blurCheckMs": 250,
+  "accent": "2A2E35"
 }
 ```
 
@@ -346,8 +347,9 @@ type SlotBehavior = {
 type GeneralSettings = {
   dynamicDefaults: SlotBehavior
   handlesEnabled: boolean
-  animation: { durationMs: number; steps: number }
+  animation: { durationMs: number; steps: number }   // steps: 0 — анимации нет
   blurCheckMs: number
+  accent: string                                     // RRGGBB, без «#»
 }
 
 type PermanentSlotValue = SlotBehavior & {
@@ -396,7 +398,8 @@ type Req<A extends string, P> = {
 
 type Request =
   | Req<'settings.getInitialState', Record<string, never>>
-  | Req<'settings.apply' | 'settings.ok' | 'settings.cancel', { draft: SettingsDraft }>
+  | Req<'settings.apply' | 'settings.ok', { draft: SettingsDraft }>
+  | Req<'settings.cancel', { draft?: SettingsDraft; discardChanges?: boolean }>
   | Req<'picker.exe' | 'picker.window', Record<string, never>>
   | Req<'slot.bind' | 'slot.release', { slot: SlotNumber }>
   | Req<'slot.watchStatus', { enabled: boolean }>
@@ -711,7 +714,7 @@ hooked-hotkey не является проверяемым конфликтом.
 `restartRequiredFields`, потому что, как и в native Settings, изменение начинает
 действовать только после перезапуска Drawer.
 
-## Что реализовано в первом vertical slice
+## Что реализовано: вкладка General целиком
 
 Production-код: `src/webview/Json.ahk` (codec), `SettingsWebView.ahk`
 (транспорт), `SettingsJsonBridge.ahk` (конверт, диспетчер, lifecycle
@@ -723,6 +726,15 @@ Production-код: `src/webview/Json.ahk` (codec), `SettingsWebView.ahk`
 `settings.cancel`. Apply строит внутренний вход и зовёт
 `SettingsGeneralPlan` → `SettingsApplyPlan`; своей записи у порта нет.
 
+Через них проходит вся вкладка General — те же десять ключей, что правит
+native: `[dynamic]` width/edge/monitor/activateOnShow/hideOnBlur и
+`[general]` handles/animMs/animSteps/blurMs/accent. Черновиком владеет Vue
+(`settings-ui/src/bridge/general.ts`), применённым состоянием — AHK;
+успешный Save возвращает canonical, и он же становится новым baseline.
+Числа живут в черновике строками и приводятся к числу только на границе
+wire: иначе «300abc» стало бы 300 ещё до валидации, а очищенное поле —
+нулём.
+
 Отклонения от текста ADR, принятые сознательно:
 
 - `SaveResult` содержит `diagnostics: string[]` — замечания перечитанного
@@ -731,8 +743,13 @@ Production-код: `src/webview/Json.ahk` (codec), `SettingsWebView.ahk`
 - `MonitorRef` получил вариант `{kind:"invalid", raw}`. Значение вроде
   `monitor=abc` из правленого руками файла не эквивалентно `cursor`:
   `ResolveMonitor` на нём бросает, и форма должна показать, что там лежит.
-- `accent` на wire нет: цвет в slice не входит, порт подставляет
-  действующее значение, и точечная запись его не трогает.
+- `accent` добавлен в `GeneralSettings` — шесть hex-цифр без «#», как в
+  `config.ini`. В примерах ADR его не было (см. оговорку в начале
+  документа), но это настоящее поле текущего Settings, и без него
+  вкладка не переносится.
+- «Без анимации» на wire отдельным полем не выражается: это `steps: 0`.
+  У native это пункт списка только затем, чтобы не переписывать `animMs`;
+  разницы в поведении нет (`Slide` проверяет `animSteps < 1`).
 - `error.field` заполняется только для ошибок формы DTO, которые ловит сам
   порт. Границы значений проверяет backend, и его сообщение приходит без
   `field`: вычислять путь поля разбором русского текста — ровно то, от
@@ -740,8 +757,22 @@ Production-код: `src/webview/Json.ahk` (codec), `SettingsWebView.ahk`
 - Picker operation gate не реализован: в slice нет ни одной операции,
   которую он охраняет. `picker.*`, `slot.bind`, `slot.release` и
   `slot.watchStatus` отвечают `unsupported_action`.
-- `settings.cancel` закрывает окно без сравнения draft с baseline:
-  dirty-confirmation остаётся у native Settings.
+- `settings.cancel` получил `discardChanges` в payload. Разделение труда
+  из ADR сохранено: сравнивает draft с применённым состоянием порт (он
+  один знает, что действует), спрашивает человека WebView. Ответ
+  `closed:false` возвращает мост в `open`, страница показывает вопрос и
+  при согласии присылает cancel ещё раз с `discardChanges`. MsgBox из
+  моста сделал бы обратное — заблокировал бы очередь сообщений WebView
+  на всё время раздумий и дал бы сработать пятисекундному timeout
+  решения; так вопрос задаётся уже в состоянии `open`.
+- Dirty считает тот же `SettingsGeneralPlan`, что делает Save: его список
+  writes и есть перечень отличий от runtime. Второе сравнение полей
+  разошлось бы с первым. Черновик, который DTO не принимает, считается
+  изменённым: терять его молча нельзя.
+- `restartRequiredFields` для General всегда пуст: реконсиляция
+  перечитывает `config.ini` и применяет все его ключи сразу
+  (`HandleRepaintAll`, `HandlesSync`, `WatchBlur` переармируется по
+  новому `blurMs`). Список наполняет только `focusHotkey` слотов.
 - `settings.closed` отправляется, `slot.statusChanged` — нет: watcher не
   подключён.
 

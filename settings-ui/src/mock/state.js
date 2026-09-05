@@ -1,7 +1,11 @@
 import { reactive } from 'vue'
 
-// Mock config.ini-shaped state. No real persistence yet — General edits
-// [dynamic]/[general] defaults, Slots edits [slotN]/[dynamicSlotN].
+// Mock config.ini-shaped state. Осталось только под вкладку Slots: она
+// пока не подключена к мосту. General живёт на canonical state AHK и
+// сюда не заглядывает — см. src/bridge/general.ts.
+//
+// Блок general здесь всё ещё нужен: панель динамического слота
+// показывает им «унаследовано от [dynamic]». Уедет вместе со Slots.
 export const state = reactive({
   accent: '#2A2E35',
   accentPalette: ['#2A2E35', '#332A35', '#2A352E', '#2A3335', '#332F2A', '#2E2E2E'],

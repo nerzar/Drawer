@@ -11,9 +11,11 @@
 ; SettingsApplyPlan. Второй persistence не появляется — это условие
 ; принятого gate, а не стилистика.
 ;
-; Слайс намеренно узкий. Всё, что за его границей (правка слотов,
-; picker, bind/release, watchStatus), отвечает unsupported_action —
-; заглушки, притворяющейся успехом, здесь нет.
+; Через порт проходит вся вкладка General: те же десять ключей, что
+; правит native ([dynamic] width/edge/monitor/activateOnShow/hideOnBlur и
+; [general] handles/animMs/animSteps/blurMs/accent). Всё, что за этой
+; границей (правка слотов, picker, bind/release, watchStatus), отвечает
+; unsupported_action — заглушки, притворяющейся успехом, здесь нет.
 
 class DrawerSettingsPort {
     static PROTOCOL_VERSION := 1
@@ -36,11 +38,49 @@ class DrawerSettingsPort {
         return this._Save(payload, true)
     }
 
-    ; Слайс не сравнивает draft с baseline и не спрашивает подтверждения:
-    ; dirty-confirmation остаётся у native Settings, а закрытие без
-    ; записи ничего не теряет, кроме несохранённого черновика.
+    ; Закрытие без записи. Правило то же, что у native SettingsClose():
+    ; несохранённый черновик молча не выбрасывается. Разделение труда —
+    ; из ADR: сравнивает draft с baseline порт (он один знает, что
+    ; применено), спрашивает человека WebView.
+    ;
+    ; closed:false — «пока не закрываю»: мост возвращается в open, окно
+    ; остаётся. Фронтенд после такого ответа показывает подтверждение и
+    ; при согласии присылает cancel ещё раз с discardChanges.
+    ;
+    ; Ответ уходит сразу, поэтому 5-секундный timeout закрытия в мосте
+    ; не успевает выстрелить, пока человек думает: вопрос задаётся уже
+    ; в состоянии open. MsgBox отсюда сделал бы ровно обратное —
+    ; заблокировал бы очередь сообщений WebView на время раздумий.
     Cancel(payload) {
-        return SettingsBridgeOk(Map("closed", JsonB(true)), true)
+        draft := JsonGet(payload, "draft", 0)
+        discard := JsonGet(payload, "discardChanges", false)
+        if (discard = true || !this._DraftDirty(draft))
+            return SettingsBridgeOk(Map("closed", JsonB(true)), true)
+        return SettingsBridgeOk(Map("closed", JsonB(false)), false)
+    }
+
+    ; Есть ли в черновике хоть что-то, чего нет в применённом состоянии.
+    ; Считает это тот же SettingsGeneralPlan, который делает Save: его
+    ; список writes и есть перечень отличий от runtime. Второе сравнение
+    ; полей разошлось бы с первым — ровно так и появляются окна, которые
+    ; спрашивают про несохранённое, когда сохранять нечего.
+    ;
+    ; Неразобранный черновик считается изменённым: форму правили, раз в
+    ; ней лежит то, чего DTO не принимает, и терять это молча нельзя.
+    _DraftDirty(draft) {
+        if !(draft is Map)
+            return false
+        edits := JsonGet(draft, "slotEdits", 0)
+        if (edits is Array && edits.Length)
+            return true
+        err := "", field := ""
+        input := this._GeneralInput(JsonGet(draft, "general", 0), &err, &field)
+        if (err != "")
+            return true
+        writes := SettingsGeneralPlan(input, &err)
+        if !writes
+            return true
+        return writes.Length > 0
     }
 
     Unsupported(action) {
@@ -142,12 +182,11 @@ class DrawerSettingsPort {
     ; приходят от плана без field: разбирать русский текст, чтобы
     ; вычислить путь поля, — ровно то, от чего уводил C3.
     ;
-    ; accent на wire нет: цвет в слайс не входит, и порт подставляет
-    ; действующее значение — план сравнит его с runtime и ничего не
-    ; напишет. noAnim всегда false: wire несёт длительность всегда,
-    ; «без анимации» — способ native не трогать ключ.
+    ; noAnim всегда false: wire несёт длительность всегда, а «без
+    ; анимации» — это ноль шагов. У native это отдельный пункт списка
+    ; только затем, чтобы не переписывать animMs; разницы в поведении
+    ; между «0 шагов» и «без анимации» нет (см. Slide: animSteps < 1).
     _GeneralInput(g, &err, &field) {
-        global HANDLE_BG
         if !(g is Map)
             return this._Bad("В draft нет general", "general", &err, &field)
         dd := JsonGet(g, "dynamicDefaults", 0)
@@ -170,7 +209,7 @@ class DrawerSettingsPort {
             animMs:         this._Int(anim, "durationMs", "general.animation.durationMs", &err, &field),
             animSteps:      this._Int(anim, "steps", "general.animation.steps", &err, &field),
             blurMs:         this._Int(g, "blurCheckMs", "general.blurCheckMs", &err, &field),
-            accent:         HANDLE_BG
+            accent:         this._Text(g, "accent", "general.accent", &err, &field)
         }
     }
 
@@ -228,6 +267,13 @@ class DrawerSettingsPort {
         kind := String(m["kind"])
         if (kind = "cursor")
             return "cursor"
+        ; Значение приехало из config.ini негодным и вернулось назад
+        ; нетронутым. Ответ должен звать выбрать монитор, а не описывать
+        ; допустимые kind: человек этого поля не заполнял.
+        if (kind = "invalid")
+            return this._Bad("Монитор в config.ini задан неверно («"
+                             . String(JsonGet(m, "raw", "")) "») — выберите заново",
+                             path, &err, &field)
         if (kind != "number")
             return this._Bad("monitor.kind — cursor или number", path ".kind", &err, &field)
         if !m.Has("number") || !IsInteger(m["number"])
@@ -249,13 +295,17 @@ class DrawerSettingsPort {
             "slots", slots)
     }
 
+    ; accent — шесть hex-цифр без «#», ровно как в config.ini и как их
+    ; принимает SettingsAccentIn. Решётка нужна только CSS, и добавляет
+    ; её форма: на wire формат один.
     _GeneralDto(g) {
         return Map(
             "dynamicDefaults", this._BehaviorDto(g.dynamicDefaults),
             "handlesEnabled", JsonB(g.handlesEnabled),
             "animation", Map("durationMs", this._Num(g.animMs, 160),
                              "steps", this._Num(g.animSteps, 14)),
-            "blurCheckMs", this._Num(g.blurMs, 250))
+            "blurCheckMs", this._Num(g.blurMs, 250),
+            "accent", String(Opt(g, "accent", "2A2E35")))
     }
 
     _BehaviorDto(b) {

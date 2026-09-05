@@ -1,6 +1,13 @@
 <script setup>
 import { computed } from 'vue'
-import { settings, applySettings, cancelSettings, okSettings } from '../bridge/settings'
+import {
+  settings,
+  applySettings,
+  cancelSettings,
+  keepEditing,
+  okSettings,
+  restartHint,
+} from '../bridge/settings'
 
 const props = defineProps({
   status: { type: String, default: '' },
@@ -10,12 +17,28 @@ const props = defineProps({
 // Пока идёт запрос, повторные Apply/OK не нужны: ответ связан с запросом
 // по id, но вторая запись на диск во время первой — уже не гонка UI.
 const busy = computed(() => settings.status === 'loading' || settings.status === 'saving')
-const ready = computed(() => settings.canonical !== null)
+const ready = computed(() => settings.draft !== null)
+const restart = computed(() => restartHint())
 </script>
 
 <template>
-  <div class="footer">
-    <div class="footer-status" :class="{ bad: props.bad }" data-testid="status">{{ props.status }}</div>
+  <!-- Вопрос о несохранённом задаёт страница, а не MsgBox из AHK: модальное
+       окно на стороне моста остановило бы очередь сообщений WebView на всё
+       время раздумий. Что считать несохранённым, решает порт — он один
+       знает применённое состояние. -->
+  <div v-if="settings.confirmDiscard" class="footer confirm" data-testid="confirm">
+    <div class="footer-status">Изменения не сохранены. Закрыть и отменить их?</div>
+    <button class="btn-outline" data-testid="keep" @click="keepEditing()">Продолжить правку</button>
+    <button class="btn-primary" data-testid="discard" @click="cancelSettings(true)">
+      Отменить изменения
+    </button>
+  </div>
+
+  <div v-else class="footer">
+    <div class="footer-status" :class="{ bad: props.bad }" data-testid="status">
+      {{ props.status }}
+      <span v-if="restart" class="restart" data-testid="restart">{{ restart }}</span>
+    </div>
     <button class="btn-outline" data-testid="cancel" :disabled="busy" @click="cancelSettings()">Отмена</button>
     <button class="btn-outline" data-testid="apply" :disabled="busy || !ready" @click="applySettings()">
       Применить
@@ -27,6 +50,9 @@ const ready = computed(() => settings.canonical !== null)
 <style scoped>
 .footer-status.bad {
   color: #e2857f;
+}
+.restart {
+  color: var(--text-2);
 }
 button[disabled] {
   opacity: 0.5;
