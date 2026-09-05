@@ -114,6 +114,17 @@ SmokeSlotWindow() {
         global smokeActiveWindow
         smokeActiveWindow := 0
         fixture.Destroy()
+        phase := 7
+    ; Слот 6: тот же exe, что и у слота 1 (originalExe на стороне JS),
+    ; но к этому моменту все окна той же exe/cls уже уничтожены выше —
+    ; коллизии с чужим FindWindow() нет. cls у слота 6 не задан (пикер
+    ; его не трогал), поэтому подходит любое окно этого exe.
+    } else if (phase = 7 && InStr(log, "smoke.slot6-live")) {
+        fixture := Gui(, "Slot six fixture")
+        fixture.Show("w300 h240 NoActivate")
+        phase := 8
+    } else if (phase = 8 && InStr(log, "smoke.slot6-live-done")) {
+        fixture.Destroy()
         SetTimer(SmokeSlotWindow, 0)
     }
 }
@@ -326,7 +337,7 @@ SmokeWatch() {
         (($after -match '(?m)^\[dynamicSlot5\]') -and ($after -match '(?m)^width=43\s*$'))
     Check "5e: slot fields persisted through Apply and OK" `
         (($after -match '(?m)^name=Saved by OK\s*$') -and ($after -match '(?m)^width=62\s*$') `
-         -and ($after -match '(?m)^cls=AutoHotkeyGUI\s*$') -and ($after -match '(?m)^focusHotkey=\^!#2\s*$'))
+         -and ($after -match '(?m)^cls=AutoHotkeyGUI\s*$') -and ($after -match '(?m)^focusHotkey=\^!F2\s*$'))
 
     # --- хоткей постоянного слота: весь путь от config.ini до старта ---
     # Значение из файла обязано доехать до регистрации при старте. 20 —
@@ -336,14 +347,30 @@ SmokeWatch() {
         ($log -match '(?m)^.*boot perm slot=1 focusHotkey=\^!#1\s*$')
     Check "7b: и был зарегистрирован настоящим стартом, а не только прочитан" `
         ($log -match '(?m)^.*boot hotkeys live=21\s*$')
-    Check "7c: негодный синтаксис отвергнут backend'ом с адресом поля" `
+    Check "7c: негодное название клавиши отвергнуто backend'ом с адресом поля" `
         ($log -match 'smoke\.hotkey-rejected')
     Check "7d: отказ не тронул применённое состояние и файл" `
         ($log -match 'smoke\.hotkey-applied-intact')
-    Check "7e: годный хоткей сохранён и вернулся каноническим" `
+    Check "7e: конфликт с основным хоткеем ящика отвергнут и назван" `
+        ($log -match 'smoke\.hotkey-conflict')
+    Check "7f: годный хоткей сохранён и вернулся каноническим" `
         ($log -match 'smoke\.hotkey-saved')
-    Check "7f: правка соседнего поля хоткей не потеряла" `
+    Check "7g: правка соседнего поля хоткей не потеряла" `
         ($log -match 'smoke\.hotkey-kept')
+
+    # --- Permanent -> Dynamic: живое окно не теряется при конверсии ---
+    # Слот 6: постоянный с живым окном -> явная конверсия в динамический.
+    # Раньше Slots.Apply() безусловно отпускал окно домой, как при смене
+    # exe/cls, — слот выглядел так, будто окно закрыли. До каждой отметки
+    # ниже сценарий в webview-slice.js не дошёл бы после throw; общий
+    # "no smoke failure" выше уже проверяет отсутствие throw как такового,
+    # эти — что сценарий прошёл именно ДО нужного места, а не просто не упал.
+    Check "8a: окно постоянного слота 6 найдено статусом и захвачено обычным Save" `
+        ($log -match 'smoke\.slot6-live')
+    Check "8b: конверсия в динамический сохранила живое окно тем же слотом" `
+        ($log -match 'smoke\.reverted')
+    Check "8c: закрытое окно не остаётся мнимой привязкой" `
+        ($log -match 'smoke\.slot6-empty')
 
     $mode = if ($Compiled) { "собранный exe" } else { "исходник" }
     "режим: $mode"

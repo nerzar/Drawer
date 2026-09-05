@@ -137,7 +137,7 @@
       if (!text('slot-9').includes('Динамический')) throw new Error('row-pill-dyn')
       if (!q('slot-1').querySelector('.dot')) throw new Error('row-status-dot')
       eq('edit-name', 'Smoke permanent')
-      eq('edit-focusHotkey', '^!#1')
+      eq('edit-focusHotkey', 'Ctrl+Alt+Win+1')
       eq('edit-widthPercent', '61')
       if (!q('make-dynamic') || q('make-dynamic').disabled) throw new Error('conversion-perm')
       q('slot-5').click()
@@ -286,15 +286,16 @@
       // только показан, и уехать он обязан нетронутым.
       if (text('slot-class') !== 'AutoHotkeyGUI') throw new Error('slot-class-shown')
 
-      // Хоткей постоянного слота виден в форме тем же значением, что
-      // лежит в config.ini: canonical -> черновик, без выдумок формы.
-      eq('edit-focusHotkey', '^!#1')
+      // Хоткей постоянного слота виден в форме человеческой записью, не
+      // синтаксисом AutoHotkey: canonical хранит "^!#1", форма — "Ctrl +
+      // Alt + Win + 1". Конвертер один, на стороне AHK (HotkeyAhkToHuman);
+      // Vue его не дублирует.
+      eq('edit-focusHotkey', 'Ctrl+Alt+Win+1')
 
-      // «Ctrl + Alt + 2» — понятная человеку запись, но не синтаксис
-      // AutoHotkey. Раньше она молча уезжала в файл и умирала только при
-      // следующем старте, по модальному сообщению на слот; теперь её
-      // отвергает backend и называет поле.
-      setText('edit-focusHotkey', 'Ctrl + Alt + 2')
+      // "Bla" не название клавиши AutoHotkey. Модификаторы форма понимает
+      // сама (HotkeyHumanToAhk), а само название клавиши — нет: его
+      // проверяет тот же Hotkey(), которым идёт настоящая регистрация.
+      setText('edit-focusHotkey', 'Ctrl + Alt + Bla')
       await apply(() => /не сочетание клавиш AutoHotkey/.test(text('status')))
       if (/slots\.1\.focusHotkey/.test(text('status'))) throw new Error('machine-path-hotkey')
       await wait(() => q('slot-1').getAttribute('aria-pressed') === 'true', 5000)
@@ -302,11 +303,21 @@
       post('smoke.hotkey-rejected')
       // Неудачный Save черновика не трогает: набранное осталось на месте,
       // и заново вводить остальные поля не приходится.
-      eq('edit-focusHotkey', 'Ctrl + Alt + 2')
+      eq('edit-focusHotkey', 'Ctrl + Alt + Bla')
       eq('edit-widthPercent', '62')
       post('smoke.hotkey-applied-intact')
 
-      setText('edit-focusHotkey', '^!#2')
+      // «Ctrl + Alt + 2» — синтаксис AutoHotkey понимает («^!2»), но это
+      // уже основной хоткей слота 2 (Ctrl+Alt+2 в таблице «Горячие
+      // клавиши»): конфликт, а не ошибка синтаксиса, и сообщение должно
+      // называть то, с чем совпало.
+      setText('edit-focusHotkey', 'Ctrl + Alt + 2')
+      await apply(() => /уже занято/.test(text('status')))
+      if (!/показать\/убрать слот 2/.test(text('status'))) throw new Error('conflict-not-named')
+      if (!q('edit-focusHotkey').className.includes('field-bad')) throw new Error('conflict-field-error')
+      post('smoke.hotkey-conflict')
+
+      setText('edit-focusHotkey', 'Ctrl + Alt + F2')
       setPick('edit-monitorKind', 'cursor')
       setPick('edit-edge', 'top')
       setCheck('edit-activateOnShow', true)
@@ -355,7 +366,7 @@
       eq('edit-edge', 'top')
       // Сохранённый хоткей вернулся каноническим ответом AHK, а не остался
       // висеть черновиком формы.
-      eq('edit-focusHotkey', '^!#2')
+      eq('edit-focusHotkey', 'Ctrl+Alt+F2')
       post('smoke.hotkey-saved')
       if (!text('restart').includes('1')) throw new Error('slot-restart-hint')
       await apply(() => /Менять нечего/.test(text('status')))
@@ -367,10 +378,10 @@
       // проверяют дальше.
       setText('edit-widthPercent', '63')
       await apply(() => /Сохранено/.test(text('status')))
-      eq('edit-focusHotkey', '^!#2')
+      eq('edit-focusHotkey', 'Ctrl+Alt+F2')
       setText('edit-widthPercent', '62')
       await apply(() => /Сохранено/.test(text('status')))
-      eq('edit-focusHotkey', '^!#2')
+      eq('edit-focusHotkey', 'Ctrl+Alt+F2')
       post('smoke.hotkey-kept')
       q('slot-9').click()
       await wait(() => val('edit-widthPercent') === '80', 5000)
@@ -384,7 +395,7 @@
       q('make-permanent').click()
       await wait(() => q('edit-name'), 5000)
       setText('edit-name', 'Converted six')
-      setText('edit-executable', 'notepad.exe')
+      setText('edit-executable', originalExe)
       // Надстройка соседнего динамического слота уезжает тем же Save.
       q('slot-7').click()
       await wait(() => val('edit-widthPercent') === '80', 5000)
@@ -397,8 +408,33 @@
       if (!text('dyn-source').includes('ширина')) throw new Error('override-not-own')
       post('smoke.converted')
 
+      // Живое окно постоянного слота 6, ДО обращения в динамический.
+      // Статус видит его сразу опросом, без Save — SlotWindow() ищет
+      // окно заново при каждом обращении и ничего не пишет в реестр.
+      q('slot-6').click()
+      post('smoke.slot6-live')
+      await wait(() => q('slot-6').dataset.status === 'available', 5000)
+      await wait(() => text('slot-title') === 'Slot six fixture', 5000)
+
+      // Захватить окно в реестр слота — тот же Save, которым обычный
+      // пользователь меняет что угодно ещё у постоянного слота: реестр
+      // не запоминает найденное статусом окно сам по себе (SlotWindow()
+      // ничего не пишет), а PermSnapshot() перед следующим Apply видит
+      // только то, что уже захвачено. Без этого шага ниже проверялось бы
+      // не то, о чём просили: "окно есть", а не "окно привязано".
+      //
+      // Статус меняется с "available" на "shown" самим Save, без единого
+      // toggle: SlotsSeedManaged() подхватывает окно постоянного слота
+      // после каждого Slots.Apply(), не только при старте ящика — иначе
+      // кромка (и этот статус) ждали бы первого Ctrl+Alt+N.
+      setText('edit-widthPercent', '55')
+      await apply(() => /Сохранено/.test(text('status')))
+      await wait(() => q('slot-6').dataset.status === 'shown', 5000)
+
       // И обратно: слот 6 снова динамический, надстройка слота 7 уходит,
-      // потому что вернулась к общему значению.
+      // потому что вернулась к общему значению. Живое окно слота 6 не
+      // должно потеряться — оно остаётся тем же слотом, но уже
+      // динамической привязкой (Slots.Apply(), решение Р22 исправлено).
       q('slot-6').click()
       await wait(() => q('make-dynamic'), 5000)
       q('make-dynamic').click()
@@ -408,9 +444,19 @@
       setText('edit-widthPercent', '80')
       await apply(() => /Сохранено/.test(text('status')))
       await wait(() => text('slot-6').includes('Динамический'), 5000)
+      if (q('slot-6').dataset.status === 'empty') throw new Error('conversion-lost-window')
+      q('slot-6').click()
+      await wait(() => text('slot-title') === 'Slot six fixture', 5000)
       q('slot-7').click()
       await wait(() => text('dyn-source').includes('всё из [dynamic]'), 5000)
       post('smoke.reverted')
+
+      // Окно ушло — привязка слота 6 не выдумана: статус возвращается в
+      // empty, как у обычного освобождённого динамического слота.
+      post('smoke.slot6-live-done')
+      q('slot-6').click()
+      await wait(() => q('slot-6').dataset.status === 'empty', 5000)
+      post('smoke.slot6-empty')
 
       tab('General')
       await wait(() => !watching && q('blurCheckMs'), 5000)

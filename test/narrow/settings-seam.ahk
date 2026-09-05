@@ -1183,6 +1183,11 @@ ApplyModel(prevPermKind, prevWindow, newPerm, snap) {
         id := snap.ident.Has(n) ? snap.ident[n] : 0
         if (newPerm.Has(n) && id && id.exe = newPerm[n].exe && id.cls = newPerm[n].cls)
             window[n] := hwnd
+        ; Слот явно обращён в динамический (конверсией через Settings) —
+        ; живое окно не отпускаем домой, а передаём его тем же слотом
+        ; дальше, уже динамической привязкой.
+        else if !newPerm.Has(n)
+            window[n] := hwnd
         else
             released.Push(hwnd)
     }
@@ -1215,11 +1220,16 @@ r := ApplyModel(Map(3, true), Map(3, 8001),
 Assert("17c: смена cls тоже возвращает окно домой",
     r.window[3] = 0 && r.released.Length = 1)
 
-; Слот перестал быть постоянным (conversion Permanent -> Dynamic).
+; Слот перестал быть постоянным (conversion Permanent -> Dynamic) и у
+; него было живое окно. Раньше оно безусловно уезжало домой — тем же
+; путём, что и смена exe/cls, — и постоянный слот с живым приложением
+; после конверсии выглядел так, будто окно закрыли. Пользователь менял
+; только то, как слот ищет своё окно, а не отказывался от него: слот
+; остаётся с тем же окном, но уже динамической привязкой.
 r := ApplyModel(Map(3, true), Map(3, 8001), Map(),
                 Snap(Map(3, 8001), Map(3, { exe: "a.exe", cls: "" })))
-Assert("17d: слот перестал быть постоянным -> окно домой, слот пуст",
-    r.window[3] = 0 && r.released.Length = 1 && r.released[1] = 8001)
+Assert("17d: конверсия в динамический передаёт живое окно тем же слотом",
+    r.window[3] = 8001 && r.released.Length = 0)
 
 ; Слот стал постоянным, и перечитанный файл это подтверждает: живая
 ; динамическая привязка снимается — постоянный и динамический не бывают
@@ -1261,30 +1271,45 @@ r := ApplyModel(Map(1, true, 5, true), Map(1, 8001, 5, 8005),
 Assert("17i: Save без правок слотов ничего не отпускает и ничего не теряет",
     r.window[1] = 8001 && r.window[5] = 8005 && r.released.Length = 0)
 
-; Один слот конвертируется, соседний того же рода не задет.
+; Один слот конвертируется, соседний того же рода не задет: окно
+; конвертированного слота остаётся при нём динамической привязкой.
 r := ApplyModel(Map(2, true, 5, true), Map(2, 8002, 5, 8005),
                 Map(5, { exe: "b.exe", cls: "" }),
                 Snap(Map(2, 8002, 5, 8005),
                      Map(2, { exe: "a.exe", cls: "" }, 5, { exe: "b.exe", cls: "" })))
 Assert("17j: конвертация одного слота не трогает соседний",
-    r.window[2] = 0 && r.window[5] = 8005
- && r.released.Length = 1 && r.released[1] = 8002)
+    r.window[2] = 8002 && r.window[5] = 8005 && r.released.Length = 0)
+
+; Слот конвертируется, но живого окна у него не было (applicationNotRunning) —
+; released остаётся пустым, а не получает 0 или мусор: snap.bySlot не
+; заводит запись без окна (см. Slots.PermSnapshot — "if s.window").
+r := ApplyModel(Map(6, true), Map(), Map(), Snap(Map(), Map(6, { exe: "c.exe", cls: "" })))
+Assert("17k: конвертация слота без живого окна ничего не отпускает",
+    r.window[6] = 0 && r.released.Length = 0)
 ; ---------------------------------------------------------------
 ; Точка 18: контракт хоткея постоянного слота.
 ;
 ; Хоткей — единственное поле слота, значение которого нельзя проверить
-; сравнением с набором: синтаксис разбирает сам AutoHotkey. До появления
-; SettingsHotkeyIn() поле принимало любой текст, и «Ctrl + Alt + 2» —
-; понятная человеку запись, но не синтаксис AutoHotkey — уезжала в
+; сравнением с набором: синтаксис клавиши разбирает сам AutoHotkey. До
+; появления этой проверки поле принимало любой текст, и «Ctrl + Alt + 2»
+; — понятная человеку запись, но не синтаксис AutoHotkey — уезжала в
 ; config.ini как есть. Hotkey() бросал уже при СЛЕДУЮЩЕМ запуске, по
 ; одному модальному сообщению на слот, а до тех пор ничто на ошибку не
 ; указывало: слот выглядел так, будто хоткей у него сбросился.
 ;
-; Здесь копия SettingsHotkeyIn(). Она не чистая — регистрирует хоткей, —
-; но регистрирует в контекст, который никогда не истинен, и сразу
-; выключенным, поэтому на host безопасна: сработать он не может. Если
-; тело в src/drawer.ahk изменится, копию нужно обновить вручную — как и
-; копии в точках 1, 5, 7, 9, 17.
+; По итогам ручной приёмки поле стало человекочитаемым: пользователь
+; вводит "Ctrl + Alt + F2", а не "^!F2", и проверяются конфликты с
+; хоткеями ящика и с чужим focusHotkey — не только синтаксис.
+;
+; Здесь копии HotkeyModSymbol/HotkeyHumanToAhk/HotkeyAhkToHuman/
+; SettingsHotkeyConflict/SettingsHotkeyIn. Последняя не чистая —
+; регистрирует хоткей, — но регистрирует в контекст, который никогда не
+; истинен, и сразу выключенным, поэтому на host безопасна: сработать он
+; не может. SettingsHotkeyConflict в проде читает SlotPermList() (реестр);
+; здесь вместо реестра — параметр others (Map номер -> focusHotkey), иначе
+; copy тянула бы за собой Slots.ahk целиком ради одной проверки. Если тела
+; в src/drawer.ahk изменятся, копии нужно обновить вручную — как и копии в
+; точках 1, 5, 7, 9, 17.
 ; ---------------------------------------------------------------
 
 HookedCopy(hk) {
@@ -1295,33 +1320,125 @@ SettingsBadCopy(msg, &err) {
         err := msg
     return ""
 }
-SettingsHotkeyInCopy(v, live, label, &err) {
+HotkeyModSymbolCopy(word) {
+    switch StrLower(word) {
+        case "ctrl", "control": return "^"
+        case "alt": return "!"
+        case "shift": return "+"
+        case "win", "windows", "super": return "#"
+    }
+    return ""
+}
+HotkeyHumanToAhkCopy(s, &err) {
+    err := ""
+    s := Trim(s)
+    if (s = "")
+        return ""
+    parts := StrSplit(s, "+")
+    hasModWord := false
+    for p in parts
+        if (HotkeyModSymbolCopy(Trim(p)) != "")
+            hasModWord := true
+    if !hasModWord
+        return s
+    hasCtrl := false, hasAlt := false, hasShift := false, hasWin := false, key := ""
+    for p in parts {
+        t := Trim(p)
+        if (t = "")
+            return SettingsBadCopy("пустая часть сочетания", &err)
+        switch HotkeyModSymbolCopy(t) {
+            case "^":
+                if hasCtrl
+                    return SettingsBadCopy("повтор модификатора: " t, &err)
+                hasCtrl := true
+            case "!":
+                if hasAlt
+                    return SettingsBadCopy("повтор модификатора: " t, &err)
+                hasAlt := true
+            case "+":
+                if hasShift
+                    return SettingsBadCopy("повтор модификатора: " t, &err)
+                hasShift := true
+            case "#":
+                if hasWin
+                    return SettingsBadCopy("повтор модификатора: " t, &err)
+                hasWin := true
+            default:
+                if (key != "")
+                    return SettingsBadCopy("в сочетании может быть только одна клавиша: " t, &err)
+                key := t
+        }
+    }
+    if (key = "")
+        return SettingsBadCopy("нужна клавиша, не только модификаторы", &err)
+    return (hasCtrl ? "^" : "") (hasAlt ? "!" : "") (hasShift ? "+" : "") (hasWin ? "#" : "") key
+}
+HotkeyAhkToHumanCopy(ahk) {
+    if (ahk = "" || InStr("$*~", SubStr(ahk, 1, 1)))
+        return ahk
+    s := ahk, out := ""
+    while (s != "" && InStr("^!+#", SubStr(s, 1, 1))) {
+        c := SubStr(s, 1, 1)
+        out .= (c = "^" ? "Ctrl" : c = "!" ? "Alt" : c = "+" ? "Shift" : "Win") "+"
+        s := SubStr(s, 2)
+    }
+    return out . s
+}
+SettingsHotkeyConflictCopy(ahk, n, others) {
+    want := HookedCopy(ahk)
+    Loop 9 {
+        if (HookedCopy("^!" A_Index) = want)
+            return "показать/убрать слот " A_Index
+        if (HookedCopy("^!+" A_Index) = want)
+            return "назначить слот " A_Index
+    }
+    if (HookedCopy("^!0") = want)
+        return "очистить динамические слоты"
+    if (HookedCopy("^!+0") = want)
+        return "выход"
+    for slotN, hk in others {
+        if (slotN = n)
+            continue
+        if (hk != "" && HookedCopy(hk) = want)
+            return "слот " slotN
+    }
+    return ""
+}
+SettingsHotkeyInCopy(v, live, label, n, others, &err) {
     static never := (*) => false
     if (err != "")
         return ""
     s := String(v)
     if (InStr(s, "`r") || InStr(s, "`n"))
         return SettingsBadCopy(label ": перевод строки недопустим", &err)
-    s := Trim(s)
-    if (s = "" || s = live)
-        return s
+    human := Trim(s)
+    if (human = "")
+        return human
+    herr := ""
+    ahk := HotkeyHumanToAhkCopy(human, &herr)
+    if (herr != "")
+        return SettingsBadCopy(label ": " human " — " herr ". Например Ctrl + Alt + F2", &err)
+    if (ahk = live)
+        return ahk
     ok := true
     HotIf never
     try {
-        Hotkey(HookedCopy(s), (*) => 0, "Off")
+        Hotkey(HookedCopy(ahk), (*) => 0, "Off")
     } catch {
         ok := false
     } finally {
         HotIf
     }
     if !ok
-        return SettingsBadCopy(label ": " s " — не сочетание клавиш AutoHotkey."
-                             . " Например ^!F2 — это Ctrl+Alt+F2", &err)
-    return s
+        return SettingsBadCopy(label ": " human " — не сочетание клавиш AutoHotkey."
+                             . " Например Ctrl + Alt + F2", &err)
+    if (conflict := SettingsHotkeyConflictCopy(ahk, n, others))
+        return SettingsBadCopy(label ": " human " уже занято — " conflict, &err)
+    return ahk
 }
-HotkeyOk(s, live := "") {
+HotkeyOk(s, live := "", n := 0, others := 0) {
     err := ""
-    SettingsHotkeyInCopy(s, live, "хоткей", &err)
+    SettingsHotkeyInCopy(s, live, "хоткей", n, others ? others : Map(), &err)
     return err = ""
 }
 
@@ -1330,27 +1447,38 @@ HotkeyOk(s, live := "") {
 Hotkey(HookedCopy("^!F9"), (*) => 0)
 
 good := true
-for s in ["^!F2", "^!2", "^!#1", "~$+F3", "#Space", "*^!Numpad1", "F13", "vk41", "^!+#F5"]
+for s in ["^!F2", "^2", "^!#1", "~$+F3", "#Space", "*^!Numpad1", "F13", "vk41", "^!+#F5"]
     good := good && HotkeyOk(s)
-Assert("18a: синтаксис AutoHotkey принимается (модификаторы, F-клавиши, vk, префиксы)", good)
+Assert("18a: синтаксис AutoHotkey принимается насквозь (модификаторы, F-клавиши, vk, префиксы)", good)
+
+; Человеческая запись — с точностью до пробелов и регистра модификатора.
+good := true
+for s in ["Ctrl + Alt + F4", "ctrl+alt+f4", "Control + Alt + F4", " Alt + Ctrl + F4 "]
+    good := good && HotkeyOk(s)
+Assert("18a2: человеческие модификаторы (Ctrl/Control, любой регистр, любой их порядок) принимаются", good)
 
 bad := true
-for s in ["Ctrl + Alt + 2", "Ctrl + Alt +3", "нечто", "^!F99", "Ctrl+Alt+2"]
+for s in ["нечто", "^!F99", "Ctrl + Alt + Bla", "Ctrl+Alt+Bla", "Ctrl + Alt + Alt + F2"]
     bad := bad && !HotkeyOk(s)
-Assert("18b: понятная человеку запись отвергается — она не сочетание клавиш", bad)
+Assert("18b: незнакомое имя клавиши или повтор модификатора — отказ по синтаксису", bad)
+
+err18 := ""
+SettingsHotkeyInCopy("Ctrl + Alt + Bla", "", "Слот 2: хоткей", 0, Map(), &err18)
+Assert("18b2: причина отказа — не название клавиши, а не «занято», и назван годный пример",
+    InStr(err18, "не сочетание клавиш AutoHotkey") > 0 && InStr(err18, "Ctrl + Alt + F2") > 0)
 
 err18 := ""
 Assert("18c: пустой хоткей — это «хоткея нет», а не ошибка",
-    SettingsHotkeyInCopy("", "", "хоткей", &err18) = "" && err18 = "")
+    SettingsHotkeyInCopy("", "", "хоткей", 0, Map(), &err18) = "" && err18 = "")
 
 err18 := ""
 Assert("18d: пробелы по краям снимаются, а не отвергаются",
-    SettingsHotkeyInCopy("  ^!F3  ", "", "хоткей", &err18) = "^!F3" && err18 = "")
+    SettingsHotkeyInCopy("  ^!F3  ", "", "хоткей", 0, Map(), &err18) = "^!F3" && err18 = "")
 
 err18 := ""
-SettingsHotkeyInCopy("Ctrl + Alt + 2", "", "Слот 2: хоткей", &err18)
-Assert("18e: отказ называет и поле, и годный пример",
-    InStr(err18, "Слот 2: хоткей") > 0 && InStr(err18, "^!F2") > 0)
+SettingsHotkeyInCopy("Ctrl + Alt + Bla", "", "Слот 2: хоткей", 0, Map(), &err18)
+Assert("18e: отказ называет и поле, и годный пример человеческой записью",
+    InStr(err18, "Слот 2: хоткей") > 0 && InStr(err18, "Ctrl + Alt + F2") > 0)
 
 reg18 := true
 try
@@ -1359,13 +1487,48 @@ catch
     reg18 := false
 Assert("18f: проверка безвредна — уже назначенный хоткей остался управляемым", reg18)
 
-; Испорченное значение, уже лежащее в config.ini, не должно запирать
-; правку соседних полей: точечная запись его и так не трогает. Именно на
-; этом пользователь спотыкался бы, зайдя починить ширину слота.
-Assert("18r: неизменённое негодное значение проходит, менять соседнее поле не мешает",
-    HotkeyOk("Ctrl + Alt + 2", "Ctrl + Alt + 2"))
-Assert("18s: но стоит его тронуть — и отказ приходит сразу",
-    !HotkeyOk("Ctrl + Alt + 3", "Ctrl + Alt + 2"))
+; Испорченное (или занятое) значение, уже лежащее в config.ini, не должно
+; запирать правку соседних полей: точечная запись его и так не трогает.
+; live — то, что реально хранит config.ini: синтаксис AutoHotkey, не
+; человеческий текст.
+Assert("18r: неизменённое (по факту) значение проходит, менять соседнее поле не мешает",
+    HotkeyOk("Ctrl + Alt + 2", "^!2"))
+Assert("18s: но стоит его тронуть — и отказ приходит сразу (теперь как конфликт, раз синтаксис годный)",
+    !HotkeyOk("Ctrl + Alt + 3", "^!2"))
+
+; --- конфликт с зарезервированными хоткеями ящика ----------------------
+Assert("18t: Ctrl+Alt+N — уже основной хоткей слота N, в любой записи",
+    !HotkeyOk("Ctrl + Alt + 2") && !HotkeyOk("^!5") && !HotkeyOk("Ctrl+Alt+9"))
+Assert("18u: Ctrl+Alt+Shift+N — уже хоткей назначения слота N",
+    !HotkeyOk("Ctrl + Alt + Shift + 3"))
+Assert("18v: Ctrl+Alt+0 и Ctrl+Alt+Shift+0 — очистка и выход, тоже заняты",
+    !HotkeyOk("Ctrl + Alt + 0") && !HotkeyOk("Ctrl + Alt + Shift + 0"))
+
+err18 := ""
+SettingsHotkeyInCopy("Ctrl + Alt + 2", "", "Слот 1: хоткей", 1, Map(), &err18)
+Assert("18w: отказ конфликта называет то, с чем совпало, а не только «занято»",
+    InStr(err18, "уже занято") > 0 && InStr(err18, "показать/убрать слот 2") > 0)
+
+; --- конфликт с чужим focusHotkey ---------------------------------------
+others18 := Map(2, "^!F6")
+Assert("18x: совпадение с чужим focusHotkey — тоже конфликт",
+    !HotkeyOk("Ctrl + Alt + F6", "", 1, others18))
+Assert("18y: совпадение со своим же текущим значением — не конфликт (себя исключаем из обхода)",
+    HotkeyOk("Ctrl + Alt + F6", "", 2, others18))
+
+; --- HotkeyAhkToHuman: обратное преобразование для показа --------------
+Assert("18z: модификаторы показываются словами, порядок — как в значении",
+    HotkeyAhkToHumanCopy("^!F2") = "Ctrl+Alt+F2" && HotkeyAhkToHumanCopy("^!#1") = "Ctrl+Alt+Win+1"
+ && HotkeyAhkToHumanCopy("F13") = "F13" && HotkeyAhkToHumanCopy("") = "")
+Assert("18aa: экзотика с $/*/~ не переводится — показывается синтаксисом AutoHotkey как есть",
+    HotkeyAhkToHumanCopy("~$+F3") = "~$+F3" && HotkeyAhkToHumanCopy("*^!Numpad1") = "*^!Numpad1")
+
+e18 := ""
+Assert("18ab: round-trip — что показали (HotkeyAhkToHuman), то и сохранится тем же значением",
+    HotkeyHumanToAhkCopy(HotkeyAhkToHumanCopy("^!#1"), &e18) = "^!#1" && e18 = "")
+e18 := ""
+Assert("18ac: экзотика без распознанных слов-модификаторов проходит насквозь без разбора",
+    HotkeyHumanToAhkCopy("~$+F3", &e18) = "~$+F3" && e18 = "")
 
 ; --- запись и чтение [slotN] focusHotkey на настоящем INI ------------
 hkIni := A_Temp "\drawer-seam-hotkey.ini"
@@ -1392,16 +1555,20 @@ if !FileExist(drawerPath) || !FileExist(slotsPath) {
     pSW18 := InStr(src18, "SettingsSlotWrites(n, e, &err, &field?) {")
     pSP18 := InStr(src18, "SettingsSlotsPlan(edits, &err) {")
     codeSW18 := (pSW18 > 0 && pSP18 > pSW18) ? NoComments(SubStr(src18, pSW18, pSP18 - pSW18)) : ""
-    Assert("18j: план проверяет хоткей синтаксисом, а не как обычный текст",
+    Assert("18j: план проверяет хоткей синтаксисом и номером слота, а не как обычный текст",
         codeSW18 != "" && InStr(codeSW18, "SettingsHotkeyIn(e.focusHotkey, SettingsLiveSlot(n, `"focusHotkey`")") > 0
-     && InStr(codeSW18, "SettingsTextIn(e.focusHotkey") = 0)
+     && InStr(codeSW18, ", n, &err)") > 0 && InStr(codeSW18, "SettingsTextIn(e.focusHotkey") = 0)
     Assert("18k: отказ несёт адрес контрола, а форме есть куда вести",
         InStr(codeSW18, "field := `"slots.`" n `".focusHotkey`"") > 0)
 
-    pHK := InStr(src18, "SettingsHotkeyIn(v, live, label, &err) {")
-    bodyHK := pHK ? NoComments(SubStr(src18, pHK, 700)) : ""
-    Assert("18l: своего разбора синтаксиса не заводится — спрашивается AutoHotkey",
+    pHK := InStr(src18, "SettingsHotkeyIn(v, live, label, n, &err) {")
+    bodyHK := pHK ? NoComments(SubStr(src18, pHK, 1600)) : ""
+    Assert("18l: своего разбора клавиши не заводится — спрашивается AutoHotkey",
         pHK > 0 && InStr(bodyHK, "Hotkey(Hooked(s)") > 0)
+    Assert("18l2: перед проверкой синтаксиса человеческий ввод переводится в AHK",
+        InStr(bodyHK, "HotkeyHumanToAhk(human, &herr)") > 0)
+    Assert("18l3: после годного синтаксиса спрашивается конфликт с чужим хоткеем",
+        InStr(bodyHK, "SettingsHotkeyConflict(s, n)") > 0)
     Assert("18m: проверка выключена и в контексте, который никогда не истинен",
         InStr(bodyHK, "HotIf never") > 0 && InStr(bodyHK, "`"Off`"") > 0
      && InStr(bodyHK, "static never := (*) => false") > 0)
@@ -1419,6 +1586,55 @@ if !FileExist(drawerPath) || !FileExist(slotsPath) {
     Assert("18q: засев формы берёт хоткей у самого слота, а не выдумывает его",
         InStr(src18, "focusHotkey: a.focusHotkey") > 0
      && InStr(src18s, "perm     := 0") > 0)
+
+    ; Форма показывает и принимает человеческую запись; синтаксис
+    ; AutoHotkey нигде, кроме config.ini, наружу не течёт. Один конвертер
+    ; на обе поверхности (native Edit и WebView DTO) — источник истины один.
+    portPath18 := A_ScriptDir "\..\..\src\webview\SettingsPort.ahk"
+    Assert("18ab2: native показывает хоткей человеческой записью, не сырым config-значением",
+        InStr(src18, "ui.eFocus.Value := HotkeyAhkToHuman(Opt(cfg, `"focusHotkey`", `"`"))") > 0)
+    if FileExist(portPath18) {
+        srcPort18 := FileRead(portPath18, "UTF-8")
+        Assert("18ac2: WebView DTO тоже переводит хоткей в человеческую запись, вторым конвертером не заводится",
+            InStr(srcPort18, "HotkeyAhkToHuman(String(Opt(cfg, `"focusHotkey`", `"`")))") > 0)
+    }
+
+    ; Основной хоткей слота (Ctrl+Alt+N) — не focusHotkey, и форма не
+    ; должна выдавать дополнительный хоткей за единственный.
+    Assert("18ad: панель постоянного слота отдельно показывает основной Ctrl+Alt+N",
+        InStr(src18, "ui.primaryHotkey.Text := `"Основной: Ctrl + Alt + `" ef.n") > 0)
+
+    ; --- SlotsSeedManaged: кромка постоянного слота без первого toggle ---
+    pSeed := InStr(src18, "SlotsSeedManaged() {")
+    bodySeed := pSeed ? NoComments(SubStr(src18, pSeed, 900)) : ""
+    Assert("18ae: SlotsSeedManaged считает геометрию тем же путём, что и Show(), но окно не двигает",
+        bodySeed != "" && InStr(bodySeed, "ResolveMonitor(a)") > 0 && InStr(bodySeed, "CaptureOrigin(hwnd, mi)") > 0
+     && InStr(bodySeed, "ComputeGeom(a, mi)") > 0
+     && InStr(bodySeed, "WinMove") = 0 && InStr(bodySeed, "WinActivate") = 0)
+    Assert("18af: уже managed окно SlotsSeedManaged не трогает",
+        InStr(bodySeed, "WindowManaged(hwnd)") > 0)
+    ; Вызов при старте — отдельной строкой, а не сразу за Slots.Apply(
+    ; bootConfig): state/handles ещё не объявлены в этой точке файла
+    ; (они ниже, глобальными присваиваниями), и вызов раньше свалился бы.
+    Assert("18ag: вызывается при старте, до первой пересборки кромок",
+        InStr(src18, "SlotsSeedManaged()`r`nSetTimer(HandlesSync, -1)") > 0)
+    Assert("18ah: и в SettingsReconcileRuntime — после каждого Save, не только при старте",
+        InStr(src18, "Slots.Apply(cfg, slotPlan.prevPerm)`r`n    SlotsSeedManaged()") > 0)
+
+    ; --- Permanent -> Dynamic конверсией через native Settings ------------
+    ; До фикса ui.edits[r.n] := { kind: "dyn" } не нёс width/edge/monitor/
+    ; activateOnShow/hideOnBlur, и SettingsDynSlotWrites() падал на первом
+    ; же e.width — Save конверсии из native был всегда сломан, не только
+    ; терял окно. dSeed := SlotCfg(r.n) — тот же засев, каким уже
+    ; пользуется SettingsEffective() для уже динамического слота (ef.kind
+    ; = "dyn"): дублировать его вторым набором умолчаний не нужно.
+    pConv := InStr(src18, "SettingsConvertClick(ui) {")
+    pConvEnd := InStr(src18, "SettingsSlotExePick(ui) {")
+    bodyConv := (pConv > 0 && pConvEnd > pConv) ? NoComments(SubStr(src18, pConv, pConvEnd - pConv)) : ""
+    Assert("18ai: конверсия в динамический засевает все пять полей поведения, не только kind",
+        bodyConv != "" && InStr(bodyConv, "SlotCfg(r.n)") > 0
+     && InStr(bodyConv, "width: d.width, edge: d.edge, monitor: d.monitor") > 0
+     && InStr(bodyConv, "activateOnShow: d.activateOnShow, hideOnBlur: d.hideOnBlur") > 0)
 }
 ; ---------------------------------------------------------------
 out := ""

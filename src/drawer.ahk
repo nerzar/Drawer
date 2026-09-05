@@ -227,6 +227,11 @@ try {
 } catch as e
     MsgBox("Хоткей выхода не назначен:`n" e.Message, "Ящик")
 
+; Постоянный слот, чьё приложение уже запущено на момент старта, получает
+; кромку сразу, а не только после первого Ctrl+Alt+N (см. SlotsSeedManaged).
+SlotsSeedManaged()
+SetTimer(HandlesSync, -1)
+
 ; Windows активировала окно — Alt+Tab, щелчок по значку на панели задач,
 ; что угодно ещё. Если это окно ящика и оно припарковано, выдвигаем его.
 ; Хук пассивный: ничего не перехватывает и не может сломать обычную
@@ -1065,6 +1070,37 @@ CaptureOrigin(hwnd, mi) {
              w: (R - L) * 8 // 10, h: (B - T) * 8 // 10 }
 }
 
+; Кромка постоянного слота, чьё окно уже существует, не обязана ждать
+; первого Ctrl+Alt+N. Без этого шага WindowManaged() у такого окна ложный
+; до первого показа — Slots.Apply() только проецирует конфиг, окно ищет и
+; запоминает SlotCapture(), а managed-геометрию считает только Show() — и
+; HandlesSync() пропускал слот с работающим приложением молча, как будто
+; оно не запущено.
+;
+; Вызывается после каждого Slots.Apply(cfg, ...) — при старте и после
+; Save/reconcile, не только при первом запуске: то же самое приложение
+; может обнаружиться и у слота, который только что стал постоянным или
+; получил новый exe.
+;
+; Считает геометрию тем же путём, что и Show() (ResolveMonitor,
+; CaptureOrigin, ComputeGeom), но без WinMove/WinActivate — окно остаётся
+; там, где было, и фокус не трогается. Уже managed окно не трогаем: у
+; него, возможно, идёт анимация или оно припарковано, и обе величины
+; правильно пересчитает следующий реальный показ.
+SlotsSeedManaged() {
+    for a in SlotPermList() {
+        if !(hwnd := SlotCapture(a.slot)) || WindowManaged(hwnd)
+            continue
+        st := StateOf(hwnd)
+        try {
+            mi := ResolveMonitor(a)
+            if !st.orig
+                st.orig := CaptureOrigin(hwnd, mi)
+            st.geom := ComputeGeom(a, mi)
+        }
+    }
+}
+
 ; Настоящее окно приложения: видимое, с заголовком, разумного размера.
 ; Служебные окна JetBrains без заголовка отсеиваются здесь.
 FindWindow(a) {
@@ -1605,7 +1641,7 @@ SettingsFieldLabel(key) {
         "width", "Ширина (%)",
         "activateOnShow", "Активация",
         "hideOnBlur", "Автоскрытие",
-        "focusHotkey", "Хоткей")
+        "focusHotkey", "Хоткей фокуса")
     return labels[key]
 }
 
@@ -2149,7 +2185,8 @@ SettingsFillEditable(ui, ef) {
     ui.eWidth.Value := String(Opt(cfg, "width", 60))
     ui.eAct.Value   := Opt(cfg, "activateOnShow", true) ? 1 : 0
     ui.eBlur.Value  := Opt(cfg, "hideOnBlur", true) ? 1 : 0
-    ui.eFocus.Value := Opt(cfg, "focusHotkey", "")
+    ui.eFocus.Value := HotkeyAhkToHuman(Opt(cfg, "focusHotkey", ""))
+    ui.primaryHotkey.Text := "Основной: Ctrl + Alt + " ef.n " (не настраивается)"
     ui.editingSlot  := ef.n
     ui.box.Text := "Слот " ef.n . (ef.HasOwnProp("pending") ? "  ·  не сохранено" : "")
     ui.populating := false
@@ -2206,7 +2243,13 @@ SettingsConvertClick(ui) {
                   . " Действие войдёт в силу после «Применить» или «ОК». Продолжить?",
                   "Ящик", 0x24) != "Yes")
             return
-        ui.edits[r.n] := { kind: "dyn" }
+        ; Тот же засев, которым native заполняет панель для уже
+        ; динамического слота (SettingsEffective, ef.kind = "dyn"):
+        ; поведение слота после конверсии — общее [dynamic] плюс
+        ; [dynamicSlotN], если оно есть, без пяти пустых полей.
+        d := SlotCfg(r.n)
+        ui.edits[r.n] := { kind: "dyn", width: d.width, edge: d.edge, monitor: d.monitor,
+                            activateOnShow: d.activateOnShow, hideOnBlur: d.hideOnBlur }
     } else
         ui.edits[r.n] := SettingsEditSeed(r.n)
     SettingsFillRow(ui, idx)
@@ -2786,7 +2829,12 @@ SettingsOpen() {
     roLabels := [], valc := [], srcc := []
     for i, key in SettingsReadOnlyFields() {
         y := detailY + 44 + (i - 1) * 30
-        roLabels.Push(SettingsMk(panelSlots, g.Add("Text", "x" fx " y" y " w" fLabelW " h18", SettingsFieldLabel(key))))
+        ; У динамического слота эта строка — не "хоткей фокуса" (такого
+        ; поля у него нет вовсе), а основной Ctrl+Alt+N, который ящик
+        ; назначает по номеру. SettingsFieldLabel() называет focusHotkey
+        ; для ПОСТОЯННОГО слота — здесь нужна отдельная, более общая подпись.
+        label := (key = "focusHotkey") ? "Хоткей" : SettingsFieldLabel(key)
+        roLabels.Push(SettingsMk(panelSlots, g.Add("Text", "x" fx " y" y " w" fLabelW " h18", label)))
         valc.Push(SettingsMk(panelSlots, g.Add("Text", "x" fValX " y" y " w100 h18", "")))
         g.SetFont("c9A9CA3")
         srcc.Push(SettingsMk(panelSlots, g.Add("Text", "x" (fValX + 108) " y" y " w118 h18", "")))
@@ -2835,11 +2883,18 @@ SettingsOpen() {
     ui.eBlur  := SettingsMk(panelSlots, g.Add("CheckBox", "x" fValX " y" (detailY + 44 + 7 * 30 + 3) " w226 h20", "Убирать окно, когда фокус ушёл"))
     ui.eFocus := SettingsMk(panelSlots, g.Add("Edit", "-E0x200 Background252A31 x" fValX " y" yFocus " w160 h26"))
     g.SetFont("s8 c9A9CA3")
-    focusCaption := SettingsMk(panelSlots, g.Add("Text", "x" fValX " y" (yFocus + 27) " w160 h16", "после перезапуска"))
+    focusCaption := SettingsMk(panelSlots, g.Add("Text", "x" fValX " y" (yFocus + 27) " w220 h16", "дополнительный, после перезапуска"))
+    ; Основной хоткей слота — Ctrl+Alt+N — ящик назначает сам номером
+    ; слота и не даёт настраивать; без этой подписи рядом единственное
+    ; видимое поле "Хоткей фокуса" читалось бы как единственный хоткей
+    ; слота вообще. Текст выставляется в SettingsFillEditable() по номеру
+    ; текущего слота.
+    ui.primaryHotkey := SettingsMk(panelSlots, g.Add("Text", "x" (fValX + 172) " y" (yFocus + 5) " w260 h32", ""))
     g.SetFont("s9 cEDEDEF")
 
     ui.editCtl := [ui.eName, ui.eExe, ui.eExeBrowse, ui.eExeWindow, ui.eCls, clsInfo,
-                   ui.eMon, ui.eEdge, ui.eWidth, ui.eAct, ui.eBlur, ui.eFocus, focusCaption, editLabels*]
+                   ui.eMon, ui.eEdge, ui.eWidth, ui.eAct, ui.eBlur, ui.eFocus, focusCaption,
+                   ui.primaryHotkey, editLabels*]
 
     ui.eName.OnEvent("Change",  (*) => SettingsSlotEdited(ui, "name", ui.eName.Value))
     ui.eExe.OnEvent("Change",   (*) => SettingsSlotEdited(ui, "exe", ui.eExe.Value))
@@ -3054,18 +3109,142 @@ SettingsTextIn(v, label, &err) {
     return s
 }
 
-; Сочетание клавиш постоянного слота. Единственное поле, которое нельзя
-; проверить сравнением с набором, — синтаксис разбирает сам AutoHotkey.
-; Своего разбора не заводим: список модификаторов, имён клавиш и
-; составных сочетаний живёт в нём, и вторая его копия разошлась бы с
-; первой при первом же обновлении.
+; Слово-модификатор человеческого ввода хоткея в символ AutoHotkey — пусто,
+; если слово не модификатор (тогда это и есть клавиша). Список короткий и
+; фиксированный, в отличие от имён клавиш: их у AutoHotkey не два
+; десятка, а сотня с алиасами, и заводить свой словарь означало бы вести
+; вторую версию того, что уже знает Hotkey().
+HotkeyModSymbol(word) {
+    switch StrLower(word) {
+        case "ctrl", "control": return "^"
+        case "alt": return "!"
+        case "shift": return "+"
+        case "win", "windows", "super": return "#"
+    }
+    return ""
+}
+
+; Человеческий ввод хоткея слота — "Ctrl + Alt + F2" — в синтаксис
+; AutoHotkey. Разбираются только МОДИФИКАТОРЫ: имя клавиши (F2, Space, 2,
+; a) уже человеческое и идёт дальше как есть — Hotkey() ниже проверит его
+; тем же путём, что и саму регистрацию при старте.
 ;
-; До этой проверки поле принимало любой текст. «Ctrl + Alt + 2» —
-; понятная человеку запись, но не синтаксис AutoHotkey: она уезжала в
-; config.ini как есть, а Hotkey() бросал уже при СЛЕДУЮЩЕМ запуске, по
-; одному модальному сообщению на слот. До перезапуска ничто на ошибку не
-; указывало, и слот выглядел так, будто хоткей у него сбросился. Теперь
-; отказ приходит там же, где значение вводят, и с адресом поля.
+; Порядок модификаторов в результате всегда один и тот же (Ctrl, Alt,
+; Shift, Win), независимо от того, в каком порядке их набрал пользователь:
+; иначе один и тот же хоткей давал бы разные строки, а сравнение "не
+; изменилось ли значение" и поиск конфликта ниже сравнивают эти строки
+; текстом, а не разбирают их заново.
+;
+; Строка, ни один сегмент которой не назван модификатором, уже не
+; человеческая запись — это либо голая клавиша без модификаторов ("F13"),
+; либо синтаксис AutoHotkey, набранный в config.ini вручную ДО этого поля
+; (составные формы вроде "~$+F3" — сама она содержит "+" как символ
+; Shift, а не как разделитель). Такую строку возвращаем как есть: чужой
+; формат не наш, а ломать значения, доставшиеся по наследству, только
+; потому что их не наберёшь через это поле, — не дело правки.
+HotkeyHumanToAhk(s, &err) {
+    err := ""
+    s := Trim(s)
+    if (s = "")
+        return ""
+    parts := StrSplit(s, "+")
+    hasModWord := false
+    for p in parts
+        if (HotkeyModSymbol(Trim(p)) != "")
+            hasModWord := true
+    if !hasModWord
+        return s
+    hasCtrl := false, hasAlt := false, hasShift := false, hasWin := false, key := ""
+    for p in parts {
+        t := Trim(p)
+        if (t = "")
+            return SettingsBad("пустая часть сочетания", &err)
+        switch HotkeyModSymbol(t) {
+            case "^":
+                if hasCtrl
+                    return SettingsBad("повтор модификатора: " t, &err)
+                hasCtrl := true
+            case "!":
+                if hasAlt
+                    return SettingsBad("повтор модификатора: " t, &err)
+                hasAlt := true
+            case "+":
+                if hasShift
+                    return SettingsBad("повтор модификатора: " t, &err)
+                hasShift := true
+            case "#":
+                if hasWin
+                    return SettingsBad("повтор модификатора: " t, &err)
+                hasWin := true
+            default:
+                if (key != "")
+                    return SettingsBad("в сочетании может быть только одна клавиша: " t, &err)
+                key := t
+        }
+    }
+    if (key = "")
+        return SettingsBad("нужна клавиша, не только модификаторы", &err)
+    return (hasCtrl ? "^" : "") (hasAlt ? "!" : "") (hasShift ? "+" : "") (hasWin ? "#" : "") key
+}
+
+; Обратное преобразование — как показать хоткей, лежащий в config.ini в
+; синтаксисе AutoHotkey, человеку. Ведущие $/*/~ — признак значения,
+; набранного мимо этого поля (модификаторы клавиатурного хука, а не
+; сочетание клавиш): показываем как есть, синтаксисом AutoHotkey, вместо
+; того чтобы гадать человеческое название несуществующей комбинации.
+HotkeyAhkToHuman(ahk) {
+    if (ahk = "" || InStr("$*~", SubStr(ahk, 1, 1)))
+        return ahk
+    s := ahk, out := ""
+    while (s != "" && InStr("^!+#", SubStr(s, 1, 1))) {
+        c := SubStr(s, 1, 1)
+        out .= (c = "^" ? "Ctrl" : c = "!" ? "Alt" : c = "+" ? "Shift" : "Win") "+"
+        s := SubStr(s, 2)
+    }
+    return out . s
+}
+
+; Занято ли сочетание чем-то ещё в ящике — пусто, если свободно. n —
+; слот, для которого спрашиваем: сравнение с его же текущим хоткеем не
+; конфликт, поэтому свой номер из обхода исключается. Совпадение
+; сравнивается той же строкой, что получит регистрация (Hooked()), а не
+; исходной: иначе "^!2" и "$^!2" не совпали бы текстом, хотя это одно и то
+; же сочетание клавиш.
+SettingsHotkeyConflict(ahk, n) {
+    want := Hooked(ahk)
+    Loop 9 {
+        if (Hooked("^!" A_Index) = want)
+            return "Ctrl+Alt+" A_Index " — показать/убрать слот " A_Index
+        if (Hooked("^!+" A_Index) = want)
+            return "Ctrl+Alt+Shift+" A_Index " — назначить слот " A_Index
+    }
+    if (Hooked("^!0") = want)
+        return "Ctrl+Alt+0 — очистить динамические слоты"
+    if (Hooked("^!+0") = want)
+        return "Ctrl+Alt+Shift+0 — выход"
+    for a in SlotPermList() {
+        if (a.slot = n)
+            continue
+        hk := Opt(a, "focusHotkey", "")
+        if (hk != "" && Hooked(hk) = want)
+            return "слот " a.slot " (" a.name ")"
+    }
+    return ""
+}
+
+; Дополнительный хоткей постоянного слота (не путать с основным
+; Ctrl+Alt+N — тем ящик управляет сам и он не настраивается). Ввод
+; человеческий: "Ctrl + Alt + F2", а не "^!F2" — HotkeyHumanToAhk() выше
+; переводит его в синтаксис AutoHotkey, и только эта строка идёт дальше.
+;
+; Синтаксис клавиши саму по себе не проверяем — список имён и составных
+; сочетаний живёт в Hotkey(), и вторая его копия разошлась бы с первой при
+; первом же обновлении AutoHotkey. До этой проверки поле принимало любой
+; текст: «Ctrl + Alt + 2» уезжала в config.ini как есть, а Hotkey() бросал
+; уже при СЛЕДУЮЩЕМ запуске, по одному модальному сообщению на слот. До
+; перезапуска ничто на ошибку не указывало, и слот выглядел так, будто
+; хоткей у него сбросился. Теперь отказ приходит там же, где значение
+; вводят, и с адресом поля.
 ;
 ; Проверка обязана быть безвредной. Регистрация идёт в контекст, который
 ; никогда не истинен, и сразу выключенной: сработать такой хоткей не
@@ -3076,23 +3255,26 @@ SettingsTextIn(v, label, &err) {
 ; старте, вместе с префиксом Hooked(): иначе проверка отвечала бы за один
 ; синтаксис, а работа шла бы по другому.
 ;
-; Пустое значение — это «у слота нет хоткея», а не ошибка. Значение
-; обрезается по краям: IniRead и так возвращает его без окружающих
-; пробелов, поэтому незамеченный пробел в конце иначе переписывал бы ключ
-; при каждом Save и не совпадал бы с тем, что зарегистрируют.
+; Пустое значение — это «у слота нет хоткея», а не ошибка.
 ;
-; live — то, что уже лежит в config.ini. Синтаксис проверяется только у
-; НОВОГО значения: точечная запись неизменившийся ключ и так пропускает,
-; а спотыкаться на своём же старом значении, правя соседнее поле,
-; пользователь не должен. Испорченный хоткей чинится там, где его вводят,
-; и не запирает остальную форму; про негодное значение в файле программа
-; и так говорит при старте.
-SettingsHotkeyIn(v, live, label, &err) {
+; live — то, что уже лежит в config.ini (синтаксисом AutoHotkey). Синтаксис
+; и конфликт проверяются только у НОВОГО значения: точечная запись
+; неизменившийся ключ и так пропускает, а спотыкаться на своём же старом
+; значении, правя соседнее поле, пользователь не должен. Испорченный
+; хоткей чинится там, где его вводят, и не запирает остальную форму; про
+; негодное значение в файле программа и так говорит при старте.
+SettingsHotkeyIn(v, live, label, n, &err) {
     static never := (*) => false
     if (err != "")
         return ""
-    s := Trim(SettingsTextIn(v, label, &err))
-    if (err != "" || s = "" || s = live)
+    human := Trim(SettingsTextIn(v, label, &err))
+    if (err != "" || human = "")
+        return human
+    herr := ""
+    s := HotkeyHumanToAhk(human, &herr)
+    if (herr != "")
+        return SettingsBad(label ": " human " — " herr ". Например Ctrl + Alt + F2", &err)
+    if (s = live)
         return s
     ok := true
     HotIf never
@@ -3104,8 +3286,10 @@ SettingsHotkeyIn(v, live, label, &err) {
         HotIf
     }
     if !ok
-        return SettingsBad(label ": " s " — не сочетание клавиш AutoHotkey."
-                         . " Например ^!F2 — это Ctrl+Alt+F2", &err)
+        return SettingsBad(label ": " human " — не сочетание клавиш AutoHotkey."
+                         . " Например Ctrl + Alt + F2", &err)
+    if (conflict := SettingsHotkeyConflict(s, n))
+        return SettingsBad(label ": " human " уже занято — " conflict, &err)
     return s
 }
 
@@ -3248,7 +3432,7 @@ SettingsSlotFieldLabel(n, key := "") {
         "name",           "имя",
         "executable",     "файл (exe)",
         "windowClass",    "класс окна",
-        "focusHotkey",    "горячая клавиша",
+        "focusHotkey",    "хоткей фокуса",
         "widthPercent",   "размер окна",
         "edge",           "край",
         "monitor",        "монитор",
@@ -3294,7 +3478,7 @@ SettingsSlotWrites(n, e, &err, &field?) {
     name := SettingsTextIn(e.name, lbl "имя", &err)
     exe  := SettingsTextIn(e.exe, lbl "файл (exe)", &err)
     cls  := SettingsTextIn(e.cls, lbl "класс окна", &err)
-    hk   := SettingsHotkeyIn(e.focusHotkey, SettingsLiveSlot(n, "focusHotkey"), lbl "хоткей", &err)
+    hk   := SettingsHotkeyIn(e.focusHotkey, SettingsLiveSlot(n, "focusHotkey"), lbl "хоткей фокуса", n, &err)
     if (err != "" && field = "")
         field := "slots." n ".focusHotkey"
     mon  := SettingsMonitorIn(String(e.monitor), lbl "монитор", true, &err)
@@ -3650,10 +3834,13 @@ SettingsPersistVerified(generalWrites, slotPlan, &outcome) {
 ; проецируются на реестр (Slots.Apply) — там же живут и все Release().
 ; Правила проекции и порядок стадий описаны в шапке Slots.Apply():
 ;
-;  - слот, теряющий постоянную привязку или меняющий exe/cls, не должен
-;    остаться без хозяина: Release() возвращает окно на исходное место,
-;    как при выходе и Ctrl+Alt+0 — и то же самое окно никогда не
-;    трогается, если его exe/cls не изменились;
+;  - постоянный слот, у которого изменились exe/cls, не должен остаться
+;    без хозяина: Release() возвращает окно на исходное место, как при
+;    выходе и Ctrl+Alt+0 — и то же самое окно никогда не трогается, если
+;    его exe/cls не изменились;
+;  - слот, явно обращённый в динамический (конверсией через Settings),
+;    не теряет живое окно — оно остаётся тем же слотом, но уже
+;    динамической привязкой;
 ;  - динамическая привязка слота, ставшего постоянным, снимается явно:
 ;    постоянный и динамический не бывают одним слотом одновременно;
 ;  - решает ПЕРЕЧИТАННЫЙ файл, а не намерение правки: если запись слота n
@@ -3665,7 +3852,10 @@ SettingsPersistVerified(generalWrites, slotPlan, &outcome) {
 ;
 ; Порядок здесь: сначала общие значения и цвет кромки (перекрашивать надо
 ; тем, что уже прочитано), затем слоты — их проекция сама решает, какие
-; окна вернуть домой, а пересборка кромок завершает обе стадии.
+; окна вернуть домой. SlotsSeedManaged() следом подхватывает постоянные
+; слоты, чьё приложение уже запущено, но ещё ни разу не показывалось
+; (иначе кромка ждала бы первого Ctrl+Alt+N и после Save, не только при
+; старте) — и только потом пересборка кромок завершает все стадии разом.
 SettingsReconcileRuntime(slotPlan, &diags) {
     global configPath, HANDLE_BG, HANDLE_BG_HOT
 
@@ -3678,6 +3868,7 @@ SettingsReconcileRuntime(slotPlan, &diags) {
     HandleRepaintAll()
 
     Slots.Apply(cfg, slotPlan.prevPerm)
+    SlotsSeedManaged()
 
     SetTimer(HandlesSync, -1)
 }

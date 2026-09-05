@@ -502,7 +502,12 @@ class DrawerSettingsPort {
             "widthPercent", this._Num(Opt(cfg, "width", 60), 60),
             "activateOnShow", JsonB(Opt(cfg, "activateOnShow", true)),
             "hideOnBlur", JsonB(Opt(cfg, "hideOnBlur", true)),
-            "focusHotkey", String(Opt(cfg, "focusHotkey", "")))
+            ; Человеку — человеческая запись ("Ctrl + Alt + F2"), не
+            ; синтаксис AutoHotkey: форма отправит её назад как есть,
+            ; SettingsHotkeyIn() на стороне AHK разберёт её обратно в
+            ; "^!F2" сама. Второго конвертера на стороне Vue не заводим —
+            ; источник истины один, и он уже здесь.
+            "focusHotkey", HotkeyAhkToHuman(String(Opt(cfg, "focusHotkey", ""))))
     }
 
     ; windowTitle появляется только там, где окно найдено: в контракте

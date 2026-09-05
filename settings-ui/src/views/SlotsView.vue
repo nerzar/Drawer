@@ -200,6 +200,15 @@ function makePermanent() {
         </div>
 
         <template v-if="kind === 'permanent'">
+          <!-- Основной хоткей слота ящик назначает сам номером и не даёт
+               настраивать — то же самое Ctrl+Alt+N, что и у динамического
+               слота ниже. Хоткей фокуса в форме — ДОПОЛНИТЕЛЬНЫЙ, и без
+               этой строки рядом легко принять его за единственный. -->
+          <div class="detail-row" style="margin-bottom: 14px">
+            <div class="l">Основной хоткей</div>
+            <div class="v">Ctrl + Alt + {{ selectedSlot.number }}</div>
+            <div class="s">не настраивается</div>
+          </div>
           <fieldset v-if="draft" class="editor" :disabled="locked">
             <div class="row">
               <label for="slot-name">Имя</label>
@@ -312,19 +321,20 @@ function makePermanent() {
               <span>Убирать окно, когда фокус ушёл</span>
             </label>
             <div class="row">
-              <label for="slot-hotkey">Горячая клавиша</label>
+              <label for="slot-hotkey">Хоткей фокуса</label>
               <div class="field">
                 <input
                   id="slot-hotkey"
                   type="text"
-                  style="width: 126px"
+                  style="width: 160px"
+                  placeholder="Ctrl + Alt + F2"
                   data-testid="edit-focusHotkey"
                   :class="{ 'field-bad': bad('focusHotkey') }"
                   v-model="draft.focusHotkey"
                 />
               </div>
             </div>
-            <div class="hotkey-cap">после перезапуска</div>
+            <div class="hotkey-cap">дополнительный, после перезапуска</div>
           </fieldset>
         </template>
 
