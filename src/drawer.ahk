@@ -3098,33 +3098,68 @@ SettingsVerifyDeleted(path, sec) {
         return false
 }
 
+; Провал persistence одной записью: код контракта плюс человеческий
+; текст. По коду ветвится клиент (write_failed / verify_failed из
+; docs/settings-integration-layer.md), текст native показывает в
+; статус-строке. Раньше был только текст, и отличить «не записалось» от
+; «записалось не то» можно было лишь разбором русской фразы.
+SettingsPersistFail(&outcome, code, msg) {
+    outcome.ok := false
+    outcome.code := code
+    outcome.err := msg
+}
+
+; Сверка одного записанного ключа. Чтение при сверке тоже может не
+; удаться — файл занят другим процессом, — и это «не смогли сверить», а
+; не «в файле пусто»: без отдельной ветки такой сбой попадал бы в текст
+; как «в файле «»» и выглядел бы расхождением значений. Наружу в обоих
+; случаях verify_failed: записанному нельзя верить, пока не прочитано.
+SettingsVerifyValue(path, sec, key, want, &detail) {
+    got := ""
+    try
+        got := IniRead(path, sec, key, "")
+    catch as e {
+        detail := " — не прочитать: " e.Message
+        return false
+    }
+    if (got = want)
+        return true
+    detail := " — в файле «" got "», ожидалось «" want "»"
+    return false
+}
+
 ; Только диск: пишет, удаляет и сверяет General и Slots одним проходом.
 ; Не вызывает Release()/LoadConfig() ни при успехе, ни при ошибке — про
 ; runtime знает только SettingsReconcileRuntime(), и только после того,
 ; как эта функция полностью отработала (успешно или нет).
+;
+; mayHavePersisted означает ровно одно: хотя бы одна дисковая операция
+; ЗАВЕРШИЛАСЬ. Бросившая исключение IniWrite/IniDelete файл не меняет,
+; поэтому флаг в catch не поднимается — иначе первый же неудавшийся
+; write запускал бы реконсиляцию неизменённого файла и объявлял рантайм
+; перечитанным там, где его вообще не трогали.
 SettingsPersistVerified(generalWrites, slotPlan, &outcome) {
     global configPath
-    outcome := { ok: true, err: "", mayHavePersisted: false }
+    outcome := { ok: true, code: "", err: "", mayHavePersisted: false }
 
     gDone := 0
     for v in generalWrites {
         try
             IniWrite(v.val, configPath, v.sec, v.key)
         catch as e {
-            outcome.ok := false
-            outcome.err := "Не записалось: [" v.sec "] " v.key " — " e.Message
-                         . (gDone ? ".  До сбоя записано строк: " gDone : "")
+            SettingsPersistFail(&outcome, "write_failed",
+                "Не записалось: [" v.sec "] " v.key " — " e.Message
+              . (gDone ? ".  До сбоя записано строк: " gDone : ""))
             return
         }
         gDone++
         outcome.mayHavePersisted := true
     }
     for v in generalWrites {
-        got := IniRead(configPath, v.sec, v.key, "")
-        if (got != v.val) {
-            outcome.ok := false
-            outcome.err := "Проверка не прошла: [" v.sec "] " v.key
-                         . " — в файле «" got "», ожидалось «" v.val "»"
+        detail := ""
+        if !SettingsVerifyValue(configPath, v.sec, v.key, v.val, &detail) {
+            SettingsPersistFail(&outcome, "verify_failed",
+                "Проверка не прошла: [" v.sec "] " v.key detail)
             return
         }
     }
@@ -3137,23 +3172,43 @@ SettingsPersistVerified(generalWrites, slotPlan, &outcome) {
         try
             IniDelete(configPath, "slot" n)
         catch as e {
-            outcome.ok := false
-            outcome.err := "Не удалить [slot" n "]: " e.Message
+            SettingsPersistFail(&outcome, "write_failed",
+                "Не удалить [slot" n "]: " e.Message)
             return
         }
         outcome.mayHavePersisted := true
     }
     for n in slotPlan.deletes {
         if !SettingsVerifyDeleted(configPath, "slot" n) {
-            outcome.ok := false
-            outcome.err := "Проверка не прошла: [slot" n "] не удалился"
+            SettingsPersistFail(&outcome, "verify_failed",
+                "Проверка не прошла: [slot" n "] не удалился")
             return
         }
     }
+    ; Секция [dynamicSlotN] у слота, ставшего постоянным, ни на что не
+    ; влияет, но LoadConfig сообщает о ней при каждом старте. Раньше её
+    ; удаление шло голым try и молча глотало отказ — единственная
+    ; дисковая операция Save без сверки. Сначала читаем: если секции нет,
+    ; файл не трогаем вовсе, иначе IniDelete по заведомо отсутствующей
+    ; секции поднимал бы mayHavePersisted на каждом Save со слотами.
     for n in slotPlan.touched {
-        if !delSet.Has(n)
-            try
-                IniDelete(configPath, "dynamicSlot" n)
+        if delSet.Has(n)
+            continue
+        if SettingsVerifyDeleted(configPath, "dynamicSlot" n)
+            continue
+        try
+            IniDelete(configPath, "dynamicSlot" n)
+        catch as e {
+            SettingsPersistFail(&outcome, "write_failed",
+                "Не удалить [dynamicSlot" n "]: " e.Message)
+            return
+        }
+        outcome.mayHavePersisted := true
+        if !SettingsVerifyDeleted(configPath, "dynamicSlot" n) {
+            SettingsPersistFail(&outcome, "verify_failed",
+                "Проверка не прошла: [dynamicSlot" n "] не удалился")
+            return
+        }
     }
 
     sDone := 0
@@ -3161,21 +3216,19 @@ SettingsPersistVerified(generalWrites, slotPlan, &outcome) {
         try
             IniWrite(w.val, configPath, w.sec, w.key)
         catch as e {
-            outcome.ok := false
-            outcome.mayHavePersisted := true
-            outcome.err := "Не записалось: [" w.sec "] " w.key " — " e.Message
-                         . (sDone ? ".  До сбоя записано строк: " sDone : "")
+            SettingsPersistFail(&outcome, "write_failed",
+                "Не записалось: [" w.sec "] " w.key " — " e.Message
+              . (sDone ? ".  До сбоя записано строк: " sDone : ""))
             return
         }
         sDone++
         outcome.mayHavePersisted := true
     }
     for w in slotPlan.writes {
-        got := IniRead(configPath, w.sec, w.key, "")
-        if (got != w.val) {
-            outcome.ok := false
-            outcome.err := "Проверка не прошла: [" w.sec "] " w.key
-                         . " — в файле «" got "», ожидалось «" w.val "»"
+        detail := ""
+        if !SettingsVerifyValue(configPath, w.sec, w.key, w.val, &detail) {
+            SettingsPersistFail(&outcome, "verify_failed",
+                "Проверка не прошла: [" w.sec "] " w.key detail)
             return
         }
     }
@@ -3244,31 +3297,150 @@ SettingsReconcileRuntime(slotPlan) {
     SetTimer(HandlesSync, -1)
 }
 
+; Копия поведения слота одним объектом. Снимок обязан пережить
+; следующий LoadConfig: dynamic и dynamicSlots заменяются целиком, а
+; SlotCfg() для слота без собственной секции возвращает сам объект
+; dynamic — отдать его наружу значило бы отдать ссылку на живой глобал.
+SettingsBehaviorCopy(cfg) {
+    return { name:           Opt(cfg, "name", ""),
+             monitor:        Opt(cfg, "monitor", ""),
+             edge:           Opt(cfg, "edge", ""),
+             width:          Opt(cfg, "width", ""),
+             activateOnShow: Opt(cfg, "activateOnShow", true),
+             hideOnBlur:     Opt(cfg, "hideOnBlur", true) }
+}
+
+; Канонический снимок ПРИМЕНЁННОГО состояния: то, чем программа
+; пользуется прямо сейчас, а не то, что набрано в форме. Отвечает на
+; единственный вопрос клиента после частичной записи — «что в итоге
+; действует», — и потому включает живой статус слота (C3), а не только
+; конфиг. Имена полей внутренние (exe/cls/width, monitor строкой):
+; перевод в имена wire (executable/windowClass/widthPercent, MonitorRef)
+; — работа порта, здесь ей не место.
+SettingsStateSnapshot() {
+    global dynamic, animMs, animSteps, blurMs, handlesOn, HANDLE_BG
+    slots := []
+    Loop 9 {
+        n := A_Index
+        if (a := PermApp(n))
+            slots.Push({ n: n, kind: "perm", status: SlotStatus(n),
+                         cfg: { name: a.name, exe: a.exe, cls: a.cls,
+                                monitor: a.monitor, edge: a.edge,
+                                width: a.width,
+                                activateOnShow: a.activateOnShow,
+                                hideOnBlur: a.hideOnBlur,
+                                focusHotkey: Opt(a, "focusHotkey", "") } })
+        else
+            slots.Push({ n: n, kind: "dyn", status: SlotStatus(n),
+                         cfg: SettingsBehaviorCopy(SlotCfg(n)) })
+    }
+    return { general: { dynamicDefaults: SettingsBehaviorCopy(dynamic),
+                        handlesEnabled: handlesOn, animMs: animMs,
+                        animSteps: animSteps, blurMs: blurMs,
+                        accent: HANDLE_BG },
+             slots: slots }
+}
+
+; Номера слотов, которых Save действительно коснулся: и переписанные
+; [slotN], и удалённые. changedWrites считает поля, этот список — слоты;
+; в контракте это changedSlots. Порядок возрастающий и без повторов:
+; у одного слота обычно несколько изменённых ключей.
+SettingsChangedSlots(slotPlan) {
+    seen := Map()
+    for w in slotPlan.writes
+        seen[Integer(SubStr(w.sec, 5))] := true
+    for n in slotPlan.deletes
+        seen[n] := true
+    out := []
+    Loop 9
+        if seen.Has(A_Index)
+            out.Push(A_Index)
+    return out
+}
+
+; Слоты, у которых изменился focusHotkey. Хоткеи регистрируются один раз
+; при старте (см. цикл по apps в начале файла), и Save их не
+; переставляет — это принятое поведение C1, а не недоделка. Контракт
+; называет этот список restartRequiredFields; текст native статус-строки
+; C4 не меняет, поле нужно клиенту порта.
+SettingsRestartRequired(slotPlan) {
+    out := []
+    for w in slotPlan.writes
+        if (w.key = "focusHotkey")
+            out.Push(Integer(SubStr(w.sec, 5)))
+    return out
+}
+
 ; Строгая последовательность validate/plan (уже выполнен вызывающей
 ; стороной) -> persistence+verify -> runtime reconciliation. Единственная
 ; точка, которая решает, нужна ли реконсиляция: она нужна, если диск хоть
 ; немного тронут, — успешно или нет. Native Settings — первый клиент;
 ; DrawerSettingsPort (WebView) станет вторым клиентом этой же функции, не
 ; получая при этом ни setUI, ни HWND, ни INI-секции напрямую.
+;
+; Outcome — полный контракт Save, а не «сохранилось/не сохранилось»:
+;
+;  - code пуст ровно тогда, когда ошибки нет; saved отличает успех от
+;    no-op. Клиент ветвится по code, человек читает err;
+;  - mayHavePersisted говорит, что файл уже изменён и rollback не
+;    обещан; runtimeReloaded — что рантайм после этого перечитан;
+;  - state отдаётся ТОЛЬКО при runtimeReloaded: иначе про применённое
+;    состояние ничего не известно и снимок был бы выдумкой;
+;  - retryable запрещён только там, где диск тронут, а перечитать его не
+;    вышло. Если диска не касались вовсе, рантайм остался каноническим,
+;    и повтор безопасен независимо от кода ошибки.
+;
+; Исключения наружу не выходят: единственный вызывающий — GUI-колбэк
+; Apply/OK, и вылет из него уронил бы не Save, а всё окно настроек.
 SettingsApplyPlan(generalWrites, slotPlan, &outcome) {
     hasSlotWork := slotPlan.writes.Length || slotPlan.deletes.Length
-    outcome := { saved: false, err: "", changedWrites: 0, changedDeletes: 0 }
+    outcome := { saved: false, code: "", err: "", retryable: false,
+                 changedWrites: 0, changedDeletes: 0,
+                 changedSlots: [], restartRequired: [],
+                 mayHavePersisted: false, runtimeReloaded: false, state: 0 }
     if (!generalWrites.Length && !hasSlotWork)
         return
 
-    persist := ""
-    SettingsPersistVerified(generalWrites, slotPlan, &persist)
+    persist := "", reloadErr := ""
+    try
+        SettingsPersistVerified(generalWrites, slotPlan, &persist)
+    catch as e
+        ; Ошибки диска persistence ловит сама; сюда попадает только
+        ; неожиданное. Худшее предположение — файл тронут: реконсиляция
+        ; ниже прочитает, что там на самом деле.
+        persist := { ok: false, code: "internal_error", mayHavePersisted: true,
+                     err: "Сбой записи настроек: " e.Message }
+    outcome.mayHavePersisted := persist.mayHavePersisted
 
-    if persist.mayHavePersisted
-        SettingsReconcileRuntime(slotPlan)
+    if persist.mayHavePersisted {
+        try {
+            SettingsReconcileRuntime(slotPlan)
+            outcome.runtimeReloaded := true
+        } catch as e
+            reloadErr := e.Message
+    }
+    if outcome.runtimeReloaded
+        outcome.state := SettingsStateSnapshot()
 
     if !persist.ok {
+        outcome.code := persist.code
         outcome.err := persist.err
+        outcome.retryable := !outcome.mayHavePersisted || outcome.runtimeReloaded
+        return
+    }
+    if (reloadErr != "") {
+        ; Диск записан и сверен, но перечитать не удалось. Успехом это
+        ; называть нельзя: про рантайм больше ничего не известно, а
+        ; повтор Save пошёл бы поверх состояния, которого никто не видел.
+        outcome.code := "internal_error"
+        outcome.err := "Настройки записаны, но перечитать конфиг не удалось: " reloadErr
         return
     }
     outcome.saved := true
     outcome.changedWrites := generalWrites.Length + slotPlan.writes.Length
     outcome.changedDeletes := slotPlan.deletes.Length
+    outcome.changedSlots := SettingsChangedSlots(slotPlan)
+    outcome.restartRequired := SettingsRestartRequired(slotPlan)
 }
 
 ; Состояние формы одной строкой — этого хватает, чтобы понять, трогал ли
@@ -3340,7 +3512,9 @@ SettingsSave(closeAfter) {
     outcome := ""
     SettingsApplyPlan(vals, slotPlan, &outcome)
 
-    if (outcome.err != "") {
+    ; Провал — это непустой code, а не непустой текст: текст остаётся
+    ; человеческим сообщением и в статус-строке, и на wire.
+    if (outcome.code != "") {
         SettingsStatus(outcome.err, true)
         return
     }

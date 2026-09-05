@@ -40,6 +40,15 @@
 ; Точка 8 (C3): статическая проверка, что статус нигде не разбирается из
 ; русской строки, а сами подписи остались дословными — на них стоят
 ; проверки набора setstat.
+;
+; Точка 9 (C4, Save outcome): копия решающей логики SettingsApplyPlan со
+; стадиями-параметрами — какой outcome получается при каком исходе
+; persistence и reload. Плюс сверка значения на настоящем временном INI
+; и чистые SettingsChangedSlots/SettingsRestartRequired.
+;
+; Точка 10 (C4): статическая проверка, что каждый провал persistence
+; несёт код контракта, удаление [dynamicSlotN] сверяется, реконсиляция
+; вызвана под try и state отдаётся только после успешного reload.
 
 drawerPath := A_ScriptDir "\..\..\src\drawer.ahk"
 
@@ -408,6 +417,252 @@ if !FileExist(drawerPath) {
     bodyWin := posWin ? SubStr(src8, posWin, 420) : ""
     Assert("8g: SlotWindow не пишет в managed",
         posWin > 0 && InStr(bodyWin, "managed[n] :=") = 0)
+}
+
+; ---------------------------------------------------------------
+; Точка 9 (C4): контракт outcome. Настоящий SettingsApplyPlan трогает
+; диск и рантайм, а вопрос «какой outcome при каком исходе стадий» —
+; чистая арифметика, поэтому решающая часть скопирована со стадиями,
+; подставленными параметрами. Если ветвление в src/drawer.ahk изменится,
+; эту копию нужно обновить вручную — как и копии в точках 1, 5, 7.
+; ---------------------------------------------------------------
+ApplyOutcomeCopy(hasWork, persistOk, persistCode, mayHavePersisted, reloadOk) {
+    o := { saved: false, code: "", retryable: false, mayHavePersisted: false,
+           runtimeReloaded: false, hasState: false }
+    if !hasWork
+        return o
+    o.mayHavePersisted := mayHavePersisted
+    reloadErr := false
+    if mayHavePersisted {
+        if reloadOk
+            o.runtimeReloaded := true
+        else
+            reloadErr := true
+    }
+    o.hasState := o.runtimeReloaded
+    if !persistOk {
+        o.code := persistCode
+        o.retryable := !o.mayHavePersisted || o.runtimeReloaded
+        return o
+    }
+    if reloadErr {
+        o.code := "internal_error"
+        return o
+    }
+    o.saved := true
+    return o
+}
+
+; Менять нечего: до диска дело не доходит, даже если стадиям подсунуть
+; «файл тронут» — ранний выход обязан случиться раньше их результатов.
+o := ApplyOutcomeCopy(false, true, "", true, true)
+Assert("9a: no-op — ни saved, ни кода, ни тронутого файла",
+    o.saved = false && o.code = "" && o.mayHavePersisted = false
+ && o.runtimeReloaded = false && o.hasState = false)
+
+o := ApplyOutcomeCopy(true, true, "", true, true)
+Assert("9b: полный успех — saved, пустой код, перечитано, state есть",
+    o.saved = true && o.code = "" && o.runtimeReloaded = true
+ && o.hasState = true)
+
+; Первый же IniWrite бросил: файл не изменён, рантайм канонический.
+o := ApplyOutcomeCopy(true, false, "write_failed", false, true)
+Assert("9c: провал ДО первой мутации — reload не нужен, state не отдаём",
+    o.code = "write_failed" && o.mayHavePersisted = false
+ && o.runtimeReloaded = false && o.hasState = false)
+Assert("9d: провал до мутации повторяем — рантайм не расходился с файлом",
+    o.retryable = true)
+
+; Часть записана, реконсиляция удалась: rollback не обещан, но клиент
+; знает актуальное состояние и может повторить.
+o := ApplyOutcomeCopy(true, false, "write_failed", true, true)
+Assert("9e: частичная запись + успешный reload — partial с актуальным state",
+    o.code = "write_failed" && o.saved = false && o.mayHavePersisted = true
+ && o.runtimeReloaded = true && o.hasState = true && o.retryable = true)
+
+; Часть записана, перечитать не вышло — единственный случай, когда
+; повтор запрещён: применённое состояние никому не известно.
+o := ApplyOutcomeCopy(true, false, "verify_failed", true, false)
+Assert("9f: частичная запись + неудачный reload — без state и без повтора",
+    o.code = "verify_failed" && o.mayHavePersisted = true
+ && o.runtimeReloaded = false && o.hasState = false && o.retryable = false)
+
+; Диск записан и сверен, но LoadConfig бросил — успехом это не считается.
+o := ApplyOutcomeCopy(true, true, "", true, false)
+Assert("9g: запись прошла, reload упал — internal_error, а не success",
+    o.saved = false && o.code = "internal_error" && o.hasState = false
+ && o.retryable = false)
+
+Assert("9h: saved не бывает без успешного reload",
+    ApplyOutcomeCopy(true, true, "", true, false).saved = false
+ && ApplyOutcomeCopy(true, true, "", true, true).saved = true)
+
+; --- changedSlots / restartRequired: чистые функции, копии из src ---
+ChangedSlotsCopy(writes, deletes) {
+    seen := Map()
+    for w in writes
+        seen[Integer(SubStr(w.sec, 5))] := true
+    for n in deletes
+        seen[n] := true
+    out := []
+    Loop 9
+        if seen.Has(A_Index)
+            out.Push(A_Index)
+    return out
+}
+RestartRequiredCopy(writes) {
+    out := []
+    for w in writes
+        if (w.key = "focusHotkey")
+            out.Push(Integer(SubStr(w.sec, 5)))
+    return out
+}
+Join(a) {
+    s := ""
+    for v in a
+        s .= (s = "" ? "" : ",") v
+    return s
+}
+
+wr := [{ sec: "slot7", key: "exe", val: "a.exe" },
+       { sec: "slot2", key: "name", val: "N" },
+       { sec: "slot2", key: "width", val: "60" },
+       { sec: "slot2", key: "focusHotkey", val: "^!t" }]
+Assert("9i: changedSlots — номера по возрастанию, писать можно и не по порядку",
+    Join(ChangedSlotsCopy(wr, [5])) = "2,5,7")
+Assert("9j: слот с двумя изменёнными ключами попадает в список один раз",
+    Join(ChangedSlotsCopy([{ sec: "slot2", key: "name", val: "N" },
+                           { sec: "slot2", key: "edge", val: "left" }], [])) = "2")
+Assert("9k: restartRequired — только focusHotkey, а не любая правка слота",
+    Join(RestartRequiredCopy(wr)) = "2")
+Assert("9l: правки без focusHotkey рестарта не требуют",
+    RestartRequiredCopy([{ sec: "slot3", key: "width", val: "70" }]).Length = 0)
+
+; --- сверка значения на настоящем временном INI (окон не касается) ---
+SettingsVerifyValue(path, sec, key, want, &detail) {
+    got := ""
+    try
+        got := IniRead(path, sec, key, "")
+    catch as e {
+        detail := " — не прочитать: " e.Message
+        return false
+    }
+    if (got = want)
+        return true
+    detail := " — в файле «" got "», ожидалось «" want "»"
+    return false
+}
+
+verIni := A_Temp "\drawer_narrow_verify_test.ini"
+try FileDelete(verIni)
+IniWrite("60", verIni, "dynamic", "width")
+
+d := ""
+Assert("9m: записанное значение совпало — сверка проходит",
+    SettingsVerifyValue(verIni, "dynamic", "width", "60", &d) = true)
+d := ""
+Assert("9n: в файле другое значение — сверка не проходит и говорит, что там",
+    SettingsVerifyValue(verIni, "dynamic", "width", "70", &d) = false
+ && InStr(d, "в файле «60»") > 0)
+d := ""
+Assert("9o: ключа в файле нет — это тоже провал сверки, а не молчаливое «ок»",
+    SettingsVerifyValue(verIni, "dynamic", "edge", "left", &d) = false)
+
+IniWrite("Слот 4", verIni, "dynamicSlot4", "name")
+Assert("9p: живая [dynamicSlotN] не считается удалённой",
+    SettingsVerifyDeleted(verIni, "dynamicSlot4") = false)
+IniDelete(verIni, "dynamicSlot4")
+Assert("9q: после удаления [dynamicSlotN] сверка подтверждает отсутствие",
+    SettingsVerifyDeleted(verIni, "dynamicSlot4") = true)
+try FileDelete(verIni)
+
+; ---------------------------------------------------------------
+; Точка 10 (C4): статическая проверка src/drawer.ahk.
+; ---------------------------------------------------------------
+
+; Тело без строк-комментариев: статическая проверка должна смотреть на
+; код, а не на слова о коде — иначе комментарий «не вызывает LoadConfig()»
+; провалил бы проверку «LoadConfig здесь не вызывается».
+NoComments(body) {
+    out := ""
+    for line in StrSplit(body, "`n", "`r")
+        if (SubStr(Trim(line), 1, 1) != ";")
+            out .= line "`n"
+    return out
+}
+
+if !FileExist(drawerPath) {
+    Assert("10: src/drawer.ahk найден рядом с test/narrow (" drawerPath ")", false)
+} else {
+    src10 := FileRead(drawerPath, "UTF-8")
+
+    pP := InStr(src10, "SettingsPersistVerified(generalWrites, slotPlan, &outcome) {")
+    pR := InStr(src10, "SettingsReconcileRuntime(slotPlan) {")
+    codeP := (pP > 0 && pR > pP) ? NoComments(SubStr(src10, pP, pR - pP)) : ""
+    Assert("10a: тело SettingsPersistVerified найдено", codeP != "")
+
+    Assert("10b: каждый провал persistence идёт через код контракта",
+        InStr(codeP, "SettingsPersistFail(&outcome, `"write_failed`"") > 0
+     && InStr(codeP, "SettingsPersistFail(&outcome, `"verify_failed`"") > 0
+     && InStr(codeP, "outcome.err :=") = 0
+     && InStr(codeP, "outcome.ok := false") = 0)
+
+    Assert("10c: удаление [dynamicSlotN] теперь сверяется",
+        InStr(codeP, "Проверка не прошла: [dynamicSlot") > 0
+     && InStr(codeP, "Не удалить [dynamicSlot") > 0)
+    Assert("10d: голого try IniDelete(dynamicSlot) без catch больше нет",
+        InStr(codeP, "if !delSet.Has(n)") = 0)
+
+    Assert("10e: persistence по-прежнему ничего не знает о рантайме",
+        InStr(codeP, "LoadConfig(") = 0 && InStr(codeP, "Release(") = 0)
+
+    pA := InStr(src10, "SettingsApplyPlan(generalWrites, slotPlan, &outcome) {")
+    pS := InStr(src10, "SettingsSnapshot() {")
+    bodyA := (pA > 0 && pS > pA) ? SubStr(src10, pA, pS - pA) : ""
+    codeA := bodyA != "" ? NoComments(bodyA) : ""
+    Assert("10f: тело SettingsApplyPlan найдено", codeA != "")
+
+    pTry := InStr(codeA, "try {")
+    pRec := InStr(codeA, "SettingsReconcileRuntime(slotPlan)")
+    Assert("10g: реконсиляция вызвана под try — исключение не уходит в GUI-колбэк",
+        pTry > 0 && pRec > pTry && InStr(codeA, "reloadErr := e.Message") > 0)
+
+    pTryP := InStr(codeA, "try")
+    pCall := InStr(codeA, "SettingsPersistVerified(")
+    Assert("10h: persistence тоже вызвана под try, с internal_error в запасе",
+        pTryP > 0 && pCall > pTryP && pCall < pTry
+     && InStr(codeA, "`"internal_error`"") > 0)
+
+    pIf := InStr(codeA, "if outcome.runtimeReloaded")
+    pSt := InStr(codeA, "outcome.state := SettingsStateSnapshot()")
+    Assert("10i: state отдаётся только после успешного reload",
+        pIf > 0 && pSt > pIf && (pSt - pIf) < 60
+     && StrSplit(codeA, "outcome.state :=").Length = 2)
+
+    Assert("10j: outcome несёт весь контракт partial failure",
+        InStr(codeA, "mayHavePersisted: false") > 0
+     && InStr(codeA, "runtimeReloaded: false") > 0
+     && InStr(codeA, "changedSlots: []") > 0
+     && InStr(codeA, "restartRequired: []") > 0
+     && InStr(codeA, "retryable: false") > 0)
+
+    Assert("10k: повтор запрещён только при тронутом диске без reload",
+        InStr(codeA, "outcome.retryable := !outcome.mayHavePersisted || outcome.runtimeReloaded") > 0)
+
+    pSnap := InStr(src10, "SettingsStateSnapshot() {")
+    pCh := InStr(src10, "SettingsChangedSlots(slotPlan) {")
+    bodySnap := (pSnap > 0 && pCh > pSnap) ? SubStr(src10, pSnap, pCh - pSnap) : ""
+    Assert("10l: снимок копирует настройки, а не отдаёт живой глобал",
+        bodySnap != "" && InStr(bodySnap, "SettingsBehaviorCopy(SlotCfg(n))") > 0
+     && InStr(bodySnap, "SettingsBehaviorCopy(dynamic)") > 0)
+    Assert("10m: снимок включает живой статус слота, а не только конфиг",
+        InStr(bodySnap, "SlotStatus(n)") > 0)
+
+    pSave := InStr(src10, "SettingsSave(closeAfter) {")
+    codeSave := pSave ? NoComments(SubStr(src10, pSave, 1800)) : ""
+    Assert("10n: native ветвится по коду, а не по непустому тексту",
+        pSave > 0 && InStr(codeSave, "if (outcome.code != `"`")") > 0
+     && InStr(codeSave, "if (outcome.err != `"`")") = 0)
 }
 
 ; ---------------------------------------------------------------

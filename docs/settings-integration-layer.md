@@ -649,9 +649,10 @@ status; frontend сравнивает его с прежним baseline и не 
 |---|---|
 | `SettingsGeneralPlan(input, &err)` | Semantic input без controls → точечные General writes; сравнение с runtime через `SettingsLive`. |
 | `SettingsSlotsPlan(edits, &err)` | Edits → writes/deletes/touched и snapshot `oldBySlot`/`oldIdent`; без записи и Release. |
-| `SettingsPersistVerified(generalWrites, slotPlan, &outcome)` | INI writes/deletes/readback; outcome `{ok, err, mayHavePersisted}`; не вызывает `Release`/`LoadConfig`. |
+| `SettingsPersistVerified(generalWrites, slotPlan, &outcome)` | INI writes/deletes/readback; outcome `{ok, code, err, mayHavePersisted}` с кодами `write_failed`/`verify_failed`; не вызывает `Release`/`LoadConfig`. |
 | `SettingsReconcileRuntime(slotPlan)` | Перечитывает INI, обновляет настройки/кромки, переиндексирует Permanent по номеру, сохраняет HWND при неизменных exe/cls и освобождает исчезнувшие/изменённые bindings. |
-| `SettingsApplyPlan(generalWrites, slotPlan, &outcome)` | Persist, затем reconcile при `persist.mayHavePersisted`; outcome `{saved, err, changedWrites, changedDeletes}`. |
+| `SettingsApplyPlan(generalWrites, slotPlan, &outcome)` | Persist, затем reconcile при `persist.mayHavePersisted`; обе стадии под `try`; outcome `{saved, code, err, retryable, changedWrites, changedDeletes, changedSlots, restartRequired, mayHavePersisted, runtimeReloaded, state}`. |
+| `SettingsStateSnapshot()` | Канонический снимок применённого состояния: General плюс девять слотов с конфигом и живым `SlotStatus`. Имена полей внутренние; перевод в wire-имена — работа порта. |
 | `SettingsCollect` / `SettingsSlotsCollect` | Native UI-adapters для двух plan-функций. |
 | `SettingsSave` | Вызывает общий seam, затем обновляет native status/rebase/close. |
 
@@ -661,11 +662,14 @@ Reconciliation освобождает dynamic binding тронутого ном�
 `dynSlots.Has(n) && permSlots.Has(n)` после `LoadConfig` и пересборки
 `permSlots`. Не записавшаяся conversion не освобождает оставшийся Dynamic.
 
-Оставшиеся ограничения относятся к C4/C5:
+C4 закрыл outcome-часть. `retryable` считается как «диск не тронут, либо
+рантайм успешно перечитан»: запрет повтора нужен там, где применённое
+состояние неизвестно, а не там, где файла вообще не касались. Успешная
+persistence с упавшим reload — `internal_error`, а не success. Снимок
+`state` отдаётся только вместе с `runtimeReloaded=true`.
 
-- Wire codes, `partial`, `runtimeReloaded` и canonical state ещё не возвращаются.
-- Удаление `[dynamicSlotN]` пока подавляет ошибку и не имеет отдельной сверки;
-  исключения readback/reload не везде преобразуются в outcome.
+Оставшиеся ограничения относятся к C5:
+
 - Plan читает runtime globals; `LoadConfig` показывает MsgBox. Это ещё не
   headless config API и не полная backend-валидация произвольного DTO.
 - `oldBySlot` изменяется reconciliation: plan не является повторно используемым

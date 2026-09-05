@@ -54,6 +54,16 @@ reconciliation перечитывает файл после выхода из pe
 подтверждением удаления; динамический binding тронутого слота освобождается
 только при фактическом переходе в Permanent после `LoadConfig`.
 
+В C4 outcome доведён до полного контракта Save. `SettingsPersistVerified`
+возвращает код `write_failed`/`verify_failed` вместо одного текста;
+`mayHavePersisted` поднимается только завершившейся дисковой операцией.
+`SettingsApplyPlan` ловит исключения обеих стадий — из GUI-колбэка Apply/OK
+ничего не вылетает — и возвращает `runtimeReloaded`, `changedSlots`,
+`restartRequired` и канонический `state` (`SettingsStateSnapshot`), причём
+`state` только после успешного reload. Повтор запрещён единственным случаем:
+диск тронут, а перечитать его не удалось. Удаление `[dynamicSlotN]` теперь
+сверяется чтением, как и удаление `[slotN]`.
+
 Production WebView bridge ещё не подключён. `settings-ui/` — Vue-фронтенд
 с mock state/bridge. Принятый integration-контракт перенесён из spike/review
 в `docs/settings-integration-layer.md`; архитектурный gate Claude — GO.
@@ -125,10 +135,11 @@ VM-оркестратор находится в `test/vm/` и используе
 артефакты вернулись на хост, VM выключилась штатно. `apps`/`all` в этой
 VM не подтверждены.
 
-В commit `a39f543` зафиксированы `/validate` для production AHK и узкого
-теста, а также `test/narrow/settings-seam.ahk`: 10/10. Проверка удаления
-исполняет копию функции, проверка reconciliation анализирует исходник;
-это не поведенческая приёмка S4. VM/full suite для этого commit не запускался.
+`test/narrow/settings-seam.ahk` — 86/86 на host: копии чистых функций
+(`SettingsVerifyDeleted`, `IsServiceWindow`, `SlotWindow`/`SlotStatus`,
+решающая логика `SettingsApplyPlan`), сверка значений на временном INI и
+статические проверки исходника. Это не поведенческая приёмка S4.
+VM/full suite для C1–C4 не запускался.
 
 ## Подтверждённые ограничения
 
@@ -146,17 +157,17 @@ VM не подтверждены.
   меняющего состав Permanent-слотов, индекс может указывать на другой слот;
   исправление по стабильному номеру слота — C1.
 - Save не транзакционный: General может сохраниться раньше ошибки Slots.
-  Возвращаемый outcome пока содержит `saved`, `err`, `changedWrites`,
-  `changedDeletes`, без wire error codes и recovery state — C4.
+  Rollback не обещается; частичная запись возвращается как `write_failed`
+  или `verify_failed` с `mayHavePersisted`, а не как успех.
 
 ## Оставшиеся риски и пробелы
 
 - Смешанный DPI мониторов не проверен.
 - Сочетание `hideOnBlur=true` и `activateOnShow=false` не покрыто
   отдельным тестом.
-- Полный failure-path Save ещё не закрыт: удаление `[dynamicSlotN]`
-  выполняется без отдельной сверки, исключения readback/reload не везде
-  превращаются в outcome. Эти ограничения входят в C4.
+- Расхождение файла и рантайма после неудачного reload не устраняется
+  автоматически: outcome сообщает `runtimeReloaded=false` и запрещает
+  повтор, но привести рантайм в соответствие может только перезапуск.
 - Validation/config пока зависят от globals и native UI: `LoadConfig`
   показывает MsgBox, а часть допустимого ввода обеспечивают контролы.
   Headless-граница для WebView — C5.
