@@ -61,6 +61,7 @@
 ; передают его в запись как есть.
 
 drawerPath := A_ScriptDir "\..\..\src\drawer.ahk"
+slotsPath  := A_ScriptDir "\..\..\src\Slots.ahk"
 
 results := []
 Assert(name, cond) {
@@ -100,43 +101,58 @@ Assert("1d: соседняя секция цела после чужого IniDe
 try FileDelete(scratchIni)
 
 ; ---------------------------------------------------------------
-; Точка 2: статическая проверка исходника src/drawer.ahk — правильный
-; gate у Release() и правильный порядок стадий внутри
-; SettingsReconcileRuntime (сама функция не выполняется).
+; Точка 2: статическая проверка порядка стадий реконсиляции. После
+; выделения реестра слотов она живёт в двух местах: сама
+; SettingsReconcileRuntime (перечитать файл -> отдать его реестру) и
+; Slots.Apply (проекция файла -> отпускание окон). Проверяются оба, сами
+; функции не выполняются.
 ; ---------------------------------------------------------------
-if !FileExist(drawerPath) {
-    Assert("2: src/drawer.ahk найден рядом с test/narrow (" drawerPath ")", false)
+if !FileExist(drawerPath) || !FileExist(slotsPath) {
+    Assert("2: src/drawer.ahk и src/Slots.ahk найдены рядом с test/narrow", false)
 } else {
     src := FileRead(drawerPath, "UTF-8")
     posFn := InStr(src, "SettingsReconcileRuntime(slotPlan, &diags)")
     Assert("2a: SettingsReconcileRuntime найдена в src/drawer.ahk", posFn > 0)
 
     body := posFn ? SubStr(src, posFn, 2000) : ""
-    posLoadConfig  := InStr(body, "LoadConfig(configPath")
-    posPermRebuild := InStr(body, "permSlots.Clear()")
-    posGate        := InStr(body, "dynSlots.Has(n) && permSlots.Has(n)")
-    posManagedClr  := InStr(body, "managed.Clear()")
+    posLoadConfig := InStr(body, "LoadConfig(configPath")
+    posApply      := InStr(body, "Slots.Apply(cfg, slotPlan.prevPerm)")
+    Assert("2b: реконсиляция отдаёт слоты реестру, а не правит структуры сама",
+        posApply > 0 && InStr(body, "Release(") = 0)
+    Assert("2c: проекция идёт ПОСЛЕ чтения диска (не до, как было багом)",
+        posLoadConfig > 0 && posApply > posLoadConfig)
 
-    Assert("2b: gate 'dynSlots.Has(n) && permSlots.Has(n)' присутствует",
+    srcSlots := FileRead(slotsPath, "UTF-8")
+    posApplyFn := InStr(srcSlots, "static Apply(cfg, prevPerm := 0) {")
+    Assert("2d: Slots.Apply найдена в src/Slots.ahk", posApplyFn > 0)
+    bodyApply := posApplyFn ? SubStr(srcSlots, posApplyFn, 1800) : ""
+
+    posProject := InStr(bodyApply, "s.perm     := cfg.perm.Has(n)")
+    posGate    := InStr(bodyApply, "if (dynBind[n] && Slots.Get(n).perm) {")
+    posRestore := InStr(bodyApply, "for n, hwnd in old.bySlot {")
+
+    Assert("2e: gate 'динамическая привязка + слот стал постоянным' присутствует",
         posGate > 0)
-    Assert("2c: gate стоит ПОСЛЕ LoadConfig (не до диска, как было багом)",
-        posLoadConfig > 0 && posGate > posLoadConfig)
-    Assert("2d: gate стоит ПОСЛЕ пересборки permSlots (иначе permSlots.Has(n) читает старые данные)",
-        posPermRebuild > 0 && posGate > posPermRebuild)
-    Assert("2e: gate стоит ДО очистки managed (порядок стадий не перепутан)",
-        posManagedClr > 0 && posGate < posManagedClr)
-    Assert("2f: старого безусловного 'if dynSlots.Has(n) {' (без && permSlots.Has(n)) в функции нет",
-        InStr(body, "if dynSlots.Has(n) {") = 0)
+    Assert("2f: gate стоит ПОСЛЕ проекции файла (иначе .perm читает старые данные)",
+        posProject > 0 && posGate > posProject)
+    Assert("2g: gate стоит ДО восстановления постоянных привязок из снимка",
+        posRestore > 0 && posGate < posRestore)
+    Assert("2h: динамическая привязка отпускается только под этим gate",
+        StrSplit(bodyApply, "Release(dynBind[n])").Length = 2)
+    Assert("2i: постоянные привязки берутся только из снимка плана",
+        InStr(bodyApply, "old := prevPerm ? prevPerm : { bySlot: Map(), ident: Map() }") > 0
+     && InStr(bodyApply, "s.window   := 0") > 0)
 }
 
 ; ---------------------------------------------------------------
-; Точка 3 (C1): стабильный Slot ID. LoadConfig пересобирает apps в
-; порядке номеров слотов, поэтому позиция в массиве — не идентичность:
-; появление постоянного слота с меньшим номером сдвигает всё, что за ним.
-; Здесь моделируется ровно эта пересборка и сравниваются два способа
-; разрешить слот из уже зарегистрированного колбэка: по номеру (как
-; сейчас) и по индексу (как было до C1). Окон, фокуса и config.ini
-; проверка не касается — это чистая арифметика идентичности.
+; Точка 3 (C1): стабильный Slot ID. Модель прежнего позиционного списка
+; постоянных слотов: появление слота с меньшим номером сдвигало всё, что
+; за ним. Сравниваются два способа разрешить слот из уже
+; зарегистрированного колбэка — по номеру и по позиции, — и показывается,
+; почему позиция идентичностью быть не может. Самого списка в production
+; больше нет (точка 4 это и проверяет); модель остаётся регрессионным
+; аргументом за номер слота. Окон, фокуса и config.ini проверка не
+; касается — это чистая арифметика идентичности.
 ; ---------------------------------------------------------------
 
 ; Тот же порядок, которым apps наполняется в LoadConfig: Loop 9 по
@@ -191,25 +207,33 @@ Assert("3g: managed по индексу после пересборки отда
     managedByIndex.Has(after.permSlots[2]) && managedByIndex[after.permSlots[2]] = 4242)
 
 ; ---------------------------------------------------------------
-; Точка 4 (C1): исходник src/drawer.ahk не содержит прежней
-; apps-index-идентичности.
+; Точка 4 (C1): в исходниках не осталось ни позиционной идентичности
+; слота, ни параллельных структур, которые могли описать один слот
+; по-разному. Идентичность — номер, хранилище — одна запись реестра.
 ; ---------------------------------------------------------------
-if !FileExist(drawerPath) {
-    Assert("4: src/drawer.ahk найден рядом с test/narrow", false)
+if !FileExist(drawerPath) || !FileExist(slotsPath) {
+    Assert("4: src/drawer.ahk и src/Slots.ahk найдены рядом с test/narrow", false)
 } else {
-    src4 := FileRead(drawerPath, "UTF-8")
+    src4  := FileRead(drawerPath, "UTF-8")
+    src4s := FileRead(slotsPath, "UTF-8")
+    ; Смотреть надо на код, а не на слова о коде: шапка Slots.ahk
+    ; называет прежние структуры, объясняя, почему их больше нет.
+    both  := NoComments(src4) . NoComments(src4s)
     Assert("4a: focus-хоткей регистрируется номером слота",
         InStr(src4, "OnFocusHotkey.Bind(a.slot)") > 0)
-    Assert("4b: прежней регистрации по индексу apps нет",
+    Assert("4b: прежней регистрации по позиции в списке нет",
         InStr(src4, "OnFocusHotkey.Bind(i)") = 0)
-    Assert("4c: PermApp(n) — единственная точка разрешения номера в запись apps",
-        InStr(src4, "PermApp(n) {") > 0)
-    Assert("4d: managed нигде не индексируется индексом apps",
-        InStr(src4, "managed[i]") = 0 && InStr(src4, "managed.Has(i)") = 0)
-    Assert("4e: apps[...] читается только внутри PermApp",
-        StrSplit(src4, "apps[permSlots[n]]").Length = 2
-     && InStr(src4, "apps[permSlots[r.n]]") = 0
-     && InStr(src4, "apps[i]") = 0)
+    Assert("4c: SlotPerm(n) — единственная точка разрешения номера в конфигурацию",
+        InStr(src4s, "SlotPerm(n) {") > 0
+     && StrSplit(src4s, "Slots.Get(n).perm`r`n}").Length = 2)
+    Assert("4d: параллельных структур состояния слота больше нет",
+        InStr(both, "permSlots") = 0 && InStr(both, "dynSlots") = 0
+     && InStr(both, "managed[") = 0 && InStr(both, "managed.Has(") = 0)
+    Assert("4e: запись слота адресуется номером, а не позицией",
+        InStr(src4s, "Slots.byNum[n] := Slot(n)") > 0
+     && InStr(both, "apps[") = 0)
+    Assert("4f: реестр читают только через API — byNum наружу не ходит",
+        InStr(src4, "Slots.byNum") = 0)
 }
 
 ; ---------------------------------------------------------------
@@ -398,8 +422,9 @@ if !FileExist(drawerPath) {
     Assert("8: src/drawer.ahk найден рядом с test/narrow", false)
 } else {
     src8 := FileRead(drawerPath, "UTF-8")
+    src8s := FileExist(slotsPath) ? FileRead(slotsPath, "UTF-8") : ""
     Assert("8a: SlotStatus(n) — read-only API по номеру слота",
-        InStr(src8, "SlotStatus(n) {") > 0 && InStr(src8, "SlotWindow(n) {") > 0)
+        InStr(src8s, "SlotStatus(n) {") > 0 && InStr(src8s, "SlotWindow(n) {") > 0)
     Assert("8b: прежней SettingsSlotStatus(r) нет",
         InStr(src8, "SettingsSlotStatus") = 0)
 
@@ -423,10 +448,11 @@ if !FileExist(drawerPath) {
         StrSplit(src8, "`"припаркован`"").Length = 2
      && StrSplit(src8, "`"выдвинут`"").Length = 2)
 
-    posWin := InStr(src8, "SlotWindow(n) {")
-    bodyWin := posWin ? SubStr(src8, posWin, 420) : ""
-    Assert("8g: SlotWindow не пишет в managed",
-        posWin > 0 && InStr(bodyWin, "managed[n] :=") = 0)
+    posWin := InStr(src8s, "SlotWindow(n) {")
+    bodyWin := posWin ? SubStr(src8s, posWin, 420) : ""
+    Assert("8g: SlotWindow не захватывает окно — пишет только SlotCapture",
+        posWin > 0 && InStr(bodyWin, "s.window :=") = 0
+     && InStr(src8s, "SlotCapture(n) {") > 0)
 }
 
 ; ---------------------------------------------------------------
@@ -664,7 +690,7 @@ if !FileExist(drawerPath) {
     bodySnap := (pSnap > 0 && pCh > pSnap) ? SubStr(src10, pSnap, pCh - pSnap) : ""
     Assert("10l: снимок копирует настройки, а не отдаёт живой глобал",
         bodySnap != "" && InStr(bodySnap, "SettingsBehaviorCopy(SlotCfg(n))") > 0
-     && InStr(bodySnap, "SettingsBehaviorCopy(dynamic)") > 0)
+     && InStr(bodySnap, "SettingsBehaviorCopy(SlotDefaults())") > 0)
     Assert("10m: снимок включает живой статус слота, а не только конфиг",
         InStr(bodySnap, "SlotStatus(n)") > 0)
 
@@ -835,10 +861,10 @@ if !FileExist(drawerPath) {
 } else {
     src12 := FileRead(drawerPath, "UTF-8")
 
-    pLoad := InStr(src12, "LoadConfig(path, &apps,")
+    pLoad := InStr(src12, "LoadConfig(path, &diags) {")
     pBool := InStr(src12, "IniBool(path, section, key, def, &diags) {")
     pShow := InStr(src12, "ConfigDiagShow(diags) {")
-    pEnd  := InStr(src12, "managed   := Map()")
+    pEnd  := InStr(src12, "state     := Map()")
     codeLoad := (pLoad > 0 && pBool > pLoad) ? NoComments(SubStr(src12, pLoad, pBool - pLoad)) : ""
     codeBool := (pBool > 0 && pShow > pBool) ? NoComments(SubStr(src12, pBool, pShow - pBool)) : ""
     codeShow := (pShow > 0 && pEnd > pShow) ? SubStr(src12, pShow, pEnd - pShow) : ""
@@ -847,9 +873,14 @@ if !FileExist(drawerPath) {
 
     Assert("12b: LoadConfig окон не открывает — годится для headless",
         InStr(codeLoad, "MsgBox") = 0 && InStr(codeLoad, "diags.Push(") > 0)
-    Assert("12c: LoadConfig принимает &diags и обнуляет его при входе",
-        InStr(codeLoad, "&handleBg, &diags) {") > 0
-     && InStr(codeLoad, "diags        := []") > 0)
+    Assert("12c: LoadConfig принимает &diags, обнуляет его при входе и отдаёт конфиг значением",
+        InStr(codeLoad, "LoadConfig(path, &diags) {") > 0
+     && InStr(codeLoad, "diags := []") > 0
+     && InStr(codeLoad, "return { animMs: animMs") > 0)
+    Assert("12n: рантайм заполняет ConfigApply, а не сама загрузка",
+        InStr(codeLoad, "global ") = 0
+     && InStr(src12, "ConfigApply(cfg) {") > 0
+     && InStr(src12, "ConfigApply(bootConfig)") > 0)
     Assert("12d: IniBool тоже пишет в diags, а не в окно",
         InStr(codeBool, "MsgBox") = 0 && InStr(codeBool, "diags.Push(") > 0)
     Assert("12e: показ замечаний остался ровно один — ConfigDiagShow",
@@ -971,10 +1002,11 @@ Assert("13l: SlotRelease успешен на занятом dynamic слоте",
     SlotReleaseModel(mPerm, mDyn, false, 4).ok = true && !mDyn.Has(4))
 
 ; Статические проверки исходников
-if FileExist(drawerPath) {
+if FileExist(drawerPath) && FileExist(slotsPath) {
     src13 := FileRead(drawerPath, "UTF-8")
-    Assert("13m: в drawer.ahk определены SlotBind и SlotRelease",
-        InStr(src13, "SlotBind(n) {") > 0 && InStr(src13, "SlotRelease(n) {") > 0)
+    Assert("13m: в src/Slots.ahk определены SlotBind и SlotRelease",
+        InStr(FileRead(slotsPath, "UTF-8"), "SlotBind(n) {") > 0
+     && InStr(FileRead(slotsPath, "UTF-8"), "SlotRelease(n) {") > 0)
     Assert("13n: BindSlot делегирует в SlotBind",
         InStr(src13, "res := SlotBind(n)") > 0)
     Assert("13o: ReleaseSlot делегирует в SlotRelease",
@@ -1033,9 +1065,8 @@ if FileExist(drawerPath) {
     pPlanEnd := InStr(src15, "; Отказ плана одним видом")
     codePlan := (pPlan > 0 && pPlanEnd > pPlan) ? NoComments(SubStr(src15, pPlan, pPlanEnd - pPlan)) : ""
     Assert("15b: каждый выход плана несёт адрес поля",
-        codePlan != "" && InStr(codePlan, "oldIdent: Map() }") = 0
-     && StrSplit(codePlan, "return {").Length = 2
-     && InStr(codePlan, "oldIdent: oldIdent, field: `"`"") > 0
+        codePlan != "" && StrSplit(codePlan, "return {").Length = 2
+     && InStr(codePlan, "prevPerm: Slots.PermSnapshot(), field: `"`"") > 0
      && InStr(src15, "SettingsSlotsPlanFail(field) {") > 0)
     Assert("15c: неназванный контрол превращается в адрес слота",
         InStr(codePlan, "field := `"slots.`" n") > 0)
@@ -1081,11 +1112,11 @@ if FileExist(drawerPath) {
     codePlan16 := (pPlan16 > 0 && pPlanEnd16 > pPlan16)
                   ? NoComments(SubStr(src16, pPlan16, pPlanEnd16 - pPlan16)) : ""
     Assert("16d: [slotN] сносится только у слота, который был постоянным",
-        codePlan16 != "" && InStr(src16, "if PermApp(n)`r`n                    deletes.Push(n)") > 0)
-    Assert("16e: надстройку под снос называет план, а не запись по touched",
+        codePlan16 != "" && InStr(src16, "if SlotPerm(n)`r`n                    deletes.Push(n)") > 0)
+    Assert("16e: надстройку под снос называет план; списка touched больше нет",
         InStr(codePlan16, "dynDeletes.Push(n)") > 0
      && InStr(src16, "for n in slotPlan.dynDeletes {") > 0
-     && InStr(src16, "for n in slotPlan.touched {`r`n        if delSet") = 0)
+     && InStr(src16, "slotPlan.touched") = 0)
     Assert("16f: удаление ключа надстройки сверяется чтением",
         InStr(src16, "for d in slotPlan.keyDeletes {") > 0
      && InStr(src16, "SettingsReadKey(configPath, d.sec, d.key) != `"`"") > 0)
@@ -1114,6 +1145,130 @@ if FileExist(drawerPath) {
      && InStr(src16, "DllCall(`"shlwapi\SHCreateMemStream`"") = 0)
 }
 
+; ---------------------------------------------------------------
+; Точка 17: проекция config.ini на реестр слотов (Slots.Apply). Раньше
+; эти правила были размазаны по SettingsReconcileRuntime и проверялись
+; только статически — по строкам исходника. Настоящая функция трогает
+; окна (Release -> WinMove), поэтому здесь копия её решающей части:
+; вместо окон номера, вместо Release() список отпущенных.
+;
+; Проверяется ровно то, ради чего снимок берётся ДО диска и ради чего
+; переход в постоянные подтверждается перечитанным файлом.
+; ---------------------------------------------------------------
+
+; prevPermKind — Map n -> true, если слот БЫЛ постоянным до Apply
+; prevWindow   — Map n -> hwnd: кэш постоянного либо привязка динамического
+; newPerm      — Map n -> { exe, cls }: что говорит ПЕРЕЧИТАННЫЙ файл
+; snap         — { bySlot, ident }: снимок плана, сделанный до записи
+ApplyModel(prevPermKind, prevWindow, newPerm, snap) {
+    released := [], window := Map(), dynBind := Map()
+    Loop 9 {
+        n := A_Index
+        dynBind[n] := (prevPermKind.Has(n) || !prevWindow.Has(n)) ? 0 : prevWindow[n]
+        window[n] := 0
+    }
+    Loop 9 {
+        n := A_Index
+        if (dynBind[n] && newPerm.Has(n)) {
+            released.Push(dynBind[n])
+            dynBind[n] := 0
+        }
+    }
+    Loop 9 {
+        n := A_Index
+        if dynBind[n]
+            window[n] := dynBind[n]
+    }
+    for n, hwnd in snap.bySlot {
+        id := snap.ident.Has(n) ? snap.ident[n] : 0
+        if (newPerm.Has(n) && id && id.exe = newPerm[n].exe && id.cls = newPerm[n].cls)
+            window[n] := hwnd
+        else
+            released.Push(hwnd)
+    }
+    return { window: window, released: released }
+}
+
+Snap(bySlot, ident) {
+    return { bySlot: bySlot, ident: ident }
+}
+
+; Постоянный слот 3 с неизменными exe/cls: окно остаётся за слотом и
+; домой не уезжает.
+r := ApplyModel(Map(3, true), Map(3, 8001),
+                Map(3, { exe: "a.exe", cls: "" }),
+                Snap(Map(3, 8001), Map(3, { exe: "a.exe", cls: "" })))
+Assert("17a: неизменная identity сохраняет захваченное окно",
+    r.window[3] = 8001 && r.released.Length = 0)
+
+; Сменился exe — прежнее окно ящику больше не принадлежит.
+r := ApplyModel(Map(3, true), Map(3, 8001),
+                Map(3, { exe: "b.exe", cls: "" }),
+                Snap(Map(3, 8001), Map(3, { exe: "a.exe", cls: "" })))
+Assert("17b: смена exe возвращает прежнее окно домой",
+    r.window[3] = 0 && r.released.Length = 1 && r.released[1] = 8001)
+
+; То же самое для класса окна: cls — часть identity, а не подсказка.
+r := ApplyModel(Map(3, true), Map(3, 8001),
+                Map(3, { exe: "a.exe", cls: "Other" }),
+                Snap(Map(3, 8001), Map(3, { exe: "a.exe", cls: "" })))
+Assert("17c: смена cls тоже возвращает окно домой",
+    r.window[3] = 0 && r.released.Length = 1)
+
+; Слот перестал быть постоянным (conversion Permanent -> Dynamic).
+r := ApplyModel(Map(3, true), Map(3, 8001), Map(),
+                Snap(Map(3, 8001), Map(3, { exe: "a.exe", cls: "" })))
+Assert("17d: слот перестал быть постоянным -> окно домой, слот пуст",
+    r.window[3] = 0 && r.released.Length = 1 && r.released[1] = 8001)
+
+; Слот стал постоянным, и перечитанный файл это подтверждает: живая
+; динамическая привязка снимается — постоянный и динамический не бывают
+; одним слотом одновременно.
+r := ApplyModel(Map(), Map(4, 9001),
+                Map(4, { exe: "a.exe", cls: "" }),
+                Snap(Map(), Map()))
+Assert("17e: подтверждённый переход в постоянные отпускает динамическую привязку",
+    r.window[4] = 0 && r.released.Length = 1 && r.released[1] = 9001)
+
+; Тот же намеренный переход, но запись не долетела до диска: файл
+; по-прежнему называет слот динамическим. Привязку трогать нельзя —
+; ровно эта защита и появилась в a39f543.
+r := ApplyModel(Map(), Map(4, 9001), Map(), Snap(Map(), Map()))
+Assert("17f: неподтверждённый переход привязку не трогает (partial failure)",
+    r.window[4] = 9001 && r.released.Length = 0)
+
+; Динамический слот, которого правка вообще не касалась, переживает
+; перечитывание файла.
+r := ApplyModel(Map(), Map(7, 9002), Map(), Snap(Map(), Map()))
+Assert("17g: чужая динамическая привязка переживает перечитывание",
+    r.window[7] = 9002 && r.released.Length = 0)
+
+; Окно, захваченное постоянным слотом уже ПОСЛЕ снимка, плану неизвестно:
+; кэш сбрасывается, но домой окно не отправляется — это была не потеря
+; хозяина, а просто устаревший кэш (прежняя managed.Clear()).
+r := ApplyModel(Map(3, true), Map(3, 8005),
+                Map(3, { exe: "a.exe", cls: "" }),
+                Snap(Map(), Map(3, { exe: "a.exe", cls: "" })))
+Assert("17h: захват мимо снимка сбрасывается, но окно домой не уезжает",
+    r.window[3] = 0 && r.released.Length = 0)
+
+; General-only Save: правок слотов нет, снимок всё равно взят — и все
+; постоянные привязки остаются на местах.
+r := ApplyModel(Map(1, true, 5, true), Map(1, 8001, 5, 8005),
+                Map(1, { exe: "a.exe", cls: "" }, 5, { exe: "b.exe", cls: "" }),
+                Snap(Map(1, 8001, 5, 8005),
+                     Map(1, { exe: "a.exe", cls: "" }, 5, { exe: "b.exe", cls: "" })))
+Assert("17i: Save без правок слотов ничего не отпускает и ничего не теряет",
+    r.window[1] = 8001 && r.window[5] = 8005 && r.released.Length = 0)
+
+; Один слот конвертируется, соседний того же рода не задет.
+r := ApplyModel(Map(2, true, 5, true), Map(2, 8002, 5, 8005),
+                Map(5, { exe: "b.exe", cls: "" }),
+                Snap(Map(2, 8002, 5, 8005),
+                     Map(2, { exe: "a.exe", cls: "" }, 5, { exe: "b.exe", cls: "" })))
+Assert("17j: конвертация одного слота не трогает соседний",
+    r.window[2] = 0 && r.window[5] = 8005
+ && r.released.Length = 1 && r.released[1] = 8002)
 ; ---------------------------------------------------------------
 out := ""
 allOk := true

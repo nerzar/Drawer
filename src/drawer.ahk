@@ -29,9 +29,6 @@ if !FileExist(configPath) {
     ExitApp()
 }
 
-apps         := []
-dynamic      := {}
-dynamicSlots := Map()
 iconUriCache := Map()   ; hwnd -> data-URI иконки окна (см. SlotIconUri)
 animMs       := 160
 animSteps    := 14
@@ -39,30 +36,33 @@ blurMs       := 250
 handlesOn    := true
 HANDLE_BG    := "2A2E35"
 cfgDiags := []
-LoadConfig(configPath, &apps, &dynamic, &dynamicSlots, &animMs, &animSteps, &blurMs, &handlesOn, &HANDLE_BG, &cfgDiags)
+bootConfig := LoadConfig(configPath, &cfgDiags)
+ConfigApply(bootConfig)
+Slots.Apply(bootConfig)
 ConfigDiagShow(cfgDiags)
 ; =================================================================
 
-; Читает config.ini в структуры программы. Числовые и строковые поля
+; Читает config.ini в один объект конфигурации. Числовые и строковые поля
 ; (monitor, edge, width, animMs…) идут в приложение как есть — их
 ; проверяют ResolveMonitor/ComputeGeom при показе. Отдельно проверяются
 ; только activateOnShow/hideOnBlur: непустая строка "false" в AHK
 ; истинна, поэтому её нужно явно разобрать, а не просто передать дальше.
 ;
+; Возвращает значение, а не заполняет девять ByRef-переменных: функцию
+; зовут повторно (настройки перечитывают файл после записи), и прежняя
+; форма требовала отдельно помнить, какие структуры надо обнулить перед
+; заполнением — иначе загрузка дописывала второй комплект постоянных
+; слотов к прежнему. Свежий объект такой памяти не требует по устройству.
+; Рантайма функция не касается вовсе: проекция объекта в глобалы — дело
+; ConfigApply(), в реестр слотов — Slots.Apply().
+;
 ; Окон не открывает: замечания к файлу складываются в diags, а показывает
 ; их вызывающий — при старте MsgBox'ом, при Save через outcome настроек, у
-; будущего порта полем ответа. Пока MsgBox стоял внутри, загрузка конфига
+; порта полем ответа. Пока MsgBox стоял внутри, загрузка конфига
 ; не могла работать в headless Settings service и, что хуже, всплывала из
 ; GUI-колбэка Apply посреди реконсиляции.
-LoadConfig(path, &apps, &dynamic, &dynamicSlots, &animMs, &animSteps, &blurMs, &handlesOn, &handleBg, &diags) {
-    ; Функцию должно быть можно вызвать повторно: настройки перечитывают
-    ; конфиг после записи тем же вызовом, которым программа поднимается.
-    ; Без сброса apps.Push() дописал бы второй комплект постоянных слотов
-    ; к прежнему, а dynamicSlots сохранил бы секции, которых в файле уже
-    ; нет: обе структуры заполняются добавлением, а не заменой.
-    apps         := []
-    dynamicSlots := Map()
-    diags        := []
+LoadConfig(path, &diags) {
+    diags := []
 
     animMs    := IniRead(path, "general", "animMs", 160)
     animSteps := IniRead(path, "general", "animSteps", 14)
@@ -81,14 +81,16 @@ LoadConfig(path, &apps, &dynamic, &dynamicSlots, &animMs, &animSteps, &blurMs, &
         handleBg := "2A2E35"
     }
 
-    permSlotNums := Map()
+    ; Постоянные слоты — Map по НОМЕРУ, а не массив: номер и есть имя
+    ; секции, и порядок в файле на идентичность слота больше не влияет.
+    perm := Map()
     Loop 9 {
         n := A_Index
         section := "slot" n
         exe := IniRead(path, section, "exe", "")
         if (exe = "")   ; поля нет или оно пустое — слот остаётся динамическим
             continue
-        apps.Push({
+        perm[n] := {
             slot: n,
             name: IniRead(path, section, "name", "Слот " n),
             exe: exe,
@@ -99,8 +101,7 @@ LoadConfig(path, &apps, &dynamic, &dynamicSlots, &animMs, &animSteps, &blurMs, &
             width: IniRead(path, section, "width", 60),
             activateOnShow: IniBool(path, section, "activateOnShow", true, &diags),
             hideOnBlur: IniBool(path, section, "hideOnBlur", true, &diags)
-        })
-        permSlotNums[n] := true
+        }
     }
 
     dynamic := {
@@ -112,16 +113,17 @@ LoadConfig(path, &apps, &dynamic, &dynamicSlots, &animMs, &animSteps, &blurMs, &
         hideOnBlur: IniBool(path, "dynamic", "hideOnBlur", true, &diags)
     }
 
+    overrides := Map()
     Loop 9 {
         n := A_Index
         section := "dynamicSlot" n
         if (IniRead(path, section, , "") = "")   ; секции нет или она пуста
             continue
-        if permSlotNums.Has(n) {
+        if perm.Has(n) {
             diags.Push("[" section "] задан в config.ini, но слот " n " уже постоянный ([slot" n "]) — динамические настройки для него не действуют")
             continue
         }
-        dynamicSlots[n] := {
+        overrides[n] := {
             name: IniRead(path, section, "name", dynamic.name),
             monitor: IniRead(path, section, "monitor", dynamic.monitor),
             edge: IniRead(path, section, "edge", dynamic.edge),
@@ -130,6 +132,10 @@ LoadConfig(path, &apps, &dynamic, &dynamicSlots, &animMs, &animSteps, &blurMs, &
             hideOnBlur: IniBool(path, section, "hideOnBlur", dynamic.hideOnBlur, &diags)
         }
     }
+
+    return { animMs: animMs, animSteps: animSteps, blurMs: blurMs,
+             handlesOn: handlesOn, accent: handleBg,
+             perm: perm, dynamic: dynamic, overrides: overrides }
 }
 
 ; "true"/"false" — единственный ожидаемый формат. Непустая строка "false"
@@ -152,11 +158,25 @@ ConfigDiagShow(diags) {
         MsgBox(d, "Ящик")
 }
 
-managed   := Map()   ; номер слота -> захваченный hwnd
+; Общие настройки прочитанного config.ini в рантайм. Слоты сюда не
+; входят: их проекция — Slots.Apply(), и она отдельная, потому что
+; реконсиляции после Save нужен ещё и снимок постоянных привязок.
+ConfigApply(cfg) {
+    global animMs, animSteps, blurMs, handlesOn, HANDLE_BG
+    animMs    := cfg.animMs
+    animSteps := cfg.animSteps
+    blurMs    := cfg.blurMs
+    handlesOn := cfg.handlesOn
+    HANDLE_BG := cfg.accent
+}
+
+; Слоты: модель, реестр и общие операции над ними. Всё, что программа
+; знает о слотах, живёт там; здесь остаётся оконная модель, кромки и
+; настройки. Контракт границы описан в шапке файла.
+#Include Slots.ahk
+
 state     := Map()   ; hwnd -> { orig, geom }
 watched   := Map()   ; выдвинутые окна с hideOnBlur: hwnd -> настройки
-permSlots := Map()   ; номер слота -> индекс в apps (живёт до LoadConfig)
-dynSlots  := Map()   ; номер слота -> hwnd
 notified  := Map()   ; текст уведомления -> true, пока оно ещё актуально
 handles   := Map()   ; номер слота -> кромка припаркованного окна
 handleMode := 0      ; режим опроса кромок: 0 нет, 1 редкий, 2 частый
@@ -173,9 +193,6 @@ lastFore  := 0                 ; окно, которое было активн�
 ; Хук от этого не зависит.
 ; Номер слота — секция config.ini (slot1…slot9), поэтому дубликат или
 ; выход за 1…9 структурно невозможен, в отличие от прежних литералов.
-for i, a in apps
-    permSlots[a.slot] := i
-
 live := 0
 Loop 9 {
     n := A_Index
@@ -190,7 +207,7 @@ Loop 9 {
     } catch as e
         MsgBox("Хоткей назначения слота " n " не назначен:`n" e.Message, "Ящик")
 }
-for a in apps {
+for a in SlotPermList() {
     if (Opt(a, "focusHotkey", "") = "")
         continue
     try {
@@ -310,7 +327,7 @@ Notify(text, title := "Ящик", opt := 1) {
     TrayTip(text, title, opt)
 }
 
-; Настройка приложения со значением по умолчанию: запись в apps можно
+; Настройка слота со значением по умолчанию: конфигурацию слота можно
 ; писать короткой, не перечисляя всё.
 Opt(cfg, name, def) {
     return cfg.HasOwnProp(name) ? cfg.%name% : def
@@ -408,7 +425,7 @@ OnClearHotkey(*) {
     if SettingsPickerState().active
         return
     try
-        ClearDynamic()
+        SlotClearDynamic()
     catch as e
         Notify("Сбой: " e.Message, "Ящик", 3)
 }
@@ -497,129 +514,35 @@ Vanished(hwnd) {
     return WinGetMinMax("ahk_id " hwnd) = -1
 }
 
-; Каким слотом управляется это окно и с какими настройками.
-SlotOf(hwnd) {
-    global managed, permSlots, dynSlots
-    for n in permSlots {
-        if (managed.Has(n) && managed[n] = hwnd)
-            return PermApp(n)
-    }
-    for n, h in dynSlots {
-        if (h = hwnd)
-            return SlotCfg(n)
-    }
-    return 0
-}
-
-; Колбэк держит НОМЕР слота, а не индекс в apps. apps пересобирается
-; при каждом LoadConfig в порядке номеров, поэтому появление постоянного
-; слота с меньшим номером сдвигает индексы всех следующих за ним — а
-; хоткей регистрируется один раз при старте и продолжал бы звать прежнее
-; число, попадая в чужой слот или в несуществующий индекс. Номер слота
-; такого сдвига не знает, а permSlots спрашивается в момент нажатия:
-; слот, переставший быть постоянным, теперь просто ничего не делает.
+; Колбэк держит НОМЕР слота, а не позицию в массиве. Номер слота
+; переживает перечитывание config.ini, потому что он и есть имя секции;
+; позиция сдвигалась появлением постоянного слота с меньшим номером, и
+; хоткей, зарегистрированный один раз при старте, продолжал бы звать
+; прежнее число, попадая в чужой слот. Реестр спрашивается в момент
+; нажатия: слот, переставший быть постоянным, просто ничего не делает.
 ;
 ; Сама клавиша остаётся той, что была назначена при старте:
 ; перерегистрации нет, и правка focusHotkey по-прежнему вступает в силу
 ; после перезапуска — ровно так, как подписано в форме настроек.
 OnFocusHotkey(n, *) {
     try
-        FocusApp(n)
+        SlotFocus(n)
     catch as e
         Notify("Сбой: " e.Message, "Ящик", 3)
-}
-
-; Слот: постоянный ищет своё приложение по процессу, динамический
-; управляет запомненным окном.
-ToggleSlot(n) {
-    global permSlots, dynSlots
-    if permSlots.Has(n) {
-        ToggleApp(n)
-        return
-    }
-    if !dynSlots.Has(n)          ; нечего показывать — молчим
-        return
-    hwnd := dynSlots[n]
-    if !WinExist("ahk_id " hwnd) {
-        dynSlots.Delete(n)       ; окно закрыли — слот просто освобождается
-        Release(hwnd)
-        return
-    }
-    ToggleWindow(hwnd, SlotCfg(n))
-}
-
-; Связать активное подходящее окно с динамическим слотом.
-; Возвращает structured result: { ok, code, message, hwnd, title }.
-; Единая точка связывания для хоткея и WebView-порта.
-SlotBind(n) {
-    global permSlots, dynSlots
-    if (n < 1 || n > 9)
-        return { ok: false, code: "validation_error", message: "Номер слота должен быть 1…9", hwnd: 0, title: "" }
-    if SettingsPickerState().active
-        return { ok: false, code: "busy", message: "Открыт picker", hwnd: 0, title: "" }
-    if permSlots.Has(n)
-        return { ok: false, code: "slot_is_permanent",
-                 message: "Слот " n " занят постоянной привязкой: " PermApp(n).name, hwnd: 0, title: "" }
-    if !(hwnd := PickActive())
-        return { ok: false, code: "no_eligible_active_window",
-                 message: "Активное окно не годится для ящика", hwnd: 0, title: "" }
-    if (dynSlots.Has(n) && dynSlots[n] != hwnd)
-        Release(dynSlots[n])          ; прежнее окно возвращаем на место
-    dynSlots[n] := hwnd
-    title := WinGetTitle("ahk_id " hwnd)
-    return { ok: true, code: "", message: "Слот " n " → " title, hwnd: hwnd, title: title }
-}
-
-; Освободить динамический слот: вернуть окно на исходное место, забыть о
-; привязке и обновить кромки.
-; Единая точка освобождения для хоткея и WebView-порта.
-SlotRelease(n) {
-    global permSlots, dynSlots
-    if (n < 1 || n > 9)
-        return { ok: false, code: "validation_error", message: "Номер слота должен быть 1…9", hwnd: 0 }
-    if SettingsPickerState().active
-        return { ok: false, code: "busy", message: "Открыт picker", hwnd: 0 }
-    if permSlots.Has(n)
-        return { ok: false, code: "slot_is_permanent",
-                 message: "Слот " n " — постоянный, его нельзя освободить", hwnd: 0 }
-    if !dynSlots.Has(n)
-        return { ok: false, code: "not_bound",
-                 message: "Слот " n " не привязан к окну", hwnd: 0 }
-    hwnd := dynSlots[n]
-    dynSlots.Delete(n)
-    Release(hwnd)
-    SetTimer(HandlesSync, -1)
-    return { ok: true, code: "", message: "Слот " n " освобождён", hwnd: hwnd }
 }
 
 ; Назначение слота по хоткею Ctrl+Alt+Shift+N. Показывает уведомление.
 BindSlot(n) {
     res := SlotBind(n)
-    if !res.ok
-        Notify(res.message, "Ящик", 2)
-    else
-        Notify(res.message, "Ящик", 1)
+    Notify(res.message, "Ящик", res.ok ? 1 : 2)
     return res
 }
 
 ; Освобождение динамического слота с показом уведомления.
 ReleaseSlot(n) {
     res := SlotRelease(n)
-    if !res.ok
-        Notify(res.message, "Ящик", 2)
-    else
-        Notify(res.message, "Ящик", 1)
+    Notify(res.message, "Ящик", res.ok ? 1 : 2)
     return res
-}
-
-; Очистка динамических слотов. Постоянные не трогаем, программа
-; продолжает работать — это не выход.
-ClearDynamic() {
-    global dynSlots
-    for n, hwnd in dynSlots
-        Release(hwnd)
-    dynSlots.Clear()
-    SetTimer(HandlesSync, -1)
 }
 
 ; Отпустить окно: вернуть на исходное место и забыть о нём. Окна,
@@ -635,80 +558,6 @@ Release(hwnd) {
         try WinMove(st.orig.x, st.orig.y, st.orig.w, st.orig.h, "ahk_id " hwnd)
     state.Delete(hwnd)
     SetTimer(HandlesSync, -1)    ; окно больше не наше — кромки у него нет
-}
-
-; Настройки динамического слота: общие, поверх которых кладутся
-; персональные, если для этого номера они заданы.
-SlotCfg(n) {
-    global dynamic, dynamicSlots
-    if !dynamicSlots.Has(n)
-        return dynamic
-    own := dynamicSlots[n]
-    return { name:           Opt(own, "name",           dynamic.name),
-             monitor:        Opt(own, "monitor",        dynamic.monitor),
-             edge:           Opt(own, "edge",           dynamic.edge),
-             width:          Opt(own, "width",          dynamic.width),
-             activateOnShow: Opt(own, "activateOnShow", dynamic.activateOnShow),
-             hideOnBlur:     Opt(own, "hideOnBlur",     dynamic.hideOnBlur) }
-}
-
-; Настройки постоянного слота по его номеру — 0, если слот не постоянный.
-; Единственное место, где индекс в apps ещё используется, и используется
-; он тут же, без сохранения: индекс действителен только до следующего
-; LoadConfig, потому что apps пересобирается в порядке номеров. Всё, что
-; живёт дольше одного вызова — managed, колбэки хоткеев, снимки в плане
-; Settings, — обязано помнить номер слота.
-PermApp(n) {
-    global apps, permSlots
-    return permSlots.Has(n) ? apps[permSlots[n]] : 0
-}
-
-; Окно слота прямо сейчас — 0, если его нет. Постоянный слот ищется тем
-; же поиском, что и для хоткея, но результат НИКУДА НЕ ПИШЕТСЯ: managed
-; здесь только читается. Иначе беглый взгляд на статус подменял бы выбор,
-; который иначе сделал бы FindWindow() в момент реального нажатия.
-; Динамический слот берётся из dynSlots как есть.
-SlotWindow(n) {
-    global managed, permSlots, dynSlots
-    if permSlots.Has(n) {
-        if (managed.Has(n) && WinExist("ahk_id " managed[n]))
-            return managed[n]
-        return FindWindow(PermApp(n))
-    }
-    return (dynSlots.Has(n) && WinExist("ahk_id " dynSlots[n])) ? dynSlots[n] : 0
-}
-
-; Состояние слота структурой, а не строкой: { state, title }. Пять
-; состояний — те же, что в integration-контракте
-; (docs/settings-integration-layer.md):
-;
-;   empty                  динамический слот без окна
-;   applicationNotRunning  постоянный слот, приложение не запущено
-;   available              окно есть, но ящик его ещё не показывал
-;   parked                 окно за пределами всех мониторов
-;   shown                  окно на экране
-;
-; title заполнен только там, где окно действительно есть.
-;
-; Признаки те же, на которых стоит остальная программа (HandleManaged /
-; HandleParked) — второго источника истины не заводится. Вход — номер
-; слота, а не строка списка Settings: этим же API пользуется WebView-порт,
-; которому ни строк, ни секций config.ini не показывают. Русские подписи
-; живут отдельно, в SettingsStatusText(): разбирать статус обратно из
-; локализованного текста не должен никто.
-SlotStatus(n) {
-    global permSlots
-    if !(hwnd := SlotWindow(n))
-        return { state: permSlots.Has(n) ? "applicationNotRunning" : "empty",
-                 title: "", app: "", icon: "" }
-    title := ""
-    try title := WinGetTitle("ahk_id " hwnd)
-    app := WindowAppName(hwnd)
-    icon := SlotIconUri(hwnd)
-    if !HandleManaged(hwnd)
-        return { state: "available", title: title, app: app, icon: icon }
-    return { state: HandleParked(hwnd) ? "parked" : "shown",
-             title: title, app: app, icon: icon }
 }
 
 ; Как называется приложение, которому принадлежит окно. Заголовок для
@@ -859,36 +708,6 @@ StreamToPngUri(stream) {
     }
     DllCall("GlobalUnlock", "Ptr", hglobal)
     return b64 = "" ? "" : "data:image/png;base64," b64
-}
-
-; Постоянный слот: окно ищется по настройкам приложения. Приложение не
-; запущено — показывать нечего, молчим: это то же самое, что нажать на
-; пустой слот.
-ToggleApp(n) {
-    if !(a := PermApp(n))
-        return
-    if !(hwnd := AppWindow(n, a))
-        return
-    ToggleWindow(hwnd, a)
-}
-
-FocusApp(n) {
-    if !(a := PermApp(n))
-        return
-    if !(hwnd := AppWindow(n, a))
-        return
-    FocusWindow(hwnd, a)
-}
-
-; Захваченное окно помним: припаркованное окно поиском по площади
-; можно спутать с другим окном того же приложения. Ключ — номер слота:
-; он переживает перечитывание конфига, а индекс в apps — нет.
-AppWindow(n, a) {
-    global managed
-    hwnd := (managed.Has(n) && WinExist("ahk_id " managed[n])) ? managed[n] : FindWindow(a)
-    if hwnd
-        managed[n] := hwnd
-    return hwnd
 }
 
 ; Окно, которое назначается в слот, — активное сейчас. Рабочий стол и
@@ -1322,26 +1141,6 @@ Cleanup(*) {
 ; служебные окна, так что для остального кода ящика кромок не
 ; существует — ни в Alt+Tab, ни в возврате фокуса, ни в привязке слота.
 
-; Слоты по порядку номеров: номер, окно и его настройки. Порядок задаёт
-; и порядок кромок в стопке, поэтому массив, а не Map.
-HandleSlots() {
-    global managed, permSlots, dynSlots
-    out := []
-    Loop 9 {
-        n := A_Index
-        if permSlots.Has(n) {
-            if !(managed.Has(n) && WinExist("ahk_id " managed[n]))
-                continue
-            out.Push({ n: n, hwnd: managed[n], cfg: PermApp(n) })
-        } else if dynSlots.Has(n) {
-            if !WinExist("ahk_id " dynSlots[n])
-                continue
-            out.Push({ n: n, hwnd: dynSlots[n], cfg: SlotCfg(n) })
-        }
-    }
-    return out
-}
-
 ; Управляет ли ящик этим окном: геометрия посчитана, значит слот хоть раз
 ; показывали и его место в стопке кромок уже занято.
 HandleManaged(hwnd) {
@@ -1448,7 +1247,7 @@ HandlesSync() {
         HandlesDestroyAll()
         return
     }
-    slots := HandleSlots()
+    slots := SlotBound()
 
     ; Раскладка считается по группам «монитор + край». У слота с
     ; monitor=cursor монитор определяет тот же ResolveMonitor, что и при
@@ -1757,10 +1556,10 @@ HandleClick(wParam, lParam, msg, hwnd) {
 ; «Применить» или «ОК»; закрытие окна и выход из программы не сохраняют
 ; изменения.
 ;
-; Значения берутся из тех же глобалов, которыми ящик пользуется прямо
-; сейчас (animMs, apps, dynamic…), а настройки слота — из того же
-; SlotCfg(), который спрашивает хоткей. Поэтому окно не может показывать
-; одно, пока программа делает другое.
+; Значения берутся оттуда же, откуда их берёт сам ящик прямо сейчас:
+; общие — из глобалов (animMs, blurMs…), слоты — из реестра тем же
+; SlotCfg()/SlotPerm(), которые спрашивает хоткей. Поэтому окно не
+; может показывать одно, пока программа делает другое.
 ;
 ; Отдельный вопрос — «откуда взялось значение». В загруженных структурах
 ; отсутствующий ключ и ключ со значением, равным умолчанию, неразличимы:
@@ -1887,17 +1686,15 @@ SettingsVal(cfg, key) {
 ; объект, который ящик спросит при нажатии хоткея, поэтому показанное и
 ; работающее разойтись не могут.
 SettingsRows() {
-    global permSlots, dynamicSlots
     rows := []
     Loop 9 {
         n := A_Index
-        if permSlots.Has(n) {
-            rows.Push({ n: n, kind: "perm", cfg: PermApp(n),
-                        sections: ["slot" n] })
+        if (a := SlotPerm(n)) {
+            rows.Push({ n: n, kind: "perm", cfg: a, sections: ["slot" n] })
             continue
         }
         rows.Push({ n: n, kind: "dyn", cfg: SlotCfg(n),
-                    sections: dynamicSlots.Has(n)
+                    sections: SlotOverride(n)
                               ? ["dynamicSlot" n, "dynamic"] : ["dynamic"] })
     }
     return rows
@@ -2111,23 +1908,22 @@ SettingsSlotIconPath(n) {
 ; готовится лишиться [slotN]). Ничего из этого не пишется в файл до
 ; «Применить»/«ОК» — тот же принцип, что уже держит форму General.
 ;
-; Состояние эта правка не трогает: SlotStatus() спрашивает
-; permSlots/dynSlots/managed напрямую и получает только номер слота, а не
-; буфер, — колонка «Состояние» показывает, что происходит на самом деле,
-; а не то, что вот-вот будет записано.
+; Состояние эта правка не трогает: SlotStatus() спрашивает реестр слотов
+; напрямую и получает только номер слота, а не буфер, — колонка
+; «Состояние» показывает, что происходит на самом деле, а не то, что
+; вот-вот будет записано.
 
 ; Строка с учётом несохранённых правок: то, что показывает панель «Слот»
 ; и колонки Тип/Имя/Край/Монитор/Ширина. Без правки — сама r без изменений.
 ; Берёт ui параметром, а не глобальным setUI: во время самого открытия
 ; окна (SettingsOpen -> SettingsFillRow(ui,1)) setUI ещё не присвоен.
 SettingsEffective(ui, r) {
-    global dynamicSlots
     if !r.n || !ui.edits.Has(r.n)
         return r
     e := ui.edits[r.n]
     if (e.kind = "dyn")
         return { n: r.n, kind: "dyn", cfg: SlotCfg(r.n),
-                 sections: dynamicSlots.Has(r.n) ? ["dynamicSlot" r.n, "dynamic"] : ["dynamic"],
+                 sections: SlotOverride(r.n) ? ["dynamicSlot" r.n, "dynamic"] : ["dynamic"],
                  pending: true }
     return { n: r.n, kind: "perm", cfg: e, sections: ["slot" r.n], pending: true }
 }
@@ -2136,9 +1932,7 @@ SettingsEffective(ui, r) {
 ; состоянием слота — дальше в нём меняется только то поле, которое
 ; действительно тронули, а не всё сразу.
 SettingsEditSeed(n) {
-    global permSlots
-    if permSlots.Has(n) {
-        a := PermApp(n)
+    if (a := SlotPerm(n)) {
         return { kind: "perm", name: a.name, exe: a.exe, cls: a.cls,
                  monitor: a.monitor, edge: a.edge, width: a.width,
                  activateOnShow: a.activateOnShow, hideOnBlur: a.hideOnBlur,
@@ -2726,7 +2520,8 @@ SettingsSlotRowSelect(ui, idx, *) {
 
 SettingsOpen() {
     global setGui, setUI, VERSION, configPath
-    global animMs, animSteps, blurMs, handlesOn, dynamic, HANDLE_BG
+    global animMs, animSteps, blurMs, handlesOn, HANDLE_BG
+    dynamic := SlotDefaults()
 
     ; Окно одно. Повторный вызов из трея поднимает уже открытое, а не
     ; заводит второе: два окна показывали бы один и тот же файл и
@@ -3358,9 +3153,9 @@ SettingsCollect(&err) {
 ; меняли, остаётся ненаписанным сам собой — умолчания живут в
 ; LoadConfig, и дублировать их здесь не приходится.
 SettingsLive(sec, key) {
-    global dynamic, animMs, animSteps, blurMs, handlesOn, HANDLE_BG
+    global animMs, animSteps, blurMs, handlesOn, HANDLE_BG
     if (sec = "dynamic") {
-        v := Opt(dynamic, key, "")
+        v := Opt(SlotDefaults(), key, "")
         return (key = "activateOnShow" || key = "hideOnBlur")
              ? (v ? "true" : "false") : String(v)
     }
@@ -3379,10 +3174,8 @@ SettingsLive(sec, key) {
 ; постоянного слота: если слот сейчас не постоянный или у него нет этого
 ; поля, сравнивать не с чем, и значение считается новым безусловно.
 SettingsLiveSlot(n, key) {
-    global permSlots
-    if !permSlots.Has(n)
+    if !(cfg := SlotPerm(n))
         return ""
-    cfg := PermApp(n)
     if !cfg.HasOwnProp(key)
         return ""
     v := cfg.%key%
@@ -3475,7 +3268,6 @@ SettingsSlotWrites(n, e, &err, &field?) {
 ; снова следует за General; ушли все — секция удаляется целиком. Иначе
 ; правка одного поля молча пришпилила бы к слоту и остальные четыре.
 SettingsDynSlotWrites(n, e, &err, &field?) {
-    global dynamic, dynamicSlots
     if (err != "")
         return { writes: [], keyDeletes: [], empty: true }
     field := ""
@@ -3490,7 +3282,8 @@ SettingsDynSlotWrites(n, e, &err, &field?) {
     if (err != "")
         return { writes: [], keyDeletes: [], empty: true }
     sec := "dynamicSlot" n
-    own := dynamicSlots.Has(n) ? dynamicSlots[n] : 0
+    own := SlotOverride(n)
+    dynamic := SlotDefaults()
     cand := [{ key: "monitor", val: mon, shared: String(Opt(dynamic, "monitor", "cursor")) },
              { key: "edge", val: edge, shared: String(Opt(dynamic, "edge", "right")) },
              { key: "width", val: String(w), shared: String(Opt(dynamic, "width", 60)) },
@@ -3524,7 +3317,6 @@ SettingsDynSlotWrites(n, e, &err, &field?) {
 ; пишем. Плюс read-only снимок текущих identity/bindings — он нужен
 ; SettingsReconcileRuntime() уже ПОСЛЕ диска, а не для записи здесь.
 SettingsSlotsPlan(edits, &err) {
-    global apps, managed
     err := ""
     ; Адрес поля, на котором план остановился: форме по нему выбирать
     ; слот и подсвечивать контрол. Пустым остаётся только там, где
@@ -3534,7 +3326,7 @@ SettingsSlotsPlan(edits, &err) {
     ; dynDeletes — секции [dynamicSlotN] под снос (слот стал постоянным
     ; или его надстройка опустела); keyDeletes — отдельные ключи
     ; надстройки, вернувшиеся к общему значению.
-    writes := [], deletes := [], dynDeletes := [], keyDeletes := [], touched := Map()
+    writes := [], deletes := [], dynDeletes := [], keyDeletes := []
     if edits {
         for n, e in edits {
             ; Номер и тип слота native задаёт сам строкой списка, поэтому
@@ -3554,7 +3346,7 @@ SettingsSlotsPlan(edits, &err) {
             if (e.kind = "dyn") {
                 ; Слот был постоянным — секция [slotN] уходит. Правка
                 ; надстройки уже динамического слота секцию не трогает.
-                if PermApp(n)
+                if SlotPerm(n)
                     deletes.Push(n)
                 got := SettingsDynSlotWrites(n, e, &err, &field)
                 if (err != "") {
@@ -3568,7 +3360,6 @@ SettingsSlotsPlan(edits, &err) {
                     keyDeletes.Push(d)
                 if got.empty
                     dynDeletes.Push(n)
-                touched[n] := true
                 continue
             }
             got := SettingsSlotWrites(n, e, &err, &field)
@@ -3582,28 +3373,21 @@ SettingsSlotsPlan(edits, &err) {
             ; Слот стал (или остался) постоянным: надстройка ему больше не
             ; нужна и при каждом старте попадала бы в диагностику.
             dynDeletes.Push(n)
-            touched[n] := true
         }
     }
     ; Снимок берём независимо от того, есть ли правки слотов вообще:
     ; General-only Save тоже проходит через reconciliation (ниже), и без
-    ; этого снимка она обнулила бы managed вместо того, чтобы оставить
-    ; его как есть.
-    oldBySlot := Map(), oldIdent := Map()
-    for a in apps {
-        if managed.Has(a.slot)
-            oldBySlot[a.slot] := managed[a.slot]
-        oldIdent[a.slot] := { exe: a.exe, cls: a.cls }
-    }
+    ; этого снимка она обнулила бы постоянные привязки вместо того,
+    ; чтобы оставить их как есть.
     return { writes: writes, deletes: deletes, dynDeletes: dynDeletes,
-             keyDeletes: keyDeletes, touched: touched,
-             oldBySlot: oldBySlot, oldIdent: oldIdent, field: "" }
+             keyDeletes: keyDeletes,
+             prevPerm: Slots.PermSnapshot(), field: "" }
 }
 
 ; Отказ плана одним видом: писать нечего, а адрес поля довезти надо.
 SettingsSlotsPlanFail(field) {
     return { writes: [], deletes: [], dynDeletes: [], keyDeletes: [],
-             touched: Map(), oldBySlot: Map(), oldIdent: Map(), field: field }
+             prevPerm: Slots.PermSnapshot(), field: field }
 }
 
 ; UI-adapter: тонкая обёртка над буфером setUI.edits.
@@ -3802,71 +3586,48 @@ SettingsPersistVerified(generalWrites, slotPlan, &outcome) {
 
 ; Только runtime, только после SettingsPersistVerified — при полном
 ; успехе и при partial failure одинаково (best-effort отражение того, что
-; фактически осталось в config.ini). Release() живёт только здесь:
+; фактически осталось в config.ini). Своей логики слотов здесь нет: файл
+; перечитывается, общие значения уходят в глобалы (ConfigApply), а слоты
+; проецируются на реестр (Slots.Apply) — там же живут и все Release().
+; Правила проекции и порядок стадий описаны в шапке Slots.Apply():
 ;
 ;  - слот, теряющий постоянную привязку или меняющий exe/cls, не должен
 ;    остаться без хозяина: Release() возвращает окно на исходное место,
 ;    как при выходе и Ctrl+Alt+0 — и то же самое окно никогда не
 ;    трогается, если его exe/cls не изменились;
-;  - динамическая привязка номера, который правил пользователь, снимается
-;    явно: постоянный и динамический не бывают одним слотом одновременно;
-;  - managed ключуется НОМЕРОМ СЛОТА, а не индексом в apps[]: добавление
-;    или удаление [slotN] сдвигает индексы соседних постоянных слотов, а
-;    номер слота такого сдвига не знает. permSlots пересобирается здесь же
-;    и дальше LoadConfig не живёт;
-;  - snapshot oldBySlot/oldIdent берётся из slotPlan, то есть сделан ДО
-;    любой дисковой операции — а не после, как было бы багом;
-;  - dynSlots для тронутых номеров освобождается только если ФАКТИЧЕСКИ
-;    перезагруженный config.ini подтверждает переход в постоянные
-;    (permSlots.Has(n) уже после LoadConfig), а не по одному намерению
-;    правки: если запись слота n не долетела до диска (partial failure),
-;    слот n остаётся динамическим и на диске, и в рантайме — отпускать
-;    в этом случае активную привязку было бы неверно.
+;  - динамическая привязка слота, ставшего постоянным, снимается явно:
+;    постоянный и динамический не бывают одним слотом одновременно;
+;  - решает ПЕРЕЧИТАННЫЙ файл, а не намерение правки: если запись слота n
+;    не долетела до диска (partial failure), слот n остаётся динамическим
+;    и на диске, и в рантайме — отпускать в этом случае активную привязку
+;    было бы неверно;
+;  - снимок slotPlan.prevPerm сделан ДО любой дисковой операции — а не
+;    после, как было бы багом.
+;
+; Порядок здесь: сначала общие значения и цвет кромки (перекрашивать надо
+; тем, что уже прочитано), затем слоты — их проекция сама решает, какие
+; окна вернуть домой, а пересборка кромок завершает обе стадии.
 SettingsReconcileRuntime(slotPlan, &diags) {
-    global configPath, apps, managed, permSlots, dynSlots, dynamicSlots
-    global animMs, animSteps, blurMs, handlesOn, dynamic, HANDLE_BG, HANDLE_BG_HOT
+    global configPath, HANDLE_BG, HANDLE_BG_HOT
 
-    LoadConfig(configPath, &apps, &dynamic, &dynamicSlots,
-               &animMs, &animSteps, &blurMs, &handlesOn, &HANDLE_BG, &diags)
+    cfg := LoadConfig(configPath, &diags)
+    ConfigApply(cfg)
     try
         HANDLE_BG_HOT := HandleLighten(HANDLE_BG, 0.10)
     catch
         HANDLE_BG_HOT := "3A414D"
     HandleRepaintAll()
 
-    permSlots.Clear()
-    for i, a in apps
-        permSlots[a.slot] := i
-
-    for n in slotPlan.touched {
-        if (dynSlots.Has(n) && permSlots.Has(n)) {
-            Release(dynSlots[n])
-            dynSlots.Delete(n)
-        }
-    }
-
-    managed.Clear()
-    oldBySlot := slotPlan.oldBySlot
-    for a in apps {
-        if !oldBySlot.Has(a.slot)
-            continue
-        ident := slotPlan.oldIdent[a.slot]
-        if (ident.exe = a.exe && ident.cls = a.cls)
-            managed[a.slot] := oldBySlot[a.slot]
-        else
-            Release(oldBySlot[a.slot])
-        oldBySlot.Delete(a.slot)
-    }
-    for n, hwnd in oldBySlot     ; слот больше не тот же постоянный — окно домой
-        Release(hwnd)
+    Slots.Apply(cfg, slotPlan.prevPerm)
 
     SetTimer(HandlesSync, -1)
 }
 
 ; Копия поведения слота одним объектом. Снимок обязан пережить
-; следующий LoadConfig: dynamic и dynamicSlots заменяются целиком, а
-; SlotCfg() для слота без собственной секции возвращает сам объект
-; dynamic — отдать его наружу значило бы отдать ссылку на живой глобал.
+; следующий Slots.Apply(): общие настройки и надстройки заменяются
+; целиком, а SlotCfg() для слота без собственной секции возвращает сам
+; объект умолчаний — отдать его наружу значило бы отдать ссылку на
+; живую запись реестра.
 SettingsBehaviorCopy(cfg) {
     return { name:           Opt(cfg, "name", ""),
              monitor:        Opt(cfg, "monitor", ""),
@@ -3884,11 +3645,11 @@ SettingsBehaviorCopy(cfg) {
 ; перевод в имена wire (executable/windowClass/widthPercent, MonitorRef)
 ; — работа порта, здесь ей не место.
 SettingsStateSnapshot() {
-    global dynamic, animMs, animSteps, blurMs, handlesOn, HANDLE_BG
+    global animMs, animSteps, blurMs, handlesOn, HANDLE_BG
     slots := []
     Loop 9 {
         n := A_Index
-        if (a := PermApp(n))
+        if (a := SlotPerm(n))
             slots.Push({ n: n, kind: "perm", status: SlotStatus(n),
                          cfg: { name: a.name, exe: a.exe, cls: a.cls,
                                 monitor: a.monitor, edge: a.edge,
@@ -3900,7 +3661,7 @@ SettingsStateSnapshot() {
             slots.Push({ n: n, kind: "dyn", status: SlotStatus(n),
                          cfg: SettingsBehaviorCopy(SlotCfg(n)) })
     }
-    return { general: { dynamicDefaults: SettingsBehaviorCopy(dynamic),
+    return { general: { dynamicDefaults: SettingsBehaviorCopy(SlotDefaults()),
                         handlesEnabled: handlesOn, animMs: animMs,
                         animSteps: animSteps, blurMs: blurMs,
                         accent: HANDLE_BG },
@@ -3936,7 +3697,7 @@ SettingsSectionSlot(sec) {
 }
 
 ; Слоты, у которых изменился focusHotkey. Хоткеи регистрируются один раз
-; при старте (см. цикл по apps в начале файла), и Save их не
+; при старте (см. цикл по SlotPermList() в начале файла), и Save их не
 ; переставляет — это принятое поведение C1, а не недоделка. Контракт
 ; называет этот список restartRequiredFields; текст native статус-строки
 ; C4 не меняет, поле нужно клиенту порта.
