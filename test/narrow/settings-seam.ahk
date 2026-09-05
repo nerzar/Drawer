@@ -879,7 +879,7 @@ if !FileExist(drawerPath) {
      && InStr(codeGP, "val: input.edge") = 0
      && InStr(codeGP, "val: input.monitor") = 0)
 
-    pSW := InStr(src12, "SettingsSlotWrites(n, e, &err) {")
+    pSW := InStr(src12, "SettingsSlotWrites(n, e, &err, &field?) {")
     pSP := InStr(src12, "SettingsSlotsPlan(edits, &err) {")
     codeSW := (pSW > 0 && pSP > pSW) ? NoComments(SubStr(src12, pSW, pSP - pSW)) : ""
     Assert("12j: правка слота проходит те же проверки, что и General",
@@ -1016,6 +1016,44 @@ if FileExist(drawerPath) {
             InStr(srcHarness, "smokeActiveWindow ? smokeActiveWindow : WinExist") > 0)
         Assert("14d: харнесс падает, если якорь PickActive уехал",
             InStr(srcHarness, "Не нашёл якорь PickActive") > 0)
+    }
+}
+
+; ---------------------------------------------------------------
+; Точка 15: адрес поля в ответе об ошибке
+; Ошибка обязана назвать поле, к которому форме вести человека, и
+; назвать его по-русски. Оба списка имён — один, иначе сообщение
+; backend и подпись из порта разойдутся.
+if FileExist(drawerPath) {
+    src15 := FileRead(drawerPath, "UTF-8")
+    Assert("15a: имена полей слота живут в одном месте",
+        InStr(src15, "SettingsSlotFieldLabel(n, key := `"`") {") > 0)
+
+    pPlan := InStr(src15, "SettingsSlotsPlan(edits, &err) {")
+    pPlanEnd := InStr(src15, "; UI-adapter: тонкая обёртка")
+    codePlan := (pPlan > 0 && pPlanEnd > pPlan) ? NoComments(SubStr(src15, pPlan, pPlanEnd - pPlan)) : ""
+    Assert("15b: каждый выход плана несёт адрес поля",
+        codePlan != "" && InStr(codePlan, "oldIdent: Map() }") = 0
+     && StrSplit(codePlan, "field: field").Length = 4
+     && InStr(codePlan, "oldIdent: oldIdent, field: `"`"") > 0)
+    Assert("15c: неназванный контрол превращается в адрес слота",
+        InStr(codePlan, "field := `"slots.`" n") > 0)
+    Assert("15d: exe и размер окна называют свой контрол",
+        InStr(src15, "field := `"slots.`" n `".executable`"") > 0
+     && InStr(src15, "field := `"slots.`" n `".widthPercent`"") > 0)
+
+    portPath := A_ScriptDir "\..\..\src\webview\SettingsPort.ahk"
+    if FileExist(portPath) {
+        srcPort := FileRead(portPath, "UTF-8")
+        Assert("15e: порт отдаёт форме адрес поля от плана, а не пустой",
+            InStr(srcPort, "return this._Invalid(err, slotPlan.field)") > 0)
+        Assert("15f: в сообщении стоит название поля, а не его путь",
+            InStr(srcPort, "this._FieldLabel(path), path, &err, &field)") > 0
+         && InStr(srcPort, "`" path, path, &err, &field)") = 0)
+        Assert("15g: подписи полей слота порт берёт у backend, своего списка не заводит",
+            InStr(srcPort, "SettingsSlotFieldLabel(m[1], m[2])") > 0
+         && InStr(srcPort, "`"файл (exe)`"") = 0
+         && InStr(srcPort, "`"горячая клавиша`"") = 0)
     }
 }
 

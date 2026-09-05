@@ -3235,25 +3235,58 @@ SettingsLiveSlot(n, key) {
     return SettingsIsBool(key) ? (v ? "true" : "false") : String(v)
 }
 
+; Как поле слота называется у человека. Одно место на обе стороны:
+; отсюда backend берёт подпись для своих сообщений о границах значений,
+; и отсюда же WebView-порт строит текст ошибки по адресу поля. Второй
+; список разошёлся бы с первым.
+SettingsSlotFieldLabel(n, key := "") {
+    static names := Map(
+        "name",           "имя",
+        "executable",     "файл (exe)",
+        "windowClass",    "класс окна",
+        "focusHotkey",    "горячая клавиша",
+        "widthPercent",   "размер окна",
+        "edge",           "край",
+        "monitor",        "монитор",
+        "monitor.number", "номер монитора",
+        "activateOnShow", "активация при выезде",
+        "hideOnBlur",     "автоскрытие")
+    if (key = "" || !names.Has(key))
+        return "слот " n
+    return "слот " n ", " names[key]
+}
+
 ; Постоянному слоту нужен exe — без него нечего искать по процессу.
 ; Остальные поля свободны, как и у [dynamic].
-SettingsSlotValidate(n, e, &err) {
+;
+; field — адрес контрола для формы. Он необязателен: native зовёт
+; проверку тремя аргументами, и тогда переменная просто локальная.
+SettingsSlotValidate(n, e, &err, &field?) {
     if (err != "")
         return
-    if (Trim(e.exe) = "")
+    field := ""
+    if (Trim(e.exe) = "") {
         err := "Слот " n ": exe обязателен для постоянного слота"
+        field := "slots." n ".executable"
+    }
 }
 
 ; Буфер правки слота n в дисковый вид, за вычетом ключей, уже совпадающих
 ; с текущими значениями, — точечная запись остаётся в силе и для
 ; [slotN], не только для [dynamic]. Первая же ошибка отменяет весь разбор
 ; этого слота — записывать половину полей нельзя.
-SettingsSlotWrites(n, e, &err) {
-    SettingsSlotValidate(n, e, &err)
+SettingsSlotWrites(n, e, &err, &field?) {
+    SettingsSlotValidate(n, e, &err, &field)
     if (err != "")
         return []
     lbl := "Слот " n ": "
+    ; Единственная проверка ниже, до которой форма может довести
+    ; значение: остальные поля порт уже проверил по форме, и его
+    ; отказы несут адрес сами. Ошибка здесь отменяет разбор слота
+    ; целиком, поэтому имя контрола достаточно запомнить один раз.
     w    := SettingsNum(String(e.width), 5, 100, lbl "размер окна", &err)
+    if (err != "")
+        field := "slots." n ".widthPercent"
     name := SettingsTextIn(e.name, lbl "имя", &err)
     exe  := SettingsTextIn(e.exe, lbl "файл (exe)", &err)
     cls  := SettingsTextIn(e.cls, lbl "класс окна", &err)
@@ -3292,6 +3325,10 @@ SettingsSlotWrites(n, e, &err) {
 SettingsSlotsPlan(edits, &err) {
     global apps, managed
     err := ""
+    ; Адрес поля, на котором план остановился: форме по нему выбирать
+    ; слот и подсвечивать контрол. Пустым остаётся только там, где
+    ; указывать не на что, — номер слота вне 1…9.
+    field := ""
     writes := [], deletes := [], touched := Map()
     if edits {
         for n, e in edits {
@@ -3302,20 +3339,27 @@ SettingsSlotsPlan(edits, &err) {
             ; молча трактовался бы как "perm".
             if (!IsInteger(n) || n < 1 || n > 9) {
                 err := "Слот " n ": номер вне диапазона 1…9"
-                return { writes: [], deletes: [], touched: Map(), oldBySlot: Map(), oldIdent: Map() }
+                return { writes: [], deletes: [], touched: Map(), oldBySlot: Map(),
+                         oldIdent: Map(), field: field }
             }
             if (e.kind != "perm" && e.kind != "dyn") {
                 err := "Слот " n ": тип должен быть perm или dyn"
-                return { writes: [], deletes: [], touched: Map(), oldBySlot: Map(), oldIdent: Map() }
+                field := "slots." n
+                return { writes: [], deletes: [], touched: Map(), oldBySlot: Map(),
+                         oldIdent: Map(), field: field }
             }
             if (e.kind = "dyn") {
                 deletes.Push(n)
                 touched[n] := true
                 continue
             }
-            got := SettingsSlotWrites(n, e, &err)
-            if (err != "")
-                return { writes: [], deletes: [], touched: Map(), oldBySlot: Map(), oldIdent: Map() }
+            got := SettingsSlotWrites(n, e, &err, &field)
+            if (err != "") {
+                if (field = "")
+                    field := "slots." n
+                return { writes: [], deletes: [], touched: Map(), oldBySlot: Map(),
+                         oldIdent: Map(), field: field }
+            }
             for w in got
                 writes.Push(w)
             touched[n] := true
@@ -3332,7 +3376,7 @@ SettingsSlotsPlan(edits, &err) {
         oldIdent[a.slot] := { exe: a.exe, cls: a.cls }
     }
     return { writes: writes, deletes: deletes, touched: touched,
-             oldBySlot: oldBySlot, oldIdent: oldIdent }
+             oldBySlot: oldBySlot, oldIdent: oldIdent, field: "" }
 }
 
 ; UI-adapter: тонкая обёртка над буфером setUI.edits.

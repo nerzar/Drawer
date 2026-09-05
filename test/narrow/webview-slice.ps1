@@ -212,9 +212,14 @@ SmokeWatch() {
     Check "0a: во временном config.ini blurMs=250 до запуска" ($before -match '(?m)^blurMs=250\s*$')
 
     # --- прогон ------------------------------------------------------
-    $target = if ($Compiled) { Join-Path $runDir "Drawer.exe" } else { $ahk }
-    $targetArgs = if ($Compiled) { @() } else { @("`"$dir\drawer.ahk`"") }
-    $p = Start-Process -FilePath $target -ArgumentList $targetArgs -PassThru -WindowStyle Hidden
+    # -ArgumentList не принимает пустой список: у собранного exe своих
+    # аргументов нет, и вызов должен идти вовсе без параметра. Windows
+    # PowerShell 5.1 на @() падает, а README зовёт запускать именно им.
+    $p = if ($Compiled) {
+        Start-Process -FilePath (Join-Path $runDir "Drawer.exe") -PassThru -WindowStyle Hidden
+    } else {
+        Start-Process -FilePath $ahk -ArgumentList "`"$dir\drawer.ahk`"" -PassThru -WindowStyle Hidden
+    }
     if (-not $p.WaitForExit(90000)) {
         try { $p.Kill() } catch {}
         Check "0b: приложение завершилось само" $false
@@ -244,6 +249,7 @@ SmokeWatch() {
     Check "1d: Slots canonical, live title/existence, reentry, no reload" ($log -match 'request smoke\.slots-done')
     Check "1e: watcher enabled and disabled" (($log -match 'slot-watch enabled=1') -and ($log -match 'slot-watch enabled=0'))
     Check "1f: slot draft, dirty-close and validation" ($log -match 'request smoke\.slot-validation')
+    Check "1i: ошибка поля привела к своему слоту и контролу" ($log -match 'request smoke\.slot-routing')
     Check "1g: slot Apply canonical baseline and no-op" ($log -match 'request smoke\.slot-saved')
     Check "1h: slot.bind and slot.release end-to-end with canonical state" ($log -match 'request smoke\.bind-release-verified')
 

@@ -246,14 +246,37 @@
       await wait(() => !q('confirm'), 5000)
       eq('edit-name', 'Unsaved slot')
       const originalExe = val('edit-executable')
+
+      // Ошибка формы приезжает адресом поля. Форма обязана привести к
+      // нему: ошибка про слот 1 на открытом слоте 5 иначе подсветила бы
+      // чужой контрол, а сообщение внизу говорило бы про слот, которого
+      // на экране нет. Проверяется трижды: с другого слота, с границей
+      // значения и с другой вкладки.
       setText('edit-widthPercent', '')
-      await apply(() => /slots\.1\.widthPercent/.test(text('status')))
+      q('slot-5').click()
+      await wait(() => !q('edit-widthPercent'), 5000)
+      await apply(() => /слот 1, размер окна/.test(text('status')))
+      if (/slots\.1\.widthPercent/.test(text('status'))) throw new Error('machine-path-shown')
+      await wait(() => q('slot-1').getAttribute('aria-pressed') === 'true', 5000)
       if (!q('edit-widthPercent').className.includes('field-bad')) throw new Error('slot-field-error')
+
+      // Границу значения проверяет backend, и адрес поля называет он же.
       setText('edit-widthPercent', '3')
+      q('slot-5').click()
+      await wait(() => !q('edit-widthPercent'), 5000)
       await apply(() => /допустимо от 5 до 100/.test(text('status')))
+      await wait(() => q('slot-1').getAttribute('aria-pressed') === 'true', 5000)
+      if (!q('edit-widthPercent').className.includes('field-bad')) throw new Error('range-field-error')
+
+      // Тот же путь с другой вкладки: обязательный exe.
       setText('edit-widthPercent', '62')
       setText('edit-executable', '')
+      tab('General')
+      await wait(() => q('blurCheckMs'), 5000)
       await apply(() => /exe обязателен/.test(text('status')))
+      await wait(() => q('edit-executable'), 5000)
+      if (!q('edit-executable').className.includes('field-bad')) throw new Error('exe-field-error')
+      post('smoke.slot-routing')
       if (!text('slot-1').includes('Smoke permanent')) throw new Error('slot-baseline-on-error')
       setText('edit-name', '') // Backend normalizes to Слот 1.
       setText('edit-executable', ' ' + originalExe + ' ')
@@ -273,7 +296,8 @@
       //    структурированной ошибкой с именем поля — его и подсвечивает
       //    форма, не разбирая русский текст.
       setText('blurCheckMs', '')
-      await apply(() => /general\.blurCheckMs/.test(text('status')))
+      await apply(() => /проверка потери фокуса/.test(text('status')))
+      if (/general\.blurCheckMs/.test(text('status'))) throw new Error('machine-path-general')
       if (!q('blurCheckMs').className.includes('field-bad')) throw new Error('no-field-mark')
       if (!/250/.test(text('blurApplied'))) throw new Error('applied-changed-on-error')
       post('smoke.field-error')

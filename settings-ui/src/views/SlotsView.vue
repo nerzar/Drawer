@@ -1,6 +1,7 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { settings, pickSlot } from '../bridge/settings'
+import { fieldTarget } from '../bridge/fieldError'
 import { EDGE_OPTIONS } from '../bridge/general'
 import {
   useSlotStatus,
@@ -24,7 +25,23 @@ const behavior = computed(() => selectedSlot.value && slotBehavior(selectedSlot.
 const draft = computed(() => settings.slotDrafts[selectedNumber.value])
 const watchError = useSlotStatus()
 
-const bad = (key) => settings.field === `slots.${selectedNumber.value}.${key}`
+// Куда указывает ошибка последнего ответа. Подсвечивается контрол
+// того слота, который назвал backend, — и он же выбирается в списке:
+// ошибка про слот 3 на открытом слоте 1 подсветила бы чужое поле.
+const target = computed(() => fieldTarget(settings.field))
+const bad = (key) => {
+  const t = target.value
+  return Boolean(t) && t.tab === 'slots' && t.slot === selectedNumber.value && t.control === key
+}
+
+watch(
+  target,
+  (t) => {
+    if (t && t.tab === 'slots' && slots.value.some((s) => s.number === t.slot))
+      selectedNumber.value = t.slot
+  },
+  { immediate: true },
+)
 
 // Откуда у динамического слота взялось значение. Сравнивается с
 // применённым General, а не с черновиком: подпись описывает то, что

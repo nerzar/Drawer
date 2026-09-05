@@ -195,9 +195,12 @@ class DrawerSettingsPort {
             return this._Invalid(err != "" ? err : "General не разобран", "")
 
         ; Единственный план Slots, общий с native, включая no-op и dirty.
+        ; Границы значений проверяет он, и адрес поля называет тоже он:
+        ; разбирать русский текст ответа, чтобы понять, к какому слоту
+        ; вести человека, — ровно то, от чего уводил C3.
         slotPlan := SettingsSlotsPlan(edits, &err)
         if (err != "")
-            return this._Invalid(err, "")
+            return this._Invalid(err, slotPlan.field)
 
         outcome := ""
         SettingsApplyPlan(generalWrites, slotPlan, &outcome)
@@ -296,14 +299,40 @@ class DrawerSettingsPort {
         return 0
     }
 
+    ; Как поле называется у человека. Путь — адрес для формы: по нему
+    ; она подсвечивает контрол. В сообщении должно стоять название,
+    ; иначе внизу окна написано «slots.3.widthPercent», а на экране
+    ; то же самое подписано «Ширина (%)».
+    _FieldLabel(path) {
+        static names := Map(
+            "general.dynamicDefaults.widthPercent",   "размер окна",
+            "general.dynamicDefaults.edge",           "сторона выезда",
+            "general.dynamicDefaults.monitor",        "монитор",
+            "general.dynamicDefaults.monitor.number", "номер монитора",
+            "general.dynamicDefaults.activateOnShow", "активация при открытии",
+            "general.dynamicDefaults.hideOnBlur",     "автоскрытие",
+            "general.handlesEnabled",                 "кромки у края экрана",
+            "general.animation.durationMs",           "длительность анимации",
+            "general.animation.steps",                "шаги анимации",
+            "general.blurCheckMs",                    "проверка потери фокуса",
+            "general.accent",                         "цвет акцента")
+        if names.Has(path)
+            return names[path]
+        ; Имена полей слота знает backend: он же ставит их в свои
+        ; сообщения о границах значений, и расходиться им нельзя.
+        if RegExMatch(path, "^slots\.(\d)(?:\.(.+))?$", &m)
+            return SettingsSlotFieldLabel(m[1], m[2])
+        return path
+    }
+
     _Int(m, key, path, &err, &field) {
         if (err != "")
             return 0
         if !(m is Map) || !m.Has(key)
-            return this._Bad("Поле не передано: " path, path, &err, &field)
+            return this._Bad("Поле не передано: " this._FieldLabel(path), path, &err, &field)
         v := m[key]
         if !IsInteger(v)
-            return this._Bad("Поле должно быть целым числом: " path, path, &err, &field)
+            return this._Bad("Поле должно быть целым числом: " this._FieldLabel(path), path, &err, &field)
         return Integer(v)
     }
 
@@ -311,10 +340,10 @@ class DrawerSettingsPort {
         if (err != "")
             return ""
         if !(m is Map) || !m.Has(key)
-            return this._Bad("Поле не передано: " path, path, &err, &field)
+            return this._Bad("Поле не передано: " this._FieldLabel(path), path, &err, &field)
         v := m[key]
         if (v is Map || v is Array)
-            return this._Bad("Поле должно быть строкой: " path, path, &err, &field)
+            return this._Bad("Поле должно быть строкой: " this._FieldLabel(path), path, &err, &field)
         return String(v)
     }
 
@@ -326,10 +355,10 @@ class DrawerSettingsPort {
         if (err != "")
             return false
         if !(m is Map) || !m.Has(key)
-            return this._Bad("Поле не передано: " path, path, &err, &field)
+            return this._Bad("Поле не передано: " this._FieldLabel(path), path, &err, &field)
         v := m[key]
         if !(v is Integer) || (v != 0 && v != 1)
-            return this._Bad("Поле должно быть true или false: " path, path, &err, &field)
+            return this._Bad("Поле должно быть true или false: " this._FieldLabel(path), path, &err, &field)
         return v ? true : false
     }
 
@@ -337,7 +366,7 @@ class DrawerSettingsPort {
         if (err != "")
             return ""
         if !(m is Map) || !m.Has("kind")
-            return this._Bad("Поле не передано: " path, path, &err, &field)
+            return this._Bad("Поле не передано: " this._FieldLabel(path), path, &err, &field)
         kind := String(m["kind"])
         if (kind = "cursor")
             return "cursor"
@@ -349,7 +378,7 @@ class DrawerSettingsPort {
                              . String(JsonGet(m, "raw", "")) "») — выберите заново",
                              path, &err, &field)
         if (kind != "number")
-            return this._Bad("monitor.kind — cursor или number", path ".kind", &err, &field)
+            return this._Bad("monitor.kind — cursor или number", path, &err, &field)
         if !m.Has("number") || !IsInteger(m["number"])
             return this._Bad("monitor.number должен быть целым", path ".number", &err, &field)
         return String(Integer(m["number"]))

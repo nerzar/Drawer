@@ -1,6 +1,7 @@
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { settings, loadSettings } from './bridge/settings'
+import { fieldTarget } from './bridge/fieldError'
 import TitleBar from './components/TitleBar.vue'
 import Sidebar from './components/Sidebar.vue'
 import FooterBar from './components/FooterBar.vue'
@@ -20,6 +21,18 @@ const currentView = computed(() => {
 // Первый запрос к Ящику. До ответа форма показывает «Читаем настройки…»
 // и ничего не выдумывает: canonical принадлежит AHK.
 onMounted(loadSettings)
+
+// Ответ с адресом поля переводит на ту вкладку, где это поле живёт.
+// Иначе сообщение внизу говорит про слот, которого на экране нет, и
+// подсвечивать оказывается нечего. Слот внутри вкладки выбирает уже
+// SlotsView: номер он знает из того же адреса.
+watch(
+  () => settings.field,
+  (field) => {
+    const target = fieldTarget(field)
+    if (target) activeTab.value = target.tab
+  },
+)
 
 // Акцент берётся из черновика, а не из применённого: выбранный цвет
 // виден сразу всему окну — тот же предпросмотр, что и у native, только
