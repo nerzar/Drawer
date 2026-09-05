@@ -1,212 +1,56 @@
 <script setup>
-import { computed } from 'vue'
-import { state, EDGE_OPTIONS, MONITOR_OPTIONS } from '../mock/state'
-import { bridge } from '../mock/bridge'
+import { computed, ref } from 'vue'
+import { settings } from '../bridge/settings'
+import { useSlotStatus, slotBehavior, slotLabel, monitorLabel, edgeLabels, statusLabels } from '../bridge/slots'
 
-const selectedSlot = computed(() => state.slots.find((s) => s.n === state.selectedSlot))
-
-function selectSlot(n) {
-  state.selectedSlot = n
-}
-
-function makeDynamic() {
-  const slot = selectedSlot.value
-  slot.kind = 'dyn'
-  slot.name = ''
-  slot.exe = ''
-  slot.cls = ''
-  slot.icon = ''
-  slot.running = false
-}
-
-function makePermanent() {
-  const slot = selectedSlot.value
-  slot.kind = 'perm'
-  slot.name = slot.name || `Слот ${slot.n}`
-}
-
-function statusFor(slot) {
-  if (slot.kind !== 'perm') return { text: 'пусто', dot: 'transparent', color: 'var(--text-3)' }
-  if (slot.running) return { text: 'запущено', dot: '#3DAE68', color: 'var(--text-2)' }
-  return { text: 'не запущено', dot: 'rgba(255,255,255,.2)', color: 'var(--text-3)' }
-}
+const selectedNumber = ref(1)
+const slots = computed(() => settings.canonical?.slots ?? [])
+const selectedSlot = computed(() => slots.value.find((s) => s.number === selectedNumber.value))
+const behavior = computed(() => selectedSlot.value && slotBehavior(selectedSlot.value))
+const watchError = useSlotStatus()
 </script>
 
 <template>
   <div class="content">
     <h1 class="page-title">Слоты Drawer</h1>
-    <p class="page-sub">Настройте слоты для приложений и горячие клавиши.</p>
-
-    <div class="split">
-      <div class="list">
-        <div
-          v-for="slot in state.slots"
-          :key="slot.n"
-          class="slotrow"
-          :style="{ background: slot.n === state.selectedSlot ? 'var(--accent-tint)' : 'transparent' }"
-          @click="selectSlot(slot.n)"
-        >
-          <div class="avatar" :class="{ 'avatar-empty': slot.kind !== 'perm' }">
-            <svg v-if="slot.icon === 'steam'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="8" width="18" height="9" rx="4" />
-              <line x1="7" y1="11" x2="7" y2="14" />
-              <line x1="5.5" y1="12.5" x2="8.5" y2="12.5" />
-              <circle cx="16" cy="11.3" r=".9" fill="currentColor" stroke="none" />
-              <circle cx="18.2" cy="13.5" r=".9" fill="currentColor" stroke="none" />
-            </svg>
-            <svg v-else-if="slot.icon === 'cloud'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M7 18a4 4 0 0 1-.5-7.97A5 5 0 0 1 16.9 9.01 4.5 4.5 0 0 1 16.5 18H7z" />
-            </svg>
-            <svg v-else-if="slot.icon === 'assistant'" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-              <path d="M12 3l1.6 5.4L19 10l-5.4 1.6L12 17l-1.6-5.4L5 10l5.4-1.6z" />
-            </svg>
-          </div>
+    <p class="page-sub">Применённые настройки и состояние окон. Только просмотр.</p>
+    <p v-if="watchError" role="alert">Обновление статусов недоступно: {{ watchError }}</p>
+    <p v-if="!settings.canonical">{{ settings.message || 'Читаем настройки…' }}</p>
+    <div v-else class="split" data-testid="slots">
+      <div class="list" aria-label="Слоты">
+        <button v-for="slot in slots" :key="slot.number" class="slotrow"
+          :data-testid="`slot-${slot.number}`" :data-status="slot.status.state"
+          :aria-pressed="slot.number === selectedNumber"
+          :style="{ background: slot.number === selectedNumber ? 'var(--accent-tint)' : 'transparent' }"
+          @click="selectedNumber = slot.number">
+          <div class="avatar" :class="{ 'avatar-empty': slot.kind === 'dynamic' }">{{ slot.number }}</div>
           <div style="flex: 1; min-width: 0">
-            <div class="slotrow-name">{{ slot.n }}. {{ slot.kind === 'perm' ? slot.name : `Слот ${slot.n}` }}</div>
-            <div class="slotrow-meta">
-              {{ EDGE_OPTIONS.find((o) => o.value === slot.edge)?.label }} ·
-              {{ MONITOR_OPTIONS.find((o) => o.value === slot.monitor)?.label }} · {{ slot.width }}%
-            </div>
+            <div class="slotrow-name">{{ slotLabel(slot) }}</div>
+            <div class="slotrow-meta">{{ edgeLabels[slotBehavior(slot).edge] }} · {{ monitorLabel(slotBehavior(slot).monitor) }} · {{ slotBehavior(slot).widthPercent }}%</div>
           </div>
           <div class="slotrow-right">
-            <div class="status" :style="{ color: statusFor(slot).color }">
-              <span class="dot" :style="{ background: statusFor(slot).dot }"></span>{{ statusFor(slot).text }}
-            </div>
-            <div
-              class="pill"
-              :style="{
-                background: slot.kind === 'perm' ? 'var(--accent-tint)' : 'var(--neutral-bg)',
-                color: slot.kind === 'perm' ? 'var(--accent-fg)' : 'var(--neutral-text)',
-              }"
-            >
-              {{ slot.kind === 'perm' ? 'Постоянный' : 'Динамический' }}
-            </div>
+            <div class="status" :title="slot.status.windowTitle || ''">{{ statusLabels[slot.status.state] }}</div>
+            <div class="pill">{{ slot.kind === 'permanent' ? 'Постоянный' : 'Динамический' }}</div>
           </div>
-        </div>
+        </button>
       </div>
-
-      <div class="detail" v-if="selectedSlot">
-        <div class="detail-head">
-          <h2>Слот {{ selectedSlot.n }}</h2>
-          <button v-if="selectedSlot.kind === 'perm'" class="btn-danger-hd" @click="makeDynamic">
-            Сделать динамическим…
-          </button>
-          <button v-else class="btn-primary-sm" @click="makePermanent">Сделать постоянным…</button>
-        </div>
+      <div v-if="selectedSlot" class="detail" data-testid="slot-detail">
+        <div class="detail-head"><h2>Слот {{ selectedSlot.number }}</h2></div>
         <div class="detail-divider"></div>
-
-        <template v-if="selectedSlot.kind === 'perm'">
-          <div class="row">
-            <label>Имя</label>
-            <div class="field"><input class="in-name" type="text" v-model="selectedSlot.name" /></div>
-          </div>
-          <div class="row">
-            <label>Файл (exe)</label>
-            <div class="field">
-              <input class="in-exe" type="text" v-model="selectedSlot.exe" />
-              <button class="btn-icon" title="Обзор…" @click="bridge.pickExe(selectedSlot.n)">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
-                  <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
-                </svg>
-              </button>
-              <button class="btn-icon" title="Окно…" @click="bridge.pickWindow(selectedSlot.n)">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
-                  <rect x="3" y="4" width="18" height="14" rx="1.5" />
-                  <line x1="3" y1="8" x2="21" y2="8" />
-                </svg>
-              </button>
-              <div class="info-ico" tabindex="0">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="transform: translate(3%, 2%);">
-                  <circle cx="12" cy="12" r="9" />
-                  <line x1="12" y1="11" x2="12" y2="16" />
-                  <circle cx="12" cy="8" r="1" fill="currentColor" stroke="none" />
-                </svg>
-                <div class="tip">
-                  Класс окна (ahk_class): <code>{{ selectedSlot.cls || '—' }}</code>. Уточняет, какое
-                  именно окно ловить, если под этим exe их несколько. Заполняется автоматически кнопкой
-                  «Окно…» — вручную трогать обычно не нужно.
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="row">
-            <label>Монитор</label>
-            <div class="field">
-              <select class="dd" v-model="selectedSlot.monitor">
-                <option v-for="o in MONITOR_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
-              </select>
-            </div>
-          </div>
-          <div class="row">
-            <label>Край</label>
-            <div class="field">
-              <select class="dd" v-model="selectedSlot.edge">
-                <option v-for="o in EDGE_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
-              </select>
-            </div>
-          </div>
-          <div class="row">
-            <label>Ширина (%)</label>
-            <div class="field"><input class="num-sm" type="text" v-model="selectedSlot.width" /></div>
-          </div>
-          <div class="check-row">
-            <input type="checkbox" v-model="selectedSlot.activateOnShow" />
-            <span>Активировать окно при выезде</span>
-          </div>
-          <div class="check-row">
-            <input type="checkbox" v-model="selectedSlot.hideOnBlur" />
-            <span>Убирать окно, когда фокус ушёл</span>
-          </div>
-          <div class="row">
-            <label>Горячая клавиша</label>
-            <div class="field">
-              <input type="text" v-model="selectedSlot.hotkey" style="width: 126px" />
-            </div>
-          </div>
-          <div class="hotkey-cap">после перезапуска</div>
+        <div class="detail-row"><div class="l">Имя</div><div class="v">{{ slotLabel(selectedSlot) }}</div></div>
+        <div class="detail-row"><div class="l">Состояние</div><div class="v">{{ statusLabels[selectedSlot.status.state] }}</div></div>
+        <div class="detail-row"><div class="l">Заголовок окна</div><div class="v" data-testid="slot-title">{{ selectedSlot.status.windowTitle || '—' }}</div></div>
+        <template v-if="selectedSlot.kind === 'permanent'">
+          <div class="detail-row"><div class="l">Файл (exe)</div><div class="v">{{ selectedSlot.value.executable }}</div></div>
+          <div class="detail-row"><div class="l">Класс окна</div><div class="v">{{ selectedSlot.value.windowClass || '—' }}</div></div>
+          <div class="detail-row"><div class="l">Хоткей фокуса</div><div class="v">{{ selectedSlot.value.focusHotkey || '—' }}</div></div>
         </template>
-
-        <template v-else>
-          <div class="detail-row"><div class="l">Имя</div><div class="v">—</div><div class="s">по умолчанию</div></div>
-          <div class="detail-row"><div class="l">Файл (exe)</div><div class="v">(пусто)</div><div class="s">по умолчанию</div></div>
-          <div class="detail-row">
-            <div class="l">Монитор</div>
-            <div class="v">{{ MONITOR_OPTIONS.find((o) => o.value === state.general.monitor)?.label }}</div>
-            <div class="s">из [dynamic]</div>
-          </div>
-          <div class="detail-row">
-            <div class="l">Край</div>
-            <div class="v">{{ EDGE_OPTIONS.find((o) => o.value === state.general.edge)?.label }}</div>
-            <div class="s">из [dynamic]</div>
-          </div>
-          <div class="detail-row">
-            <div class="l">Ширина (%)</div>
-            <div class="v">{{ state.general.sizePercent }}</div>
-            <div class="s">из [dynamic]</div>
-          </div>
-          <div class="detail-row">
-            <div class="l">Активировать при выезде</div>
-            <div class="v">{{ state.general.activateOnShow }}</div>
-            <div class="s">из [dynamic]</div>
-          </div>
-          <div class="detail-row" style="border-bottom: none">
-            <div class="l">Горячая клавиша</div>
-            <div class="v">Ctrl + Alt + {{ selectedSlot.n }}</div>
-            <div class="s">по номеру</div>
-          </div>
-
-          <div class="free-note">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent-fg)" stroke-width="2" stroke-linecap="round" style="flex: 0 0 auto">
-              <circle cx="12" cy="12" r="9" />
-              <line x1="12" y1="8" x2="12" y2="13" />
-              <circle cx="12" cy="16" r="1" fill="var(--accent-fg)" stroke="none" />
-            </svg>
-            <div>
-              Слот свободен и использует общие настройки динамических слотов (вкладка General).
-              Сделайте его постоянным, чтобы задать своё приложение и хоткей.
-            </div>
-          </div>
-        </template>
+        <div class="detail-row"><div class="l">Монитор</div><div class="v">{{ monitorLabel(behavior.monitor) }}</div></div>
+        <div class="detail-row"><div class="l">Край</div><div class="v">{{ edgeLabels[behavior.edge] }}</div></div>
+        <div class="detail-row"><div class="l">Размер (%)</div><div class="v" data-testid="slot-width">{{ behavior.widthPercent }}</div></div>
+        <div class="detail-row"><div class="l">Активировать при выезде</div><div class="v">{{ behavior.activateOnShow ? 'Да' : 'Нет' }}</div></div>
+        <div class="detail-row"><div class="l">Убирать при потере фокуса</div><div class="v">{{ behavior.hideOnBlur ? 'Да' : 'Нет' }}</div></div>
+        <div class="free-note">{{ selectedSlot.kind === 'dynamic' ? 'Показаны действующие параметры этого динамического слота, включая индивидуальные настройки.' : 'Показана сохранённая конфигурация постоянного слота.' }} Редактирование доступно в native Settings.</div>
       </div>
     </div>
   </div>
@@ -246,6 +90,11 @@ function statusFor(slot) {
   overflow-y: auto;
 }
 .slotrow {
+  width: 100%;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  border: 0;
   display: flex;
   align-items: center;
   gap: 11px;
@@ -477,9 +326,12 @@ select.dd {
   width: 160px;
   color: var(--text-2);
   flex: 0 0 auto;
+  max-width: 48%;
 }
 .detail-row .v {
   flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .detail-row .s {
   font-size: 10.5px;

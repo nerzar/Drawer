@@ -755,8 +755,8 @@ wire: иначе «300abc» стало бы 300 ещё до валидации, 
   `field`: вычислять путь поля разбором русского текста — ровно то, от
   чего уводил C3.
 - Picker operation gate не реализован: в slice нет ни одной операции,
-  которую он охраняет. `picker.*`, `slot.bind`, `slot.release` и
-  `slot.watchStatus` отвечают `unsupported_action`.
+  которую он охраняет. `picker.*`, `slot.bind` и `slot.release`
+  отвечают `unsupported_action`.
 - `settings.cancel` получил `discardChanges` в payload. Разделение труда
   из ADR сохранено: сравнивает draft с применённым состоянием порт (он
   один знает, что действует), спрашивает человека WebView. Ответ
@@ -773,8 +773,14 @@ wire: иначе «300abc» стало бы 300 ещё до валидации, 
   перечитывает `config.ini` и применяет все его ключи сразу
   (`HandleRepaintAll`, `HandlesSync`, `WatchBlur` переармируется по
   новому `blurMs`). Список наполняет только `focusHotkey` слотов.
-- `settings.closed` отправляется, `slot.statusChanged` — нет: watcher не
-  подключён.
+- `settings.closed` и `slot.statusChanged` отправляются. Read-only Slots
+  читает canonical DTO; `slot.watchStatus` включает 400-мс опрос
+  `DrawerSettingsPort.GetSlotStatuses()` → существующего C3 `SlotStatus(n)`.
+  При входе во вкладку отправляются все девять статусов, затем только
+  изменения enum/title (включая регистр заголовка). Vue обновляет статус
+  строки без reload Settings и без изменения General draft. При уходе
+  со вкладки таймер выключается; Dispose моста останавливает его при
+  любом закрытии/уничтожении транспорта.
 
 Страница отдаётся не через `file://`, а через
 `SetVirtualHostNameToFolderMapping`: модульные скрипты Vite с `file://`

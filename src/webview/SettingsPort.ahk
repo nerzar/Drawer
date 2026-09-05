@@ -14,7 +14,7 @@
 ; Через порт проходит вся вкладка General: те же десять ключей, что
 ; правит native ([dynamic] width/edge/monitor/activateOnShow/hideOnBlur и
 ; [general] handles/animMs/animSteps/blurMs/accent). Всё, что за этой
-; границей (правка слотов, picker, bind/release, watchStatus), отвечает
+; границей (правка слотов, picker, bind/release), отвечает
 ; unsupported_action — заглушки, притворяющейся успехом, здесь нет.
 
 class DrawerSettingsPort {
@@ -28,6 +28,13 @@ class DrawerSettingsPort {
 
     GetInitialState(payload) {
         return SettingsBridgeOk(this.StateDto())
+    }
+
+    GetSlotStatuses() {
+        statuses := Map()
+        Loop 9
+            statuses[A_Index] := this._StatusDto(SlotStatus(A_Index))
+        return statuses
     }
 
     Apply(payload) {

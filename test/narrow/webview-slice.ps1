@@ -1,10 +1,9 @@
-# Узкий end-to-end smoke вкладки General через WebView:
+# Узкий end-to-end smoke General и read-only Slots через WebView:
 #   getInitialState -> правка полей -> Apply -> SettingsApplyPlan ->
 #   канонический state обратно во Vue -> Отмена с dirty-подтверждением.
 #
-# Окнами, мышью и фокусом не управляет, поэтому VM не нужна — но окно
-# WebView2 на несколько секунд появляется на экране, это неизбежно:
-# проверяется само окно.
+# Создаёт и закрывает собственное тестовое окно для SlotStatus;
+# мышью и фокусом не управляет. WebView2 появляется на несколько секунд.
 #
 # Работает на КОПИИ src/ во временной папке: A_ScriptDir там свой, значит
 # Apply пишет во временный config.ini, а не в рабочий. Инструментация
@@ -64,6 +63,33 @@ SetTimer(SmokeOpen, -800)
 SetTimer(SmokeDrive, 700)
 SetTimer(SmokeWatch, 500)
 SetTimer(SmokeNativeClose, 400)
+SetTimer(SmokeSlotWindow, 100)
+
+; Real eligible window; only its existence/title change, never slot maps.
+SmokeSlotWindow() {
+    global webTrace
+    static phase := 0, fixture := 0
+    log := ""
+    try log := FileRead(webTrace, "UTF-8")
+    if (phase = 0 && InStr(log, "smoke.slots-ready")) {
+        fixture := Gui(, "Slots smoke title")
+        fixture.Show("w300 h240 NoActivate")
+        phase := 1
+    } else if (phase = 1 && InStr(log, "smoke.slots-available")) {
+        fixture.Title := "slots smoke title"
+        phase := 2
+    } else if (phase = 2 && InStr(log, "smoke.slots-title")) {
+        fixture.Destroy()
+        phase := 3
+    } else if (phase = 3 && InStr(log, "smoke.slots-away")) {
+        fixture := Gui(, "Slots reentry")
+        fixture.Show("w300 h240 NoActivate")
+        phase := 4
+    } else if (phase = 4 && InStr(log, "smoke.slots-done")) {
+        fixture.Destroy()
+        SetTimer(SmokeSlotWindow, 0)
+    }
+}
 
 ; webTrace задаётся здесь, а не рядом с вставкой: вставка стоит выше
 ; #Include webview\SettingsWebHost.ahk, и его собственное
@@ -152,13 +178,15 @@ SmokeWatch() {
     }
 
     $cfg = Join-Path $runDir "config.ini"
+    $fixtureExe = if ($Compiled) { 'Drawer.exe' } else { 'AutoHotkey64.exe' }
+    [IO.File]::AppendAllText($cfg, "`r`n[slot1]`r`nname=Smoke permanent`r`nexe=$fixtureExe`r`ncls=AutoHotkeyGUI`r`nmonitor=1`r`nedge=left`r`nwidth=61`r`nactivateOnShow=false`r`nhideOnBlur=false`r`nfocusHotkey=^!#1`r`n[dynamicSlot5]`r`nwidth=43`r`nedge=bottom`r`nmonitor=2`r`n", [Text.Encoding]::Unicode)
     $before = [IO.File]::ReadAllText($cfg, [Text.Encoding]::Unicode)
     Check "0a: во временном config.ini blurMs=250 до запуска" ($before -match '(?m)^blurMs=250\s*$')
 
     # --- прогон ------------------------------------------------------
     $target = if ($Compiled) { Join-Path $runDir "Drawer.exe" } else { $ahk }
     $targetArgs = if ($Compiled) { @() } else { @("`"$dir\drawer.ahk`"") }
-    $p = Start-Process -FilePath $target -ArgumentList $targetArgs -PassThru
+    $p = Start-Process -FilePath $target -ArgumentList $targetArgs -PassThru -WindowStyle Hidden
     if (-not $p.WaitForExit(90000)) {
         try { $p.Kill() } catch {}
         Check "0b: приложение завершилось само" $false
@@ -173,6 +201,8 @@ SmokeWatch() {
     Check "1a: мост принял settings.getInitialState" ($log -match 'request settings\.getInitialState')
     Check "1b: и ответил успехом" ($log -match 'response settings\.getInitialState ok=true')
     Check "1c: форма заполнена из config.ini целиком, а не умолчаниями" ($log -match 'request smoke\.loaded-full')
+    Check "1d: Slots canonical, live title/existence, reentry, no reload" ($log -match 'request smoke\.slots-done')
+    Check "1e: watcher enabled and disabled" (($log -match 'slot-watch enabled=1') -and ($log -match 'slot-watch enabled=0'))
 
     Check "2a: Apply дошёл до backend" ($log -match 'request settings\.apply')
     Check "2b: пустое поле вернулось structured validation_error" ($log -match 'response settings\.apply ok=false code=validation_error')
@@ -190,6 +220,7 @@ SmokeWatch() {
         (($log -match 'close-denied') -and -not ($log -match 'native-close-timeout'))
     Check "4d: Отмена без изменений закрыла окно сама" ($log -match 'settings-closed reason=cancel origin=frontend')
     Check "4e: окно WebView уничтожено" ($log -match 'webview-destroyed')
+    Check "4f: watcher disposed on close while Slots active" ($log -match 'slot-watch disposed')
 
     if ($Compiled) {
         # Ассеты приехали внутрь exe и распаковались во временную папку
@@ -235,6 +266,9 @@ SmokeWatch() {
 }
 finally {
     if ($env:DRAWER_SMOKE_KEEP -ne "1") {
+        $resolvedSmokeDir = [IO.Path]::GetFullPath($dir)
+        $smokeTempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\') + '\'
+        if (-not $resolvedSmokeDir.StartsWith($smokeTempRoot, [StringComparison]::OrdinalIgnoreCase) -or (Split-Path -Leaf $resolvedSmokeDir) -notlike 'drawer-webview-slice-*') { throw "Unsafe smoke cleanup: $resolvedSmokeDir" }
         Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
     } else {
         "temp: $dir"

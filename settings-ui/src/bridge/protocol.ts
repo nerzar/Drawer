@@ -114,6 +114,10 @@ export type ProtocolErrorBody = {
 // Карта action -> payload/result. Она и делает клиента типизированным:
 // request('settings.apply', ...) возвращает SaveResult, а не unknown.
 export type RequestMap = {
+  'slot.watchStatus': {
+    payload: { enabled: boolean }
+    result: { enabled: boolean }
+  }
   'settings.getInitialState': {
     payload: Record<string, never>
     result: SettingsState
@@ -148,6 +152,7 @@ export type ResponseMessage = {
 }
 
 export type EventMessage =
+  | { type: 'event'; event: 'slot.statusChanged'; data: { slot: SlotNumber; status: SlotStatus } }
   | { type: 'event'; event: 'settings.closeRequested'; data: { reason: 'window' } }
   | {
       type: 'event'

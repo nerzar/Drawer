@@ -9,7 +9,7 @@
 ; связан с запросом только через id, поэтому запрос без id не получает
 ; ответа вовсе: отправить его некуда.
 ;
-; Слайс не подключает picker, bind/release и watchStatus, поэтому и
+; Слайс не подключает picker и bind/release, поэтому и
 ; picker-gate из ADR здесь нет: гейт без операции, которую он охраняет,
 ; был бы непроверяемым кодом. Lifecycle закрытия оставлен минимальный,
 ; но настоящий: без него окно нечем закрыть.
@@ -26,6 +26,9 @@ class SettingsJsonBridge {
         this._disposed := false
         this._closeTimeoutHandler := ObjBindMethod(this, "_CloseTimedOut")
         this._destroyHandler := ObjBindMethod(this, "_DestroyNow")
+        this._statusHandler := ObjBindMethod(this, "_PollStatus")
+        this._watching := false
+        this._statuses := Map()
     }
 
     HandleJson(Json) {
@@ -72,7 +75,9 @@ class SettingsJsonBridge {
                 outcome := this._port.Ok(Request.payload)
             case "settings.cancel":
                 outcome := this._port.Cancel(Request.payload)
-            case "picker.exe", "picker.window", "slot.bind", "slot.release", "slot.watchStatus":
+            case "slot.watchStatus":
+                outcome := this._WatchStatus(Request.payload)
+            case "picker.exe", "picker.window", "slot.bind", "slot.release":
                 outcome := this._port.Unsupported(action)
             default:
                 this._SendError(Request, "unsupported_action", "Неизвестное действие: " action, false)
@@ -88,6 +93,9 @@ class SettingsJsonBridge {
         }
 
         this._Reply(Request, outcome)
+
+        if (outcome.Ok && action = "slot.watchStatus" && this._watching)
+            this._PollStatus()
 
         if !outcome.Ok {
             if (action = "settings.cancel" || action = "settings.ok")
@@ -132,6 +140,10 @@ class SettingsJsonBridge {
         if this._disposed
             return false
         this._disposed := true
+        this._watching := false
+        SetTimer(this._statusHandler, 0)
+        this._statuses.Clear()
+        this._Trace("slot-watch disposed")
         SetTimer(this._closeTimeoutHandler, 0)
         SetTimer(this._destroyHandler, 0)
         try this._port.Dispose()
@@ -140,6 +152,33 @@ class SettingsJsonBridge {
     }
 
     ; ------------------------- отправка -------------------------
+
+    _WatchStatus(payload) {
+        enabled := JsonGet(payload, "enabled", "")
+        if !(enabled is Integer) || (enabled != 0 && enabled != 1)
+            return SettingsBridgeError("invalid_request", "enabled должен быть true или false", false)
+        this._watching := enabled
+        this._statuses.Clear()
+        SetTimer(this._statusHandler, enabled ? 400 : 0)
+        this._Trace("slot-watch enabled=" enabled)
+        return SettingsBridgeOk(Map("enabled", JsonB(enabled)))
+    }
+
+    _PollStatus() {
+        if (!this._watching || this._disposed)
+            return
+        try {
+            for n, status in this._port.GetSlotStatuses() {
+                signature := JsonDump(status)
+                if (!this._statuses.Has(n) || !(this._statuses[n] == signature)) {
+                    this._statuses[n] := signature
+                    this._SendEvent("slot.statusChanged", Map("slot", n, "status", status))
+                }
+            }
+        } catch as e {
+            this._Trace("slot-watch-error " e.Message)
+        }
+    }
 
     _Reply(Request, Outcome) {
         if !Outcome.Ok {

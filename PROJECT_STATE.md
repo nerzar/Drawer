@@ -122,10 +122,19 @@ Dirty-семантика вся на настоящем пути. Отмена �
 модальное окно на стороне AHK остановило бы очередь сообщений WebView и
 дало бы сработать таймауту решения.
 
-Mock остался только там, куда перенос не дошёл: заголовок окна и вкладки
-Slots, About. Native Settings остаётся первым пунктом трея и полноценным
-путём. Правка слотов, picker, bind/release и watchStatus через WebView
+Slots read-only + live status подключены к production: все девять строк
+и детали берутся из canonical DTO, permanent value и dynamic effective
+включают реальные настройки слота. `slot.watchStatus` включает 400-мс
+опрос существующего `SlotStatus(n)` через порт; при входе отправляются
+все статусы, затем только изменения enum/title через `slot.statusChanged`.
+Vue меняет статус нужной строки, не перечитывая Settings и не трогая
+General draft. Уход со вкладки выключает таймер, закрытие уничтожает его.
+
+Mock остался в заголовке окна и About. Native Settings остаётся первым
+пунктом трея и полноценным путём. Правка слотов, picker и bind/release через WebView
 отвечают `unsupported_action`.
+
+Для editable Slots остаются slotEdits, picker, bind/release, conversion и C6.
 
 ## Инварианты
 
@@ -193,11 +202,15 @@ VM-оркестратор находится в `test/vm/` и используе
 артефакты вернулись на хост, VM выключилась штатно. `apps`/`all` в этой
 VM не подтверждены.
 
-`test/narrow/webview-slice.ps1` — end-to-end smoke вкладки General: 21/21
-на исходнике и 25/25 в режиме `-Compiled`. Гоняет копию `src/` во временной
-папке, поэтому Apply пишет во временный `config.ini`. Окнами, мышью и
-фокусом не управляет; окно WebView2 на несколько секунд появляется на
-экране. Требует собранного фронтенда: `cd settings-ui && npm run build`.
+`test/narrow/webview-slice.ps1` — end-to-end smoke General и read-only Slots:
+24/24 на исходнике. Проверяет DTO всех девяти слотов, dynamic override,
+появление/закрытие тестового окна, смену регистра title, отсутствие событий
+без изменений, остановку/возврат watcher без reload и General draft,
+effective values после Apply и закрытие с активным watcher.
+Гоняет копию `src/` во временной папке; config и окно принадлежат smoke.
+`/validate`, typecheck/build прошли; VM/full suite не запускались.
+Ранее General-only smoke в `-Compiled` прошёл 25/25; новый slice в этом
+режиме не проверялся. Требует собранного фронтенда: `npm run build --prefix settings-ui`.
 
 `-Compiled` собирает копию тем же Ahk2Exe, что и релиз, и запускает
 полученный exe в папке, где нет ни `webview\web`, ни вендора, ни
@@ -274,8 +287,8 @@ bridge, после него выполняется C6 native picker parity fix.
 
 ## Ближайшие задачи
 
-1. C1–C5, упаковка и вкладка General выполнены. Расширить bridge на
-   правку слотов, picker, bind/release и watchStatus, проверить S4
+1. C1–C5, упаковка, General и read-only Slots с live status выполнены.
+   Расширить bridge на правку слотов, picker, bind/release и conversion, проверить S4
    целевыми сценариями; затем закрыть C6 native picker parity fix.
 3. Завершить структурное разделение, затем перейти к произвольным слотам
    и новым UI-командам.

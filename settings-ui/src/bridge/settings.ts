@@ -5,7 +5,7 @@
 //
 // Вкладка General ходит этим путём целиком: все её поля читаются из
 // canonical, правятся в draft и уезжают одним settings.apply/ok. Slots
-// пока живут на mock-state и в draft не попадают — их правки поедут
+// читаются из canonical и в draft не попадают — их правки поедут
 // отдельным slotEdits, когда придёт их очередь.
 
 import { reactive } from 'vue'
