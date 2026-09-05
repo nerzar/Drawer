@@ -343,7 +343,7 @@ if !FileExist(drawerPath) {
 ; Точка 7 (C3): структурный статус слота. Пять состояний контракта и
 ; правило «просмотр статуса не захватывает окно». SlotWindow/SlotStatus
 ; обращаются к настоящим окнам, поэтому здесь копия с подставленными
-; вместо WinExist/FindWindow/HandleManaged/HandleParked параметрами:
+; вместо WinExist/FindWindow/WindowManaged/WindowParked параметрами:
 ; проверяется порядок ветвей и набор состояний, а не сами WinAPI.
 ; ---------------------------------------------------------------
 
@@ -357,7 +357,7 @@ SlotWindowCopy(managed, permSlots, dynSlots, n, alive, found) {
     return (dynSlots.Has(n) && alive.Has(dynSlots[n]) && alive[dynSlots[n]])
          ? dynSlots[n] : 0
 }
-; Копия SlotStatus: isManaged/isParked заменяют HandleManaged/HandleParked.
+; Копия SlotStatus: isManaged/isParked заменяют WindowManaged/WindowParked.
 SlotStatusCopy(isPerm, hwnd, titles, isManaged, isParked) {
     if !hwnd
         return { state: isPerm ? "applicationNotRunning" : "empty", title: "" }

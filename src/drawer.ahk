@@ -934,6 +934,26 @@ StillFocused(hwnd) {
     return false
 }
 
+; Управляет ли ящик этим окном: геометрия посчитана, значит слот хоть раз
+; показывали и его место в стопке кромок уже занято. Предикат оконной
+; модели, а не кромки: его спрашивает и реестр слотов (SlotStatus), и
+; сама кромка, поэтому он стоит здесь, рядом с state.
+WindowManaged(hwnd) {
+    global state
+    return state.Has(hwnd) && state[hwnd].geom
+}
+
+; Припарковано ли окно слота — тот же признак, на котором держится весь
+; ящик: окно не пересекается ни с одним монитором.
+WindowParked(hwnd) {
+    if !WindowManaged(hwnd)
+        return false
+    try {
+        WinGetPos(&x, &y, &w, &h, "ahk_id " hwnd)
+        return !HitsMonitor(x, y, w, h)
+    }
+    return false
+}
 ; Выдвинуто ли окно на самом деле. Пользователь мог свернуть его,
 ; перетащить или изменить размер — тогда по хоткею надо показывать
 ; окно, а не прятать то, что и так не на месте.
@@ -1141,24 +1161,6 @@ Cleanup(*) {
 ; служебные окна, так что для остального кода ящика кромок не
 ; существует — ни в Alt+Tab, ни в возврате фокуса, ни в привязке слота.
 
-; Управляет ли ящик этим окном: геометрия посчитана, значит слот хоть раз
-; показывали и его место в стопке кромок уже занято.
-HandleManaged(hwnd) {
-    global state
-    return state.Has(hwnd) && state[hwnd].geom
-}
-
-; Припарковано ли окно слота — тот же признак, на котором держится весь
-; ящик: окно не пересекается ни с одним монитором.
-HandleParked(hwnd) {
-    if !HandleManaged(hwnd)
-        return false
-    try {
-        WinGetPos(&x, &y, &w, &h, "ahk_id " hwnd)
-        return !HitsMonitor(x, y, w, h)
-    }
-    return false
-}
 
 ; Место кромки в покое: idx-я из count штук у края edge монитора mi.
 ; Стопка компактная и стоит по центру края, порядок задаёт номер слота,
@@ -1258,7 +1260,7 @@ HandlesSync() {
     ; ним и соседние кромки не прыгают, пока он ездит туда-обратно.
     groups := Map()
     for s in slots {
-        if !HandleManaged(s.hwnd)
+        if !WindowManaged(s.hwnd)
             continue
         try
             mi := ResolveMonitor(s.cfg)

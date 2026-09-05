@@ -36,7 +36,7 @@
 ;
 ;   вниз  — оконная модель drawer.ahk (state/watched/геометрия): Release,
 ;           FindWindow, ToggleWindow, FocusWindow, PickActive и предикаты
-;           HandleManaged/HandleParked. Слоты знают, КАКОЕ окно
+;           WindowManaged/WindowParked. Слоты знают, КАКОЕ окно
 ;           принадлежит слоту; что с окном делать — знает оконная модель.
 ;   вверх — хоткеи, кромки, Settings и WebView-порт зовут функции этого
 ;           файла и НЕ трогают Slots.byNum. Реестр — не общий словарь.
@@ -298,8 +298,8 @@ SlotBound() {
 ;
 ; title заполнен только там, где окно действительно есть.
 ;
-; Признаки те же, на которых стоит остальная программа (HandleManaged /
-; HandleParked) — второго источника истины не заводится. Вход — номер
+; Признаки те же, на которых стоит остальная программа (WindowManaged /
+; WindowParked) — второго источника истины не заводится. Вход — номер
 ; слота, а не строка списка Settings: этим же API пользуется WebView-порт,
 ; которому ни строк, ни секций config.ini не показывают. Русские подписи
 ; живут отдельно, в SettingsStatusText(): разбирать статус обратно из
@@ -312,9 +312,9 @@ SlotStatus(n) {
     try title := WinGetTitle("ahk_id " hwnd)
     app := WindowAppName(hwnd)
     icon := SlotIconUri(hwnd)
-    if !HandleManaged(hwnd)
+    if !WindowManaged(hwnd)
         return { state: "available", title: title, app: app, icon: icon }
-    return { state: HandleParked(hwnd) ? "parked" : "shown",
+    return { state: WindowParked(hwnd) ? "parked" : "shown",
              title: title, app: app, icon: icon }
 }
 
