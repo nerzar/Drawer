@@ -8,12 +8,19 @@ const slots = computed(() => settings.canonical?.slots ?? [])
 const selectedSlot = computed(() => slots.value.find((s) => s.number === selectedNumber.value))
 const behavior = computed(() => selectedSlot.value && slotBehavior(selectedSlot.value))
 const watchError = useSlotStatus()
+const draft = computed(() => settings.slotDrafts[selectedNumber.value])
+const textFields = [
+  { key: 'name', label: 'Имя' }, { key: 'executable', label: 'Файл (exe)' },
+  { key: 'windowClass', label: 'Класс окна' }, { key: 'focusHotkey', label: 'Хоткей фокуса' },
+  { key: 'widthPercent', label: 'Размер (%)' },
+]
+const bad = (key) => settings.field === `slots.${selectedNumber.value}.${key}`
 </script>
 
 <template>
   <div class="content">
     <h1 class="page-title">Слоты Drawer</h1>
-    <p class="page-sub">Применённые настройки и состояние окон. Только просмотр.</p>
+    <p class="page-sub">Настройки постоянных слотов и состояние окон. Динамические слоты — только просмотр.</p>
     <p v-if="watchError" role="alert">Обновление статусов недоступно: {{ watchError }}</p>
     <p v-if="!settings.canonical">{{ settings.message || 'Читаем настройки…' }}</p>
     <div v-else class="split" data-testid="slots">
@@ -40,23 +47,50 @@ const watchError = useSlotStatus()
         <div class="detail-row"><div class="l">Имя</div><div class="v">{{ slotLabel(selectedSlot) }}</div></div>
         <div class="detail-row"><div class="l">Состояние</div><div class="v">{{ statusLabels[selectedSlot.status.state] }}</div></div>
         <div class="detail-row"><div class="l">Заголовок окна</div><div class="v" data-testid="slot-title">{{ selectedSlot.status.windowTitle || '—' }}</div></div>
-        <template v-if="selectedSlot.kind === 'permanent'">
-          <div class="detail-row"><div class="l">Файл (exe)</div><div class="v">{{ selectedSlot.value.executable }}</div></div>
-          <div class="detail-row"><div class="l">Класс окна</div><div class="v">{{ selectedSlot.value.windowClass || '—' }}</div></div>
-          <div class="detail-row"><div class="l">Хоткей фокуса</div><div class="v">{{ selectedSlot.value.focusHotkey || '—' }}</div></div>
-        </template>
+        <fieldset v-if="selectedSlot.kind === 'permanent' && draft" class="slot-editor" :disabled="settings.status === 'saving'">
+          <div v-for="field in textFields" :key="field.key" class="row">
+            <label :for="`slot-${field.key}`">{{ field.label }}</label>
+            <input :id="`slot-${field.key}`" :data-testid="`edit-${field.key}`" type="text"
+              :class="{ 'field-bad': bad(field.key) }" :aria-invalid="bad(field.key)" v-model="draft[field.key]" />
+          </div>
+          <div class="row">
+            <label for="slot-monitor">Монитор</label>
+            <select id="slot-monitor" class="dd" data-testid="edit-monitorKind" v-model="draft.monitorKind" :class="{ 'field-bad': bad('monitor') }">
+              <option value="cursor">Под курсором</option><option value="number">По номеру</option>
+              <option v-if="draft.monitorKind === 'invalid'" value="invalid">Некорректно: {{ draft.monitorRaw }}</option>
+            </select>
+          </div>
+          <div v-if="draft.monitorKind === 'number'" class="row">
+            <label for="slot-monitor-number">Номер монитора</label>
+            <input id="slot-monitor-number" type="text" data-testid="edit-monitorNumber" v-model="draft.monitorNumber" :class="{ 'field-bad': bad('monitor.number') }" />
+          </div>
+          <div class="row">
+            <label for="slot-edge">Край</label>
+            <select id="slot-edge" class="dd" data-testid="edit-edge" v-model="draft.edge" :class="{ 'field-bad': bad('edge') }">
+              <option v-for="(label, edge) in edgeLabels" :key="edge" :value="edge">{{ label }}</option>
+            </select>
+          </div>
+          <label class="check-row"><input type="checkbox" data-testid="edit-activateOnShow" v-model="draft.activateOnShow" />Активировать при выезде</label>
+          <label class="check-row"><input type="checkbox" data-testid="edit-hideOnBlur" v-model="draft.hideOnBlur" />Убирать при потере фокуса</label>
+          <p class="page-sub">Хоткей фокуса применяется после перезапуска.</p>
+        </fieldset>
+        <template v-else>
         <div class="detail-row"><div class="l">Монитор</div><div class="v">{{ monitorLabel(behavior.monitor) }}</div></div>
         <div class="detail-row"><div class="l">Край</div><div class="v">{{ edgeLabels[behavior.edge] }}</div></div>
         <div class="detail-row"><div class="l">Размер (%)</div><div class="v" data-testid="slot-width">{{ behavior.widthPercent }}</div></div>
         <div class="detail-row"><div class="l">Активировать при выезде</div><div class="v">{{ behavior.activateOnShow ? 'Да' : 'Нет' }}</div></div>
         <div class="detail-row"><div class="l">Убирать при потере фокуса</div><div class="v">{{ behavior.hideOnBlur ? 'Да' : 'Нет' }}</div></div>
-        <div class="free-note">{{ selectedSlot.kind === 'dynamic' ? 'Показаны действующие параметры этого динамического слота, включая индивидуальные настройки.' : 'Показана сохранённая конфигурация постоянного слота.' }} Редактирование доступно в native Settings.</div>
+        </template>
+        <p v-if="settings.bad" role="alert">{{ settings.message }}</p>
+        <div class="free-note">{{ selectedSlot.kind === 'dynamic' ? 'Показаны действующие параметры этого динамического слота, включая индивидуальные настройки.' : 'Применить и ОК сохраняют настройки General и постоянных слотов. Список слева показывает применённые значения.' }}</div>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
+.slot-editor { border: 0; padding: 16px 0 0; margin: 0; min-width: 0; }
+.field-bad { outline: 1px solid #e2857f; }
 .content {
   flex: 1;
   padding: 26px 36px 20px;

@@ -130,11 +130,17 @@ Slots read-only + live status подключены к production: все дев�
 Vue меняет статус нужной строки, не перечитывая Settings и не трогая
 General draft. Уход со вкладки выключает таймер, закрытие уничтожает его.
 
-Mock остался в заголовке окна и About. Native Settings остаётся первым
-пунктом трея и полноценным путём. Правка слотов, picker и bind/release через WebView
-отвечают `unsupported_action`.
+Существующие permanent Slots редактируются через отдельный draft из
+canonical DTO. Apply/OK отправляют изменённые config values в `slotEdits`:
+порт переводит их в `SettingsSlotsPlan → SettingsApplyPlan`, без второго
+пути записи. Success заменяет baseline и оба draft ответом AHK; validation
+сохраняет ввод и показывает сообщение/field. Dirty-close проверяет General
+и Slots общими планами, а live status не касается slot draft.
 
-Для editable Slots остаются slotEdits, picker, bind/release, conversion и C6.
+Mock остался в заголовке окна и About. Native Settings сохранён.
+Picker и bind/release через WebView отвечают `unsupported_action`.
+
+Остаются picker, bind/release, conversion и C6; dynamic Slots пока read-only.
 
 ## Инварианты
 
@@ -202,8 +208,10 @@ VM-оркестратор находится в `test/vm/` и используе
 артефакты вернулись на хост, VM выключилась штатно. `apps`/`all` в этой
 VM не подтверждены.
 
-`test/narrow/webview-slice.ps1` — end-to-end smoke General и read-only Slots:
-24/24 на исходнике. Проверяет DTO всех девяти слотов, dynamic override,
+`test/narrow/webview-slice.ps1` — end-to-end smoke General и permanent Slots:
+27/27 на исходнике. Проверяет slot validation, dirty-close, draft при live
+status, общий Apply, canonical normalization, no-op и запись через OK;
+также DTO всех девяти слотов, dynamic override,
 появление/закрытие тестового окна, смену регистра title, отсутствие событий
 без изменений, остановку/возврат watcher без reload и General draft,
 effective values после Apply и закрытие с активным watcher.
@@ -288,7 +296,7 @@ bridge, после него выполняется C6 native picker parity fix.
 ## Ближайшие задачи
 
 1. C1–C5, упаковка, General и read-only Slots с live status выполнены.
-   Расширить bridge на правку слотов, picker, bind/release и conversion, проверить S4
+   Permanent slotEdits выполнены; добавить picker, bind/release и conversion, проверить S4
    целевыми сценариями; затем закрыть C6 native picker parity fix.
 3. Завершить структурное разделение, затем перейти к произвольным слотам
    и новым UI-командам.

@@ -781,6 +781,12 @@ wire: иначе «300abc» стало бы 300 ещё до валидации, 
   строки без reload Settings и без изменения General draft. При уходе
   со вкладки таймер выключается; Dispose моста останавливает его при
   любом закрытии/уничтожении транспорта.
+- Существующие permanent Slots получили config draft из canonical `value`.
+  Только изменённые слоты отправляются в `slotEdits`; live status обновляет
+  canonical status отдельно. Порт проверяет форму DTO и запрет conversion,
+  затем вызывает общий `SettingsSlotsPlan → SettingsApplyPlan`. Dirty-close
+  использует те же General/Slots планы. Success заменяет оба draft canonical
+  state AHK; ошибка сохраняет ввод и показывает backend message/field.
 
 Страница отдаётся не через `file://`, а через
 `SetVirtualHostNameToFolderMapping`: модульные скрипты Vite с `file://`

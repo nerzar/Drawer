@@ -203,6 +203,8 @@ SmokeWatch() {
     Check "1c: форма заполнена из config.ini целиком, а не умолчаниями" ($log -match 'request smoke\.loaded-full')
     Check "1d: Slots canonical, live title/existence, reentry, no reload" ($log -match 'request smoke\.slots-done')
     Check "1e: watcher enabled and disabled" (($log -match 'slot-watch enabled=1') -and ($log -match 'slot-watch enabled=0'))
+    Check "1f: slot draft, dirty-close and validation" ($log -match 'request smoke\.slot-validation')
+    Check "1g: slot Apply canonical baseline and no-op" ($log -match 'request smoke\.slot-saved')
 
     Check "2a: Apply дошёл до backend" ($log -match 'request settings\.apply')
     Check "2b: пустое поле вернулось structured validation_error" ($log -match 'response settings\.apply ok=false code=validation_error')
@@ -218,7 +220,7 @@ SmokeWatch() {
         (($log -match 'native-close-requested') -and ($log -match 'request smoke\.native-guarded'))
     Check "4c: отказ вернул мост в open, окно осталось" `
         (($log -match 'close-denied') -and -not ($log -match 'native-close-timeout'))
-    Check "4d: Отмена без изменений закрыла окно сама" ($log -match 'settings-closed reason=cancel origin=frontend')
+    Check "4d: OK saved slot draft and closed window" ($log -match 'settings-closed reason=ok origin=frontend')
     Check "4e: окно WebView уничтожено" ($log -match 'webview-destroyed')
     Check "4f: watcher disposed on close while Slots active" ($log -match 'slot-watch disposed')
 
@@ -252,6 +254,9 @@ SmokeWatch() {
         (($after -match '(?m)^width=80\s*$') -and ($after -match '(?m)^edge=right\s*$') `
          -and ($after -match '(?m)^monitor=cursor\s*$') -and ($after -match '(?m)^hideOnBlur=true\s*$'))
     Check "5d: файл остался UTF-16 LE с комментариями пользователя" ($after -match 'Ящик' -and $after -match 'Настройки читаются заново')
+    Check "5e: slot fields persisted through Apply and OK" `
+        (($after -match '(?m)^name=Saved by OK\s*$') -and ($after -match '(?m)^width=62\s*$') `
+         -and ($after -match '(?m)^cls=SmokeMissingClass\s*$') -and ($after -match '(?m)^focusHotkey=\^!#2\s*$'))
 
     $mode = if ($Compiled) { "собранный exe" } else { "исходник" }
     "режим: $mode"

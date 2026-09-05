@@ -89,7 +89,7 @@ export function draftToWire(d: GeneralDraft): GeneralSettings {
   }
 }
 
-function monitorToWire(d: GeneralDraft): MonitorRef {
+export function monitorToWire(d: Pick<GeneralDraft, 'monitorKind' | 'monitorRaw' | 'monitorNumber'>): MonitorRef {
   if (d.monitorKind === 'cursor') return { kind: 'cursor' }
   if (d.monitorKind === 'invalid') return { kind: 'invalid', raw: d.monitorRaw }
   return { kind: 'number', number: num(d.monitorNumber) }
@@ -98,7 +98,7 @@ function monitorToWire(d: GeneralDraft): MonitorRef {
 // Пустая строка — не ноль. Number('') даёт 0, и без этой проверки
 // очищенное поле уехало бы валидным нулём вместо «поле не заполнено».
 // NaN сериализуется в null, и порт отвечает ошибкой с именем поля.
-function num(s: string): number {
+export function num(s: string): number {
   const t = s.trim()
   return t === '' ? Number.NaN : Number(t)
 }

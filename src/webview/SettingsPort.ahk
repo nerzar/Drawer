@@ -13,9 +13,9 @@
 ;
 ; Через порт проходит вся вкладка General: те же десять ключей, что
 ; правит native ([dynamic] width/edge/monitor/activateOnShow/hideOnBlur и
-; [general] handles/animMs/animSteps/blurMs/accent). Всё, что за этой
-; границей (правка слотов, picker, bind/release), отвечает
-; unsupported_action — заглушки, притворяющейся успехом, здесь нет.
+; [general] handles/animMs/animSteps/blurMs/accent), а также существующие
+; permanent Slots через SettingsSlotsPlan. Picker и bind/release отвечают
+; unsupported_action; создание и conversion отклоняются при разборе slotEdits.
 
 class DrawerSettingsPort {
     static PROTOCOL_VERSION := 1
@@ -77,10 +77,13 @@ class DrawerSettingsPort {
     _DraftDirty(draft) {
         if !(draft is Map)
             return false
-        edits := JsonGet(draft, "slotEdits", 0)
-        if (edits is Array && edits.Length)
-            return true
         err := "", field := ""
+        edits := this._SlotsInput(JsonGet(draft, "slotEdits", []), &err, &field)
+        if (err != "")
+            return true
+        slotPlan := SettingsSlotsPlan(edits, &err)
+        if (err != "" || slotPlan.writes.Length || slotPlan.deletes.Length)
+            return true
         input := this._GeneralInput(JsonGet(draft, "general", 0), &err, &field)
         if (err != "")
             return true
@@ -109,11 +112,10 @@ class DrawerSettingsPort {
         if !(draft is Map)
             return SettingsBridgeError("invalid_request", "В запросе нет draft", false)
 
-        edits := JsonGet(draft, "slotEdits", 0)
-        if (edits is Array && edits.Length)
-            return this.Unsupported("правка слотов")
-
         err := "", field := ""
+        edits := this._SlotsInput(JsonGet(draft, "slotEdits", []), &err, &field)
+        if (err != "")
+            return this._Invalid(err, field)
         input := this._GeneralInput(JsonGet(draft, "general", 0), &err, &field)
         if (err != "")
             return this._Invalid(err, field)
@@ -124,12 +126,10 @@ class DrawerSettingsPort {
         if !generalWrites
             return this._Invalid(err != "" ? err : "General не разобран", "")
 
-        ; edits = 0 — правок слотов нет, но снимок identity/bindings
-        ; реконсиляции нужен всё равно: General-only Save тоже проходит
-        ; через неё.
-        slotPlan := SettingsSlotsPlan(0, &err)
+        ; Единственный план Slots, общий с native, включая no-op и dirty.
+        slotPlan := SettingsSlotsPlan(edits, &err)
         if (err != "")
-            return SettingsBridgeError("internal_error", err, false)
+            return this._Invalid(err, "")
 
         outcome := ""
         SettingsApplyPlan(generalWrites, slotPlan, &outcome)
@@ -265,8 +265,7 @@ class DrawerSettingsPort {
         return v ? true : false
     }
 
-    _MonitorIn(m, &err, &field) {
-        static path := "general.dynamicDefaults.monitor"
+    _MonitorIn(m, &err, &field, path := "general.dynamicDefaults.monitor") {
         if (err != "")
             return ""
         if !(m is Map) || !m.Has("kind")
@@ -286,6 +285,43 @@ class DrawerSettingsPort {
         if !m.Has("number") || !IsInteger(m["number"])
             return this._Bad("monitor.number должен быть целым", path ".number", &err, &field)
         return String(Integer(m["number"]))
+    }
+
+    ; Wire shape only: semantic validation and disk diff stay in SettingsSlotsPlan.
+    _SlotsInput(items, &err, &field) {
+        edits := Map()
+        if !(items is Array)
+            return this._Bad("slotEdits должен быть массивом", "slotEdits", &err, &field)
+        for item in items {
+            if !(item is Map)
+                return this._Bad("Правка слота должна быть объектом", "slotEdits", &err, &field)
+            n := JsonGet(item, "number", 0)
+            if !(n is Integer) || n < 1 || n > 9
+                return this._Bad("Номер слота должен быть 1…9", "slotEdits", &err, &field)
+            path := "slots." n
+            if edits.Has(n)
+                return this._Bad("Повторная правка слота " n, path, &err, &field)
+            if (JsonGet(item, "kind", "") != "permanent" || !PermApp(n))
+                return this._Bad("Доступна только правка существующего постоянного слота", path, &err, &field)
+            v := JsonGet(item, "value", 0)
+            if !(v is Map)
+                return this._Bad("Нет конфигурации слота", path, &err, &field)
+            edits[n] := {
+                kind: "perm",
+                name: this._Text(v, "name", path ".name", &err, &field),
+                exe: this._Text(v, "executable", path ".executable", &err, &field),
+                cls: this._Text(v, "windowClass", path ".windowClass", &err, &field),
+                focusHotkey: this._Text(v, "focusHotkey", path ".focusHotkey", &err, &field),
+                width: this._Int(v, "widthPercent", path ".widthPercent", &err, &field),
+                edge: this._Text(v, "edge", path ".edge", &err, &field),
+                monitor: this._MonitorIn(JsonGet(v, "monitor", 0), &err, &field, path ".monitor"),
+                activateOnShow: this._Bool(v, "activateOnShow", path ".activateOnShow", &err, &field),
+                hideOnBlur: this._Bool(v, "hideOnBlur", path ".hideOnBlur", &err, &field)
+            }
+            if (err != "")
+                return 0
+        }
+        return edits
     }
 
     ; ------------------ рантайм -> wire SettingsState ------------------

@@ -5,8 +5,7 @@
 //
 // Вкладка General ходит этим путём целиком: все её поля читаются из
 // canonical, правятся в draft и уезжают одним settings.apply/ok. Slots
-// читаются из canonical и в draft не попадают — их правки поедут
-// отдельным slotEdits, когда придёт их очередь.
+// имеют отдельный config draft и отправляют изменения через slotEdits.
 
 import { reactive } from 'vue'
 import {
@@ -17,6 +16,7 @@ import {
 } from './client'
 import { draftFromState, draftToWire, type GeneralDraft } from './general'
 import type { SettingsState } from './protocol'
+import { slotDraftsFromState, slotEditsToWire, type SlotDrafts } from './slotDraft'
 
 type Status = 'idle' | 'loading' | 'ready' | 'saving' | 'error'
 
@@ -25,6 +25,7 @@ export const settings = reactive({
   connected: false,
   canonical: null as SettingsState | null,
   draft: null as GeneralDraft | null,
+  slotDrafts: {} as SlotDrafts,
   message: '',
   bad: false,
   // Путь поля из ответа — «general.blurCheckMs» и т. п. Подсвечивает
@@ -130,12 +131,13 @@ async function save(action: 'settings.apply' | 'settings.ok'): Promise<void> {
 }
 
 function buildDraft() {
-  return { general: draftToWire(settings.draft!), slotEdits: [] }
+  return { general: draftToWire(settings.draft!), slotEdits: slotEditsToWire(settings.slotDrafts, settings.canonical!) }
 }
 
 function adopt(state: SettingsState): void {
   settings.canonical = state
   settings.draft = draftFromState(state.general)
+  settings.slotDrafts = slotDraftsFromState(state)
 }
 
 function fail(e: unknown): void {
