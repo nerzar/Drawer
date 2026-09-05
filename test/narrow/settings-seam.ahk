@@ -32,6 +32,14 @@
 ;
 ; Точка 6 (C2): статическая проверка, что ядро не знает имён окон
 ; настроек и что регистрация снимается на всех путях разрушения.
+;
+; Точка 7 (C3, структурный статус): копия SlotWindow/SlotStatus с
+; подставленными вместо WinAPI параметрами. Проверяются пять состояний
+; контракта и то, что просмотр статуса не пишет в managed.
+;
+; Точка 8 (C3): статическая проверка, что статус нигде не разбирается из
+; русской строки, а сами подписи остались дословными — на них стоят
+; проверки набора setstat.
 
 drawerPath := A_ScriptDir "\..\..\src\drawer.ahk"
 
@@ -286,6 +294,120 @@ if !FileExist(drawerPath) {
         StrSplit(src6, "ServiceWindowAdd(").Length - 1 >= 3)
     Assert("6g: регистрация снимается на всех путях разрушения",
         StrSplit(src6, "ServiceWindowDrop(").Length - 1 >= 4)
+}
+
+; ---------------------------------------------------------------
+; Точка 7 (C3): структурный статус слота. Пять состояний контракта и
+; правило «просмотр статуса не захватывает окно». SlotWindow/SlotStatus
+; обращаются к настоящим окнам, поэтому здесь копия с подставленными
+; вместо WinExist/FindWindow/HandleManaged/HandleParked параметрами:
+; проверяется порядок ветвей и набор состояний, а не сами WinAPI.
+; ---------------------------------------------------------------
+
+; Копия SlotWindow: alive заменяет WinExist, found — результат FindWindow.
+SlotWindowCopy(managed, permSlots, dynSlots, n, alive, found) {
+    if permSlots.Has(n) {
+        if (managed.Has(n) && alive.Has(managed[n]) && alive[managed[n]])
+            return managed[n]
+        return found.Has(n) ? found[n] : 0
+    }
+    return (dynSlots.Has(n) && alive.Has(dynSlots[n]) && alive[dynSlots[n]])
+         ? dynSlots[n] : 0
+}
+; Копия SlotStatus: isManaged/isParked заменяют HandleManaged/HandleParked.
+SlotStatusCopy(isPerm, hwnd, titles, isManaged, isParked) {
+    if !hwnd
+        return { state: isPerm ? "applicationNotRunning" : "empty", title: "" }
+    title := titles.Has(hwnd) ? titles[hwnd] : ""
+    if !isManaged
+        return { state: "available", title: title }
+    return { state: isParked ? "parked" : "shown", title: title }
+}
+
+titles := Map(7001, "Блокнот", 7002, "Проводник")
+
+Assert("7a: динамический слот без окна -> empty, без title",
+    SlotStatusCopy(false, 0, titles, false, false).state = "empty"
+ && SlotStatusCopy(false, 0, titles, false, false).title = "")
+Assert("7b: постоянный слот без окна -> applicationNotRunning",
+    SlotStatusCopy(true, 0, titles, false, false).state = "applicationNotRunning")
+Assert("7c: окно есть, ящик его ещё не показывал -> available + title",
+    SlotStatusCopy(true, 7001, titles, false, false).state = "available"
+ && SlotStatusCopy(true, 7001, titles, false, false).title = "Блокнот")
+Assert("7d: окно за пределами мониторов -> parked + title",
+    SlotStatusCopy(false, 7002, titles, true, true).state = "parked"
+ && SlotStatusCopy(false, 7002, titles, true, true).title = "Проводник")
+Assert("7e: окно на экране -> shown + title",
+    SlotStatusCopy(false, 7002, titles, true, false).state = "shown")
+
+; Ровно пять состояний контракта, ни одного лишнего.
+seen := Map()
+for c in [SlotStatusCopy(false, 0, titles, false, false)
+        , SlotStatusCopy(true, 0, titles, false, false)
+        , SlotStatusCopy(true, 7001, titles, false, false)
+        , SlotStatusCopy(false, 7002, titles, true, true)
+        , SlotStatusCopy(false, 7002, titles, true, false)]
+    seen[c.state] := true
+Assert("7f: набор состояний ровно тот, что в integration-контракте",
+    seen.Count = 5 && seen.Has("empty") && seen.Has("applicationNotRunning")
+ && seen.Has("available") && seen.Has("parked") && seen.Has("shown"))
+
+; Просмотр статуса не захватывает окно: managed только читается.
+managed := Map(), permSlots := Map(), dynSlots := Map()
+permSlots[1] := 1
+alive := Map(7001, true)
+found := Map(1, 7001)          ; FindWindow нашёл окно, managed пуст
+before := managed.Count
+hwnd := SlotWindowCopy(managed, permSlots, dynSlots, 1, alive, found)
+Assert("7g: окно найдено, но в managed ничего не записано",
+    hwnd = 7001 && managed.Count = before && managed.Count = 0)
+
+; Уже захваченное окно берётся из managed без повторного поиска.
+managed[1] := 7001
+Assert("7h: живое managed-окно возвращается без FindWindow",
+    SlotWindowCopy(managed, permSlots, Map(), 1, alive, Map()) = 7001)
+alive[7001] := false
+Assert("7i: мёртвое managed-окно уступает результату поиска",
+    SlotWindowCopy(managed, permSlots, Map(), 1, alive, Map(1, 7002)) = 7002)
+
+; ---------------------------------------------------------------
+; Точка 8 (C3): в src/drawer.ahk статус нигде не разбирается обратно из
+; русской строки, а сами подписи остались дословными — на них стоят
+; проверки набора setstat.
+; ---------------------------------------------------------------
+if !FileExist(drawerPath) {
+    Assert("8: src/drawer.ahk найден рядом с test/narrow", false)
+} else {
+    src8 := FileRead(drawerPath, "UTF-8")
+    Assert("8a: SlotStatus(n) — read-only API по номеру слота",
+        InStr(src8, "SlotStatus(n) {") > 0 && InStr(src8, "SlotWindow(n) {") > 0)
+    Assert("8b: прежней SettingsSlotStatus(r) нет",
+        InStr(src8, "SettingsSlotStatus") = 0)
+
+    posColor := InStr(src8, "SettingsStatusColor(state) {")
+    bodyColor := posColor ? SubStr(src8, posColor, 240) : ""
+    Assert("8c: индикатор ветвится по enum, а не по подписи",
+        posColor > 0 && InStr(bodyColor, "empty") > 0
+     && InStr(bodyColor, "applicationNotRunning") > 0
+     && InStr(bodyColor, "пусто") = 0)
+
+    posTxt := InStr(src8, "SettingsStatusText(st) {")
+    bodyTxt := posTxt ? SubStr(src8, posTxt, 600) : ""
+    Assert("8d: локализатор найден", posTxt > 0)
+    Assert("8e: подписи setstat сохранены дословно",
+        InStr(bodyTxt, "`"пусто`"") > 0
+     && InStr(bodyTxt, "`"приложение не запущено`"") > 0
+     && InStr(bodyTxt, "`"окно: `"") > 0
+     && InStr(bodyTxt, "`"припаркован`"") > 0
+     && InStr(bodyTxt, "`"выдвинут`"") > 0)
+    Assert("8f: подписи живут только в локализаторе",
+        StrSplit(src8, "`"припаркован`"").Length = 2
+     && StrSplit(src8, "`"выдвинут`"").Length = 2)
+
+    posWin := InStr(src8, "SlotWindow(n) {")
+    bodyWin := posWin ? SubStr(src8, posWin, 420) : ""
+    Assert("8g: SlotWindow не пишет в managed",
+        posWin > 0 && InStr(bodyWin, "managed[n] :=") = 0)
 }
 
 ; ---------------------------------------------------------------

@@ -579,6 +579,51 @@ PermApp(n) {
     return permSlots.Has(n) ? apps[permSlots[n]] : 0
 }
 
+; Окно слота прямо сейчас — 0, если его нет. Постоянный слот ищется тем
+; же поиском, что и для хоткея, но результат НИКУДА НЕ ПИШЕТСЯ: managed
+; здесь только читается. Иначе беглый взгляд на статус подменял бы выбор,
+; который иначе сделал бы FindWindow() в момент реального нажатия.
+; Динамический слот берётся из dynSlots как есть.
+SlotWindow(n) {
+    global managed, permSlots, dynSlots
+    if permSlots.Has(n) {
+        if (managed.Has(n) && WinExist("ahk_id " managed[n]))
+            return managed[n]
+        return FindWindow(PermApp(n))
+    }
+    return (dynSlots.Has(n) && WinExist("ahk_id " dynSlots[n])) ? dynSlots[n] : 0
+}
+
+; Состояние слота структурой, а не строкой: { state, title }. Пять
+; состояний — те же, что в integration-контракте
+; (docs/settings-integration-layer.md):
+;
+;   empty                  динамический слот без окна
+;   applicationNotRunning  постоянный слот, приложение не запущено
+;   available              окно есть, но ящик его ещё не показывал
+;   parked                 окно за пределами всех мониторов
+;   shown                  окно на экране
+;
+; title заполнен только там, где окно действительно есть.
+;
+; Признаки те же, на которых стоит остальная программа (HandleManaged /
+; HandleParked) — второго источника истины не заводится. Вход — номер
+; слота, а не строка списка Settings: этим же API пользуется WebView-порт,
+; которому ни строк, ни секций config.ini не показывают. Русские подписи
+; живут отдельно, в SettingsStatusText(): разбирать статус обратно из
+; локализованного текста не должен никто.
+SlotStatus(n) {
+    global permSlots
+    if !(hwnd := SlotWindow(n))
+        return { state: permSlots.Has(n) ? "applicationNotRunning" : "empty",
+                 title: "" }
+    title := ""
+    try title := WinGetTitle("ahk_id " hwnd)
+    if !HandleManaged(hwnd)
+        return { state: "available", title: title }
+    return { state: HandleParked(hwnd) ? "parked" : "shown", title: title }
+}
+
 ; Постоянный слот: окно ищется по настройкам приложения. Приложение не
 ; запущено — показывать нечего, молчим: это то же самое, что нажать на
 ; пустой слот.
@@ -1622,22 +1667,14 @@ SettingsKind(r) {
 
 ; Цвет индикатора статуса в строке списка: заметно тем же языком, что и
 ; сама программа отличает «выдвинут» от «припаркован» — не выдумывает
-; новую трёхцветную модель поверх SettingsSlotStatus().
-SettingsStatusColor(status) {
-    if (status = "пусто")
+; новую трёхцветную модель поверх SlotStatus(). Ветвится по enum, а не
+; по подписи: подпись переводима, состояние — нет.
+SettingsStatusColor(state) {
+    if (state = "empty")
         return "3A3D44"
-    if (status = "приложение не запущено")
+    if (state = "applicationNotRunning")
         return "5A5D64"
     return "5FB37C"
-}
-
-; Тот же поиск, что у AppWindow(), но без записи в managed: открытие
-; настроек не должно менять, какое окно приложения слот схватит по
-; следующему хоткею — иначе беглый взгляд на статус подменял бы выбор,
-; который иначе сделал бы FindWindow() в момент реального нажатия.
-SettingsAppPeek(n, a) {
-    global managed
-    return (managed.Has(n) && WinExist("ahk_id " managed[n])) ? managed[n] : FindWindow(a)
 }
 
 ; ------------------------------ ВЫБОР ------------------------------
@@ -1740,40 +1777,29 @@ SettingsPickExe() {
     return fileName
 }
 
-; Статус слота — те же признаки, на которых стоит остальная программа
-; (HandleManaged/HandleParked), просто текстом. Второго источника
-; истины не заводится: постоянный слот ищется как для хоткея, но
-; результат никуда не пишется; динамический берётся из dynSlots как есть.
-SettingsSlotStatus(r) {
-    global dynSlots
-    if (r.kind = "def")
-        return ""
-    if (r.kind = "perm") {
-        if !(hwnd := SettingsAppPeek(r.n, PermApp(r.n)))
-            return "приложение не запущено"
-    } else {
-        if !(dynSlots.Has(r.n) && WinExist("ahk_id " dynSlots[r.n]))
-            return "пусто"
-        hwnd := dynSlots[r.n]
+; Единственное место, где состояние слота превращается в текст. Сам
+; статус приходит из SlotStatus() уже разобранным, поэтому обратного
+; разбора русской строки нигде нет — ни здесь, ни в индикаторе, ни у
+; будущего WebView-порта. Подписи прежние дословно: на них стоят
+; проверки набора setstat.
+SettingsStatusText(st) {
+    switch st.state {
+    case "empty":                 return "пусто"
+    case "applicationNotRunning": return "приложение не запущено"
+    case "available":             return "окно: " st.title
+    case "parked":                return "припаркован"
+    case "shown":                 return "выдвинут"
     }
-    if !HandleManaged(hwnd)
-        return "окно: " WinGetTitle("ahk_id " hwnd)
-    return HandleParked(hwnd) ? "припаркован" : "выдвинут"
+    return ""
 }
 
 ; Путь к exe для иконки строки списка — только когда у слота есть
 ; настоящее живое окно прямо сейчас: exe в config.ini хранится голым
 ; именем файла (SettingsPickExe), без пути, а достать иконку можно
-; только по полному пути. Тот же поиск, что и у статуса — вторым
-; источником истины не заводится.
-SettingsSlotIconPath(r) {
-    global dynSlots
-    hwnd := 0
-    if (r.kind = "perm") {
-        hwnd := SettingsAppPeek(r.n, PermApp(r.n))
-    } else if (dynSlots.Has(r.n) && WinExist("ahk_id " dynSlots[r.n]))
-        hwnd := dynSlots[r.n]
-    if !hwnd
+; только по полному пути. Окно спрашивается тем же SlotWindow(), что и
+; статус, — вторым источником истины не заводится.
+SettingsSlotIconPath(n) {
+    if !(hwnd := SlotWindow(n))
         return ""
     try
         return WinGetProcessPath("ahk_id " hwnd)
@@ -1786,10 +1812,10 @@ SettingsSlotIconPath(r) {
 ; готовится лишиться [slotN]). Ничего из этого не пишется в файл до
 ; «Применить»/«ОК» — тот же принцип, что уже держит форму General.
 ;
-; Состояние эта правка не трогает: SettingsSlotStatus() по-прежнему
-; спрашивает permSlots/dynSlots/managed напрямую, а не буфер, — колонка
-; «Состояние» показывает, что происходит на самом деле, а не то, что
-; вот-вот будет записано.
+; Состояние эта правка не трогает: SlotStatus() спрашивает
+; permSlots/dynSlots/managed напрямую и получает только номер слота, а не
+; буфер, — колонка «Состояние» показывает, что происходит на самом деле,
+; а не то, что вот-вот будет записано.
 
 ; Строка с учётом несохранённых правок: то, что показывает панель «Слот»
 ; и колонки Тип/Имя/Край/Монитор/Ширина. Без правки — сама r без изменений.
@@ -2132,8 +2158,8 @@ SettingsSlotWindowPick(ui) {
 ; каждый тик незачем. Хендл — ресурс GDI, свой на каждую строку;
 ; предыдущий явно закрывается перед тем, как завести новый, и в
 ; SettingsClose() — раз окно всё равно закрывается, а не только строка.
-SettingsSlotRowIcon(row, r) {
-    path := SettingsSlotIconPath(r)
+SettingsSlotRowIcon(row, n) {
+    path := SettingsSlotIconPath(n)
     if (path = row.iconPath)
         return
     if row.iconHwnd {
@@ -2169,12 +2195,12 @@ SettingsSlotRowPaint(ui, idx) {
     row.avatar.Opt(perm ? "Background333640 c" HandleLighten(ui.accentVal, 0.6)
                          : "Background1E2025 c6C6E76")
     SettingsInvalidate(row.avatar)
-    SettingsSlotRowIcon(row, r)
+    SettingsSlotRowIcon(row, r.n)
     row.name.Text := SettingsVal(ef.cfg, "name")
 
-    status := SettingsSlotStatus(r)
-    row.meta.Text := status
-    row.dot.Opt("Background" SettingsStatusColor(status))
+    st := SlotStatus(r.n)
+    row.meta.Text := SettingsStatusText(st)
+    row.dot.Opt("Background" SettingsStatusColor(st.state))
     SettingsInvalidate(row.dot)
 
     row.pill.Text := SettingsKind(ef)
