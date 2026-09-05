@@ -49,6 +49,16 @@
 ; Точка 10 (C4): статическая проверка, что каждый провал persistence
 ; несёт код контракта, удаление [dynamicSlotN] сверяется, реконсиляция
 ; вызвана под try и state отдаётся только после успешного reload.
+;
+; Точка 11 (C5, backend-валидация): копии валидаторов семантического
+; входа. Проверяется то, что раньше гарантировали сами контролы: enum
+; края, форма монитора, hex акцента, строгий bool и запрет перевода
+; строки. Плюс копия IniBool на настоящем временном INI — умолчания и
+; диагностика вместо MsgBox.
+;
+; Точка 12 (C5): статическая проверка, что LoadConfig и IniBool окон не
+; открывают, замечания уходят вызывающему, а планы валидируют вход, а не
+; передают его в запись как есть.
 
 drawerPath := A_ScriptDir "\..\..\src\drawer.ahk"
 
@@ -98,7 +108,7 @@ if !FileExist(drawerPath) {
     Assert("2: src/drawer.ahk найден рядом с test/narrow (" drawerPath ")", false)
 } else {
     src := FileRead(drawerPath, "UTF-8")
-    posFn := InStr(src, "SettingsReconcileRuntime(slotPlan)")
+    posFn := InStr(src, "SettingsReconcileRuntime(slotPlan, &diags)")
     Assert("2a: SettingsReconcileRuntime найдена в src/drawer.ahk", posFn > 0)
 
     body := posFn ? SubStr(src, posFn, 2000) : ""
@@ -597,7 +607,7 @@ if !FileExist(drawerPath) {
     src10 := FileRead(drawerPath, "UTF-8")
 
     pP := InStr(src10, "SettingsPersistVerified(generalWrites, slotPlan, &outcome) {")
-    pR := InStr(src10, "SettingsReconcileRuntime(slotPlan) {")
+    pR := InStr(src10, "SettingsReconcileRuntime(slotPlan, &diags) {")
     codeP := (pP > 0 && pR > pP) ? NoComments(SubStr(src10, pP, pR - pP)) : ""
     Assert("10a: тело SettingsPersistVerified найдено", codeP != "")
 
@@ -623,7 +633,7 @@ if !FileExist(drawerPath) {
     Assert("10f: тело SettingsApplyPlan найдено", codeA != "")
 
     pTry := InStr(codeA, "try {")
-    pRec := InStr(codeA, "SettingsReconcileRuntime(slotPlan)")
+    pRec := InStr(codeA, "SettingsReconcileRuntime(slotPlan, &diags)")
     Assert("10g: реконсиляция вызвана под try — исключение не уходит в GUI-колбэк",
         pTry > 0 && pRec > pTry && InStr(codeA, "reloadErr := e.Message") > 0)
 
@@ -663,6 +673,241 @@ if !FileExist(drawerPath) {
     Assert("10n: native ветвится по коду, а не по непустому тексту",
         pSave > 0 && InStr(codeSave, "if (outcome.code != `"`")") > 0
      && InStr(codeSave, "if (outcome.err != `"`")") = 0)
+}
+
+; ---------------------------------------------------------------
+; Точка 11 (C5): валидаторы семантического входа. Функции чистые (ни
+; глобалов, ни контролов), поэтому проверяются копиями напрямую. Если их
+; тела в src/drawer.ahk изменятся, копии нужно обновить вручную.
+; ---------------------------------------------------------------
+SettingsBad(msg, &err) {
+    if (err = "")
+        err := msg
+    return ""
+}
+SettingsEdgeIn(v, label, req, &err) {
+    if (err != "")
+        return ""
+    if (v = "")
+        return req ? SettingsBad(label ": край не выбран", &err) : ""
+    if (v = "left" || v = "right" || v = "top" || v = "bottom")
+        return v
+    return SettingsBad(label ": ожидается left, right, top или bottom", &err)
+}
+SettingsMonitorIn(v, label, req, &err) {
+    if (err != "")
+        return ""
+    if (v = "")
+        return req ? SettingsBad(label ": монитор не выбран", &err) : ""
+    if (v = "cursor")
+        return v
+    if (IsInteger(v) && Integer(v) >= 1)
+        return String(Integer(v))
+    return SettingsBad(label ": ожидается cursor или номер монитора от 1", &err)
+}
+SettingsAccentIn(v, label, &err) {
+    if (err != "")
+        return ""
+    if (RegExMatch(String(v), "^[0-9A-Fa-f]{6}$"))
+        return String(v)
+    return SettingsBad(label ": ожидаются 6 hex-цифр (RRGGBB)", &err)
+}
+SettingsBoolIn(v, label, &err) {
+    if (err != "")
+        return false
+    if (v = true || v = 1 || v = "true")
+        return true
+    if (v = false || v = 0 || v = "false")
+        return false
+    SettingsBad(label ": ожидается true или false", &err)
+    return false
+}
+SettingsTextIn(v, label, &err) {
+    if (err != "")
+        return ""
+    s := String(v)
+    if (InStr(s, "`r") || InStr(s, "`n"))
+        return SettingsBad(label ": перевод строки недопустим", &err)
+    return s
+}
+
+; Та самая ловушка, ради которой существует и IniBool: непустая строка
+; "false" в AHK истинна, и без разбора порт записал бы true.
+ve := ""
+Assert("11a: строка «false» не становится true",
+    SettingsBoolIn("false", "L", &ve) = false && ve = "")
+ve := ""
+Assert("11b: 0 и 1 из чекбокса принимаются как есть",
+    SettingsBoolIn(0, "L", &ve) = false && SettingsBoolIn(1, "L", &ve) = true
+ && SettingsBoolIn(true, "L", &ve) = true && ve = "")
+ve := ""
+Assert("11c: посторонняя строка — ошибка, а не молчаливое true",
+    SettingsBoolIn("да", "L", &ve) = false && ve != "")
+ve := ""
+Assert("11d: пропущенный bool — тоже ошибка, а не молчаливый false",
+    SettingsBoolIn("", "L", &ve) = false && ve != "")
+
+; Именно на неизвестном крае ComputeGeom бросает ValueError — при
+; нажатии хоткея, то есть далеко от Save.
+ve := ""
+Assert("11e: край вне enum отвергнут до записи",
+    SettingsEdgeIn("diagonal", "Край", true, &ve) = "" && ve != "")
+ve := ""
+Assert("11f: четыре края проходят",
+    SettingsEdgeIn("left", "Край", true, &ve) = "left"
+ && SettingsEdgeIn("right", "Край", true, &ve) = "right"
+ && SettingsEdgeIn("top", "Край", true, &ve) = "top"
+ && SettingsEdgeIn("bottom", "Край", true, &ve) = "bottom" && ve = "")
+ve := ""
+Assert("11g: у General пустой край значит «не менять», у слота — ошибка",
+    SettingsEdgeIn("", "Край", false, &ve) = "" && ve = ""
+ && SettingsEdgeIn("", "Слот 3: край", true, &ve) = "" && ve != "")
+
+ve := ""
+Assert("11h: монитор — cursor или номер; строка отвергнута",
+    SettingsMonitorIn("cursor", "M", true, &ve) = "cursor"
+ && SettingsMonitorIn("2", "M", true, &ve) = "2" && ve = "")
+ve := ""
+Assert("11i: нечисловой монитор отвергнут — ResolveMonitor на нём бросает",
+    SettingsMonitorIn("abc", "M", true, &ve) = "" && ve != "")
+; Форма значения, а не окружение: config.ini переносится между машинами.
+ve := ""
+Assert("11j: номер монитора не сверяется с числом мониторов машины",
+    SettingsMonitorIn("7", "M", true, &ve) = "7" && ve = "")
+ve := ""
+Assert("11k: ноль и отрицательный номер монитора отвергнуты",
+    SettingsMonitorIn("0", "M", true, &ve) = "" && ve != "")
+
+ve := ""
+Assert("11l: акцент — ровно шесть hex-цифр",
+    SettingsAccentIn("2A2E35", "A", &ve) = "2A2E35" && ve = "")
+ve := ""
+Assert("11m: не-hex акцент отвергнут",
+    SettingsAccentIn("#2A2E35", "A", &ve) = "" && ve != "")
+
+ve := ""
+Assert("11n: перевод строки в значении отвергнут — он рвёт INI",
+    SettingsTextIn("a`nb", "T", &ve) = "" && ve != "")
+ve := ""
+Assert("11o: обычный текст проходит без изменений",
+    SettingsTextIn("Notepad++", "T", &ve) = "Notepad++" && ve = "")
+
+; Первая ошибка отменяет разбор — та же дисциплина, что у SettingsNum.
+ve := ""
+SettingsEdgeIn("diagonal", "Край", true, &ve)
+firstErr := ve
+SettingsMonitorIn("abc", "Монитор", true, &ve)
+Assert("11p: первая ошибка не затирается второй", ve = firstErr && ve != "")
+
+; --- IniBool: умолчания и диагностика вместо MsgBox ---
+IniBoolCopy(path, section, key, def, &diags) {
+    v := IniRead(path, section, key, def ? "true" : "false")
+    if (v = "true")
+        return true
+    if (v = "false")
+        return false
+    diags.Push("config.ini: [" section "] " key "=" v " — ожидается true или false, взято " (def ? "true" : "false"))
+    return def
+}
+
+boolIni := A_Temp "\drawer_narrow_bool_test.ini"
+try FileDelete(boolIni)
+IniWrite("false", boolIni, "dynamic", "hideOnBlur")
+IniWrite("ага", boolIni, "dynamic", "activateOnShow")
+
+dg := []
+Assert("11q: записанное false читается как false",
+    IniBoolCopy(boolIni, "dynamic", "hideOnBlur", true, &dg) = false && dg.Length = 0)
+dg := []
+Assert("11r: отсутствующий ключ берёт умолчание и молчит",
+    IniBoolCopy(boolIni, "dynamic", "нетТакого", true, &dg) = true && dg.Length = 0)
+dg := []
+Assert("11s: мусор берёт умолчание и оставляет ровно одну диагностику",
+    IniBoolCopy(boolIni, "dynamic", "activateOnShow", true, &dg) = true
+ && dg.Length = 1 && InStr(dg[1], "ожидается true или false") > 0)
+try FileDelete(boolIni)
+
+; ---------------------------------------------------------------
+; Точка 12 (C5): статическая проверка src/drawer.ahk.
+; ---------------------------------------------------------------
+if !FileExist(drawerPath) {
+    Assert("12: src/drawer.ahk найден рядом с test/narrow (" drawerPath ")", false)
+} else {
+    src12 := FileRead(drawerPath, "UTF-8")
+
+    pLoad := InStr(src12, "LoadConfig(path, &apps,")
+    pBool := InStr(src12, "IniBool(path, section, key, def, &diags) {")
+    pShow := InStr(src12, "ConfigDiagShow(diags) {")
+    pEnd  := InStr(src12, "managed   := Map()")
+    codeLoad := (pLoad > 0 && pBool > pLoad) ? NoComments(SubStr(src12, pLoad, pBool - pLoad)) : ""
+    codeBool := (pBool > 0 && pShow > pBool) ? NoComments(SubStr(src12, pBool, pShow - pBool)) : ""
+    codeShow := (pShow > 0 && pEnd > pShow) ? SubStr(src12, pShow, pEnd - pShow) : ""
+    Assert("12a: тела LoadConfig, IniBool и ConfigDiagShow найдены",
+        codeLoad != "" && codeBool != "" && codeShow != "")
+
+    Assert("12b: LoadConfig окон не открывает — годится для headless",
+        InStr(codeLoad, "MsgBox") = 0 && InStr(codeLoad, "diags.Push(") > 0)
+    Assert("12c: LoadConfig принимает &diags и обнуляет его при входе",
+        InStr(codeLoad, "&handleBg, &diags) {") > 0
+     && InStr(codeLoad, "diags        := []") > 0)
+    Assert("12d: IniBool тоже пишет в diags, а не в окно",
+        InStr(codeBool, "MsgBox") = 0 && InStr(codeBool, "diags.Push(") > 0)
+    Assert("12e: показ замечаний остался ровно один — ConfigDiagShow",
+        InStr(codeShow, "MsgBox(d, `"Ящик`")") > 0)
+    Assert("12f: старт и Save показывают их сами",
+        InStr(src12, "ConfigDiagShow(cfgDiags)") > 0
+     && InStr(src12, "ConfigDiagShow(outcome.diagnostics)") > 0)
+    Assert("12g: реконсиляция отдаёт замечания наружу, а не глотает",
+        InStr(src12, "SettingsReconcileRuntime(slotPlan, &diags) {") > 0
+     && InStr(src12, "outcome.diagnostics := diags") > 0)
+
+    pGP := InStr(src12, "SettingsGeneralPlan(input, &err) {")
+    pGPe := InStr(src12, "; UI-adapter: только читает setUI")
+    codeGP := (pGP > 0 && pGPe > pGP) ? NoComments(SubStr(src12, pGP, pGPe - pGP)) : ""
+    Assert("12h: General-план валидирует каждое поле входа",
+        codeGP != "" && InStr(codeGP, "SettingsBoolIn(input.activateOnShow") > 0
+     && InStr(codeGP, "SettingsBoolIn(input.handlesEnabled") > 0
+     && InStr(codeGP, "SettingsBoolIn(input.noAnim") > 0
+     && InStr(codeGP, "SettingsEdgeIn(input.edge") > 0
+     && InStr(codeGP, "SettingsMonitorIn(input.monitor") > 0
+     && InStr(codeGP, "SettingsAccentIn(input.accent") > 0)
+    Assert("12i: сырое значение входа в запись больше не попадает",
+        InStr(codeGP, "input.activateOnShow ?") = 0
+     && InStr(codeGP, "input.hideOnBlur ?") = 0
+     && InStr(codeGP, "input.handlesEnabled ?") = 0
+     && InStr(codeGP, "val: input.accent") = 0
+     && InStr(codeGP, "val: input.edge") = 0
+     && InStr(codeGP, "val: input.monitor") = 0)
+
+    pSW := InStr(src12, "SettingsSlotWrites(n, e, &err) {")
+    pSP := InStr(src12, "SettingsSlotsPlan(edits, &err) {")
+    codeSW := (pSW > 0 && pSP > pSW) ? NoComments(SubStr(src12, pSW, pSP - pSW)) : ""
+    Assert("12j: правка слота проходит те же проверки, что и General",
+        codeSW != "" && InStr(codeSW, "SettingsTextIn(e.name") > 0
+     && InStr(codeSW, "SettingsTextIn(e.focusHotkey") > 0
+     && InStr(codeSW, "SettingsMonitorIn(String(e.monitor)") > 0
+     && InStr(codeSW, "SettingsEdgeIn(e.edge") > 0
+     && InStr(codeSW, "SettingsBoolIn(e.activateOnShow") > 0)
+    Assert("12k: у слота край и монитор обязательны — пустой monitor= ломает ResolveMonitor",
+        InStr(codeSW, "монитор`", true, &err)") > 0
+     && InStr(codeSW, "край`", true, &err)") > 0)
+    Assert("12l: сырое e.* в запись больше не попадает",
+        InStr(codeSW, "val: e.cls") = 0 && InStr(codeSW, "val: e.edge") = 0
+     && InStr(codeSW, "e.activateOnShow ?") = 0
+     && InStr(codeSW, "val: e.focusHotkey") = 0)
+
+    pSPe := InStr(src12, "; UI-adapter: тонкая обёртка")
+    codeSP := (pSP > 0 && pSPe > pSP) ? NoComments(SubStr(src12, pSP, pSPe - pSP)) : ""
+    Assert("12m: номер и тип слота проверяются до записи",
+        codeSP != "" && InStr(codeSP, "n < 1 || n > 9") > 0
+     && InStr(codeSP, "e.kind != `"perm`" && e.kind != `"dyn`"") > 0)
+
+    pVal := InStr(src12, "SettingsEdgeIn(v, label, req, &err) {")
+    pVale := InStr(src12, "; Пустая строка означает «этот ключ писать не надо»")
+    codeVal := (pVal > 0 && pVale > pVal) ? NoComments(SubStr(src12, pVal, pVale - pVal)) : ""
+    Assert("12n: валидаторы не знают ни контролов, ни setUI — их зовёт и порт",
+        codeVal != "" && InStr(codeVal, "ui.") = 0 && InStr(codeVal, "setUI") = 0
+     && InStr(codeVal, "Gui") = 0 && InStr(codeVal, "MsgBox") = 0)
 }
 
 ; ---------------------------------------------------------------

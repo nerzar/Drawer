@@ -35,7 +35,9 @@ animSteps    := 14
 blurMs       := 250
 handlesOn    := true
 HANDLE_BG    := "2A2E35"
-LoadConfig(configPath, &apps, &dynamic, &dynamicSlots, &animMs, &animSteps, &blurMs, &handlesOn, &HANDLE_BG)
+cfgDiags := []
+LoadConfig(configPath, &apps, &dynamic, &dynamicSlots, &animMs, &animSteps, &blurMs, &handlesOn, &HANDLE_BG, &cfgDiags)
+ConfigDiagShow(cfgDiags)
 ; =================================================================
 
 ; Читает config.ini в структуры программы. Числовые и строковые поля
@@ -43,7 +45,13 @@ LoadConfig(configPath, &apps, &dynamic, &dynamicSlots, &animMs, &animSteps, &blu
 ; проверяют ResolveMonitor/ComputeGeom при показе. Отдельно проверяются
 ; только activateOnShow/hideOnBlur: непустая строка "false" в AHK
 ; истинна, поэтому её нужно явно разобрать, а не просто передать дальше.
-LoadConfig(path, &apps, &dynamic, &dynamicSlots, &animMs, &animSteps, &blurMs, &handlesOn, &handleBg) {
+;
+; Окон не открывает: замечания к файлу складываются в diags, а показывает
+; их вызывающий — при старте MsgBox'ом, при Save через outcome настроек, у
+; будущего порта полем ответа. Пока MsgBox стоял внутри, загрузка конфига
+; не могла работать в headless Settings service и, что хуже, всплывала из
+; GUI-колбэка Apply посреди реконсиляции.
+LoadConfig(path, &apps, &dynamic, &dynamicSlots, &animMs, &animSteps, &blurMs, &handlesOn, &handleBg, &diags) {
     ; Функцию должно быть можно вызвать повторно: настройки перечитывают
     ; конфиг после записи тем же вызовом, которым программа поднимается.
     ; Без сброса apps.Push() дописал бы второй комплект постоянных слотов
@@ -51,13 +59,14 @@ LoadConfig(path, &apps, &dynamic, &dynamicSlots, &animMs, &animSteps, &blurMs, &
     ; нет: обе структуры заполняются добавлением, а не заменой.
     apps         := []
     dynamicSlots := Map()
+    diags        := []
 
     animMs    := IniRead(path, "general", "animMs", 160)
     animSteps := IniRead(path, "general", "animSteps", 14)
     blurMs    := IniRead(path, "general", "blurMs", 250)
     ; По умолчанию включено: в конфиге, написанном до появления кромок,
     ; строки нет, и поведение должно остаться таким же, как без неё.
-    handlesOn := IniBool(path, "general", "handles", true)
+    handlesOn := IniBool(path, "general", "handles", true, &diags)
     ; Цвет кромки — тоже настройка теперь; умолчание то же значение, что
     ; раньше было зашито константой, так что старый config.ini без этого
     ; ключа ведёт себя точно как прежде. Формат проверяется так же
@@ -65,7 +74,7 @@ LoadConfig(path, &apps, &dynamic, &dynamicSlots, &animMs, &animSteps, &blurMs, &
     ; уронит HandleLighten() ниже прямо при старте.
     handleBg := IniRead(path, "general", "accent", "2A2E35")
     if !RegExMatch(handleBg, "^[0-9A-Fa-f]{6}$") {
-        MsgBox("config.ini: [general] accent=" handleBg " — ожидается 6 hex-цифр (RRGGBB), взято 2A2E35", "Ящик")
+        diags.Push("config.ini: [general] accent=" handleBg " — ожидается 6 hex-цифр (RRGGBB), взято 2A2E35")
         handleBg := "2A2E35"
     }
 
@@ -85,8 +94,8 @@ LoadConfig(path, &apps, &dynamic, &dynamicSlots, &animMs, &animSteps, &blurMs, &
             monitor: IniRead(path, section, "monitor", "cursor"),
             edge: IniRead(path, section, "edge", "right"),
             width: IniRead(path, section, "width", 60),
-            activateOnShow: IniBool(path, section, "activateOnShow", true),
-            hideOnBlur: IniBool(path, section, "hideOnBlur", true)
+            activateOnShow: IniBool(path, section, "activateOnShow", true, &diags),
+            hideOnBlur: IniBool(path, section, "hideOnBlur", true, &diags)
         })
         permSlotNums[n] := true
     }
@@ -96,8 +105,8 @@ LoadConfig(path, &apps, &dynamic, &dynamicSlots, &animMs, &animSteps, &blurMs, &
         monitor: IniRead(path, "dynamic", "monitor", "cursor"),
         edge: IniRead(path, "dynamic", "edge", "right"),
         width: IniRead(path, "dynamic", "width", 60),
-        activateOnShow: IniBool(path, "dynamic", "activateOnShow", true),
-        hideOnBlur: IniBool(path, "dynamic", "hideOnBlur", true)
+        activateOnShow: IniBool(path, "dynamic", "activateOnShow", true, &diags),
+        hideOnBlur: IniBool(path, "dynamic", "hideOnBlur", true, &diags)
     }
 
     Loop 9 {
@@ -106,7 +115,7 @@ LoadConfig(path, &apps, &dynamic, &dynamicSlots, &animMs, &animSteps, &blurMs, &
         if (IniRead(path, section, , "") = "")   ; секции нет или она пуста
             continue
         if permSlotNums.Has(n) {
-            MsgBox("[" section "] задан в config.ini, но слот " n " уже постоянный ([slot" n "]) — динамические настройки для него не действуют", "Ящик")
+            diags.Push("[" section "] задан в config.ini, но слот " n " уже постоянный ([slot" n "]) — динамические настройки для него не действуют")
             continue
         }
         dynamicSlots[n] := {
@@ -114,22 +123,30 @@ LoadConfig(path, &apps, &dynamic, &dynamicSlots, &animMs, &animSteps, &blurMs, &
             monitor: IniRead(path, section, "monitor", dynamic.monitor),
             edge: IniRead(path, section, "edge", dynamic.edge),
             width: IniRead(path, section, "width", dynamic.width),
-            activateOnShow: IniBool(path, section, "activateOnShow", dynamic.activateOnShow),
-            hideOnBlur: IniBool(path, section, "hideOnBlur", dynamic.hideOnBlur)
+            activateOnShow: IniBool(path, section, "activateOnShow", dynamic.activateOnShow, &diags),
+            hideOnBlur: IniBool(path, section, "hideOnBlur", dynamic.hideOnBlur, &diags)
         }
     }
 }
 
 ; "true"/"false" — единственный ожидаемый формат. Непустая строка "false"
 ; сама по себе истинна в AHK, поэтому её нельзя передавать в Opt() как есть.
-IniBool(path, section, key, def) {
+IniBool(path, section, key, def, &diags) {
     v := IniRead(path, section, key, def ? "true" : "false")
     if (v = "true")
         return true
     if (v = "false")
         return false
-    MsgBox("config.ini: [" section "] " key "=" v " — ожидается true или false, взято " (def ? "true" : "false"), "Ящик")
+    diags.Push("config.ini: [" section "] " key "=" v " — ожидается true или false, взято " (def ? "true" : "false"))
     return def
+}
+
+; Единственное место, где замечания к config.ini превращаются в окно.
+; Текст тот же, что раньше показывала сама LoadConfig, и порядок тот же —
+; меняется только кто и когда его показывает.
+ConfigDiagShow(diags) {
+    for d in diags
+        MsgBox(d, "Ящик")
 }
 
 managed   := Map()   ; номер слота -> захваченный hwnd
@@ -2870,6 +2887,92 @@ SettingsNum(raw, lo, hi, label, &err) {
     return v
 }
 
+; ------------- BACKEND-ВАЛИДАЦИЯ СЕМАНТИЧЕСКОГО ВХОДА -------------
+; Часть значений раньше гарантировало само устройство native-контролов:
+; DropDownList не даёт выбрать несуществующий край или монитор, чекбокс
+; отдаёт 0 или 1, диалог цвета — шесть hex-цифр, однострочный Edit не
+; пропускает перевод строки. Порт таких гарантий не даёт: на вход придёт
+; произвольный JSON. Проверять его обязан backend, и до записи: и
+; ComputeGeom, и ResolveMonitor на негодном значении бросают исключение
+; при следующем нажатии хоткея, то есть далеко от места ошибки и уже
+; после того, как оно попало в config.ini.
+;
+; Проверяется форма значения, а не окружение: monitor=7 на машине с двумя
+; мониторами остаётся допустимым — ResolveMonitor сам вернётся к курсору.
+; Иначе один и тот же draft был бы валиден на одной машине и невалиден на
+; другой, а config.ini переносится между ними вместе с профилем.
+;
+; Дисциплина та же, что у SettingsNum: первая ошибка отменяет весь разбор,
+; последующие проверки уже ничего не пишут в err.
+
+; req — обязательно ли значение. У General пустая строка законна и значит
+; «этот ключ не трогать» (см. SettingsEdgeVal ниже); у постоянного слота
+; край и монитор пишутся всегда, и пустая строка там означала бы
+; monitor= в файле, на котором ResolveMonitor бросает ValueError.
+SettingsEdgeIn(v, label, req, &err) {
+    if (err != "")
+        return ""
+    if (v = "")
+        return req ? SettingsBad(label ": край не выбран", &err) : ""
+    if (v = "left" || v = "right" || v = "top" || v = "bottom")
+        return v
+    return SettingsBad(label ": ожидается left, right, top или bottom", &err)
+}
+
+SettingsMonitorIn(v, label, req, &err) {
+    if (err != "")
+        return ""
+    if (v = "")
+        return req ? SettingsBad(label ": монитор не выбран", &err) : ""
+    if (v = "cursor")
+        return v
+    if (IsInteger(v) && Integer(v) >= 1)
+        return String(Integer(v))
+    return SettingsBad(label ": ожидается cursor или номер монитора от 1", &err)
+}
+
+SettingsAccentIn(v, label, &err) {
+    if (err != "")
+        return ""
+    if (RegExMatch(String(v), "^[0-9A-Fa-f]{6}$"))
+        return String(v)
+    return SettingsBad(label ": ожидаются 6 hex-цифр (RRGGBB)", &err)
+}
+
+; Чекбокс отдаёт 0 или 1, и до сих пор этого хватало. В AHK непустая
+; строка "false" истинна, поэтому без явного разбора порт записал бы в
+; config.ini true там, где просил false, — та же ловушка, из-за которой
+; существует IniBool, только на входе, а не на чтении.
+SettingsBoolIn(v, label, &err) {
+    if (err != "")
+        return false
+    if (v = true || v = 1 || v = "true")
+        return true
+    if (v = false || v = 0 || v = "false")
+        return false
+    SettingsBad(label ": ожидается true или false", &err)
+    return false
+}
+
+; Перевод строки в значении рвёт INI: остаток уедет в файл отдельной
+; строкой и при следующем чтении станет мусорной парой или чужой секцией.
+; Однострочный Edit такого не пропускал, JSON пропустит.
+SettingsTextIn(v, label, &err) {
+    if (err != "")
+        return ""
+    s := String(v)
+    if (InStr(s, "`r") || InStr(s, "`n"))
+        return SettingsBad(label ": перевод строки недопустим", &err)
+    return s
+}
+
+; Записать первую ошибку и вернуть пустое значение одной строкой.
+SettingsBad(msg, &err) {
+    if (err = "")
+        err := msg
+    return ""
+}
+
 ; Пустая строка означает «этот ключ писать не надо»: в списке выбран
 ; посторонний пункт «в файле: …», то есть значение чужое и менять его
 ; программа не бралась.
@@ -2894,30 +2997,37 @@ SettingsMonVal(ddl) {
 ; DrawerSettingsPort.Save). Без side effects: ни IniWrite, ни LoadConfig.
 SettingsGeneralPlan(input, &err) {
     err := ""
+    noAnim := SettingsBoolIn(input.noAnim, "Без анимации", &err)
     w := SettingsNum(input.width, 5, 100, "Размер окна", &err)
     ; «Без анимации» меняет только число шагов: при нуле шагов
     ; длительность ни на что не влияет, и трогать её незачем.
-    ms := input.noAnim ? 0
+    ms := noAnim ? 0
         : SettingsNum(input.animMs, 0, 5000, "Длительность анимации", &err)
     steps := SettingsNum(input.animSteps, 0, 200, "Шагов анимации", &err)
     b := SettingsNum(input.blurMs, 10, 60000, "Проверка потери фокуса", &err)
+    edge := SettingsEdgeIn(input.edge, "Край", false, &err)
+    mon := SettingsMonitorIn(input.monitor, "Монитор", false, &err)
+    accent := SettingsAccentIn(input.accent, "Цвет кромки", &err)
+    act := SettingsBoolIn(input.activateOnShow, "Активация", &err)
+    blur := SettingsBoolIn(input.hideOnBlur, "Автоскрытие", &err)
+    handles := SettingsBoolIn(input.handlesEnabled, "Кромки", &err)
     if (err != "")
         return 0
 
     cand := []
-    if (input.edge != "")
-        cand.Push({ sec: "dynamic", key: "edge", val: input.edge })
-    if (input.monitor != "")
-        cand.Push({ sec: "dynamic", key: "monitor", val: input.monitor })
+    if (edge != "")
+        cand.Push({ sec: "dynamic", key: "edge", val: edge })
+    if (mon != "")
+        cand.Push({ sec: "dynamic", key: "monitor", val: mon })
     cand.Push({ sec: "dynamic", key: "width",          val: String(w) })
-    cand.Push({ sec: "dynamic", key: "activateOnShow", val: input.activateOnShow ? "true" : "false" })
-    cand.Push({ sec: "dynamic", key: "hideOnBlur",     val: input.hideOnBlur ? "true" : "false" })
-    cand.Push({ sec: "general", key: "handles",        val: input.handlesEnabled ? "true" : "false" })
-    if !input.noAnim
+    cand.Push({ sec: "dynamic", key: "activateOnShow", val: act ? "true" : "false" })
+    cand.Push({ sec: "dynamic", key: "hideOnBlur",     val: blur ? "true" : "false" })
+    cand.Push({ sec: "general", key: "handles",        val: handles ? "true" : "false" })
+    if !noAnim
         cand.Push({ sec: "general", key: "animMs",     val: String(ms) })
     cand.Push({ sec: "general", key: "animSteps",      val: String(steps) })
     cand.Push({ sec: "general", key: "blurMs",         val: String(b) })
-    cand.Push({ sec: "general", key: "accent",         val: input.accent })
+    cand.Push({ sec: "general", key: "accent",         val: accent })
 
     out := []
     for c in cand {
@@ -3005,19 +3115,27 @@ SettingsSlotWrites(n, e, &err) {
     SettingsSlotValidate(n, e, &err)
     if (err != "")
         return []
-    w := SettingsNum(String(e.width), 5, 100, "Слот " n ": размер окна", &err)
+    lbl := "Слот " n ": "
+    w    := SettingsNum(String(e.width), 5, 100, lbl "размер окна", &err)
+    name := SettingsTextIn(e.name, lbl "имя", &err)
+    exe  := SettingsTextIn(e.exe, lbl "файл (exe)", &err)
+    cls  := SettingsTextIn(e.cls, lbl "класс окна", &err)
+    hk   := SettingsTextIn(e.focusHotkey, lbl "хоткей", &err)
+    mon  := SettingsMonitorIn(String(e.monitor), lbl "монитор", true, &err)
+    edge := SettingsEdgeIn(e.edge, lbl "край", true, &err)
+    act  := SettingsBoolIn(e.activateOnShow, lbl "активация", &err)
+    blur := SettingsBoolIn(e.hideOnBlur, lbl "автоскрытие", &err)
     if (err != "")
         return []
-    name := Trim(e.name) = "" ? "Слот " n : e.name
-    cand := [{ key: "name", val: name },
-             { key: "exe",  val: Trim(e.exe) },
-             { key: "cls",  val: e.cls },
-             { key: "monitor", val: String(e.monitor) },
-             { key: "edge", val: e.edge },
+    cand := [{ key: "name", val: Trim(name) = "" ? "Слот " n : name },
+             { key: "exe",  val: Trim(exe) },
+             { key: "cls",  val: cls },
+             { key: "monitor", val: mon },
+             { key: "edge", val: edge },
              { key: "width", val: String(w) },
-             { key: "activateOnShow", val: e.activateOnShow ? "true" : "false" },
-             { key: "hideOnBlur", val: e.hideOnBlur ? "true" : "false" },
-             { key: "focusHotkey", val: e.focusHotkey }]
+             { key: "activateOnShow", val: act ? "true" : "false" },
+             { key: "hideOnBlur", val: blur ? "true" : "false" },
+             { key: "focusHotkey", val: hk }]
     out := []
     for c in cand {
         if (SettingsLiveSlot(n, c.key) = c.val)
@@ -3040,6 +3158,19 @@ SettingsSlotsPlan(edits, &err) {
     writes := [], deletes := [], touched := Map()
     if edits {
         for n, e in edits {
+            ; Номер и тип слота native задаёт сам строкой списка, поэтому
+            ; попасть сюда мог только 1…9 и только "perm"/"dyn". С wire
+            ; приходит число и строка: slot 42 создал бы секцию [slot42],
+            ; которую LoadConfig никогда не прочитает, а незнакомый kind
+            ; молча трактовался бы как "perm".
+            if (!IsInteger(n) || n < 1 || n > 9) {
+                err := "Слот " n ": номер вне диапазона 1…9"
+                return { writes: [], deletes: [], touched: Map(), oldBySlot: Map(), oldIdent: Map() }
+            }
+            if (e.kind != "perm" && e.kind != "dyn") {
+                err := "Слот " n ": тип должен быть perm или dyn"
+                return { writes: [], deletes: [], touched: Map(), oldBySlot: Map(), oldIdent: Map() }
+            }
             if (e.kind = "dyn") {
                 deletes.Push(n)
                 touched[n] := true
@@ -3256,12 +3387,12 @@ SettingsPersistVerified(generalWrites, slotPlan, &outcome) {
 ;    правки: если запись слота n не долетела до диска (partial failure),
 ;    слот n остаётся динамическим и на диске, и в рантайме — отпускать
 ;    в этом случае активную привязку было бы неверно.
-SettingsReconcileRuntime(slotPlan) {
+SettingsReconcileRuntime(slotPlan, &diags) {
     global configPath, apps, managed, permSlots, dynSlots, dynamicSlots
     global animMs, animSteps, blurMs, handlesOn, dynamic, HANDLE_BG, HANDLE_BG_HOT
 
     LoadConfig(configPath, &apps, &dynamic, &dynamicSlots,
-               &animMs, &animSteps, &blurMs, &handlesOn, &HANDLE_BG)
+               &animMs, &animSteps, &blurMs, &handlesOn, &HANDLE_BG, &diags)
     try
         HANDLE_BG_HOT := HandleLighten(HANDLE_BG, 0.10)
     catch
@@ -3397,11 +3528,12 @@ SettingsApplyPlan(generalWrites, slotPlan, &outcome) {
     outcome := { saved: false, code: "", err: "", retryable: false,
                  changedWrites: 0, changedDeletes: 0,
                  changedSlots: [], restartRequired: [],
-                 mayHavePersisted: false, runtimeReloaded: false, state: 0 }
+                 mayHavePersisted: false, runtimeReloaded: false,
+                 state: 0, diagnostics: [] }
     if (!generalWrites.Length && !hasSlotWork)
         return
 
-    persist := "", reloadErr := ""
+    persist := "", reloadErr := "", diags := []
     try
         SettingsPersistVerified(generalWrites, slotPlan, &persist)
     catch as e
@@ -3414,8 +3546,9 @@ SettingsApplyPlan(generalWrites, slotPlan, &outcome) {
 
     if persist.mayHavePersisted {
         try {
-            SettingsReconcileRuntime(slotPlan)
+            SettingsReconcileRuntime(slotPlan, &diags)
             outcome.runtimeReloaded := true
+            outcome.diagnostics := diags
         } catch as e
             reloadErr := e.Message
     }
@@ -3511,6 +3644,10 @@ SettingsSave(closeAfter) {
 
     outcome := ""
     SettingsApplyPlan(vals, slotPlan, &outcome)
+    ; Замечания к перечитанному файлу раньше всплывали MsgBox'ом изнутри
+    ; LoadConfig — то есть посреди реконсиляции, из GUI-колбэка. Теперь их
+    ; показывает вызывающий, и ровно тем же текстом.
+    ConfigDiagShow(outcome.diagnostics)
 
     ; Провал — это непустой code, а не непустой текст: текст остаётся
     ; человеческим сообщением и в статус-строке, и на wire.

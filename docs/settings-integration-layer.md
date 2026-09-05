@@ -653,6 +653,8 @@ status; frontend сравнивает его с прежним baseline и не 
 | `SettingsReconcileRuntime(slotPlan)` | Перечитывает INI, обновляет настройки/кромки, переиндексирует Permanent по номеру, сохраняет HWND при неизменных exe/cls и освобождает исчезнувшие/изменённые bindings. |
 | `SettingsApplyPlan(generalWrites, slotPlan, &outcome)` | Persist, затем reconcile при `persist.mayHavePersisted`; обе стадии под `try`; outcome `{saved, code, err, retryable, changedWrites, changedDeletes, changedSlots, restartRequired, mayHavePersisted, runtimeReloaded, state}`. |
 | `SettingsStateSnapshot()` | Канонический снимок применённого состояния: General плюс девять слотов с конфигом и живым `SlotStatus`. Имена полей внутренние; перевод в wire-имена — работа порта. |
+| `SettingsEdgeIn` / `SettingsMonitorIn` / `SettingsAccentIn` / `SettingsBoolIn` / `SettingsTextIn` | Backend-валидация семантического входа: enum края, `cursor`/номер монитора, 6 hex акцента, строгий bool, запрет CR/LF. Первая ошибка отменяет разбор. |
+| `LoadConfig(..., &diags)` / `ConfigDiagShow(diags)` | Загрузка без GUI: замечания к файлу возвращаются списком, показ — забота вызывающего. |
 | `SettingsCollect` / `SettingsSlotsCollect` | Native UI-adapters для двух plan-функций. |
 | `SettingsSave` | Вызывает общий seam, затем обновляет native status/rebase/close. |
 
@@ -668,10 +670,25 @@ C4 закрыл outcome-часть. `retryable` считается как «ди
 persistence с упавшим reload — `internal_error`, а не success. Снимок
 `state` отдаётся только вместе с `runtimeReloaded=true`.
 
-Оставшиеся ограничения относятся к C5:
+C5 закрыл headless-часть. `LoadConfig`/`IniBool` не показывают MsgBox:
+замечания возвращаются списком `diags`, а показывает их вызывающий —
+`ConfigDiagShow` при старте, native после Save, порт полем ответа.
+Семантический вход проверяется до записи: `SettingsEdgeIn`,
+`SettingsMonitorIn`, `SettingsAccentIn`, `SettingsBoolIn`, `SettingsTextIn`
+и проверка номера/типа слота в `SettingsSlotsPlan`. Проверяется форма
+значения, а не окружение: `monitor=7` на двух мониторах остаётся
+допустимым, потому что `config.ini` переносится между машинами.
 
-- Plan читает runtime globals; `LoadConfig` показывает MsgBox. Это ещё не
-  headless config API и не полная backend-валидация произвольного DTO.
+Оставшееся:
+
+- `focusHotkey` проверяется только на CR/LF. Пробный
+  `Hotkey(Hooked(value), noop, "Off")` из этого ADR не реализован: он
+  создаёт настоящий hotkey, то есть side effect в стадии validate/plan, и
+  на комбинации, совпадающей со слотовой, отключил бы живой хоткей. Порту
+  нужен отдельный безопасный способ проверки синтаксиса и конфликтов.
+- Plan читает runtime globals (`SettingsLive`/`SettingsLiveSlot`): точечная
+  запись сравнивает с тем, чем программа пользуется сейчас. Отдельного
+  config-объекта у backend нет, и для bridge он не нужен.
 - `oldBySlot` изменяется reconciliation: plan не является повторно используемым
   immutable snapshot. На каждый Save план строится заново.
 
