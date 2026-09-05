@@ -34,14 +34,14 @@
       mark('window-success')
       q('pick-window').click()
       await wait(() => q('edit-name').value === 'Picker fixture')
-      if (q('edit-windowClass').value !== 'AutoHotkeyGUI') throw new Error('window-class')
-      const before = [...document.querySelectorAll('.slot-editor input')].map((el) => el.value).join('|')
+      if (q('slot-class').textContent !== 'AutoHotkeyGUI') throw new Error('window-class')
+      const before = [...document.querySelectorAll('.editor input')].map((el) => el.value).join('|')
       let responses = pickerResponses
       mark('window-cancel')
       q('pick-window').click()
       await wait(() => pickerResponses > responses)
       await wait(() => !q('apply').disabled)
-      if ([...document.querySelectorAll('.slot-editor input')].map((el) => el.value).join('|') !== before) throw new Error('cancel-writeback')
+      if ([...document.querySelectorAll('.editor input')].map((el) => el.value).join('|') !== before) throw new Error('cancel-writeback')
       mark('exe-success')
       responses = pickerResponses
       q('pick-exe').click()

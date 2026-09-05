@@ -1,4 +1,4 @@
-# Узкий end-to-end smoke General и read-only Slots через WebView:
+﻿# Узкий end-to-end smoke General и read-only Slots через WebView:
 #   getInitialState -> правка полей -> Apply -> SettingsApplyPlan ->
 #   канонический state обратно во Vue -> Отмена с dirty-подтверждением.
 #
@@ -295,9 +295,11 @@ SmokeWatch() {
         (($after -match '(?m)^width=80\s*$') -and ($after -match '(?m)^edge=right\s*$') `
          -and ($after -match '(?m)^monitor=cursor\s*$') -and ($after -match '(?m)^hideOnBlur=true\s*$'))
     Check "5d: файл остался UTF-16 LE с комментариями пользователя" ($after -match 'Ящик' -and $after -match 'Настройки читаются заново')
+    # cls формой не правится: его источник — picker. Значит, он обязан
+    # доехать до диска нетронутым; пустой черновик записал бы cls= .
     Check "5e: slot fields persisted through Apply and OK" `
         (($after -match '(?m)^name=Saved by OK\s*$') -and ($after -match '(?m)^width=62\s*$') `
-         -and ($after -match '(?m)^cls=SmokeMissingClass\s*$') -and ($after -match '(?m)^focusHotkey=\^!#2\s*$'))
+         -and ($after -match '(?m)^cls=AutoHotkeyGUI\s*$') -and ($after -match '(?m)^focusHotkey=\^!#2\s*$'))
 
     $mode = if ($Compiled) { "собранный exe" } else { "исходник" }
     "режим: $mode"

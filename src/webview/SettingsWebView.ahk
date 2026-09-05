@@ -26,10 +26,15 @@ class SettingsWebViewAdapter {
         this._onCloseRequested := OnCloseRequested
         this._onDestroyed := OnDestroyed
 
+        ; 1060x700 — размер, при котором вкладка Slots показывает
+        ; утверждённый макет целиком: список из девяти слотов без
+        ; прокрутки и поля правой колонки в их проектных ширинах. В
+        ; окне поуже страница ужимает поля сама (+Resize), но проектных
+        ; ширин уже не держит.
         settings := { DllPath: LoaderPath,
                       DataDir: DataDir,
-                      DefaultWidth: 980,
-                      DefaultHeight: 620 }
+                      DefaultWidth: 1060,
+                      DefaultHeight: 700 }
         this.Window := WebViewGui("+Resize", Title, , settings)
         this._messageHandler := ObjBindMethod(this, "_HandleWebMessage")
         this._messageToken := this.Window.WebMessageReceived(this._messageHandler)
@@ -39,7 +44,7 @@ class SettingsWebViewAdapter {
         this.Window.Navigate("index.html")
     }
 
-    Show(Options := "w980 h620 Center") {
+    Show(Options := "w1060 h700 Center") {
         this.Window.Show(Options)
     }
 

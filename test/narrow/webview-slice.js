@@ -126,13 +126,30 @@
         if (!row.textContent.includes(value.widthPercent + '%')) throw new Error('slot-value-' + slot.number)
         if (row.dataset.status !== slot.status.state) throw new Error('slot-state-' + slot.number)
       }
+      // Утверждённая строка списка: номер с именем, род и живое
+      // состояние точкой. Ни одного из них дизайн не отдаёт под номер в
+      // аватарке, поэтому номер проверяется именно в имени.
+      if (!text('slot-1').includes('1. Smoke permanent')) throw new Error('row-name')
+      if (!text('slot-1').includes('Постоянный')) throw new Error('row-pill-perm')
+      if (!text('slot-9').includes('Динамический')) throw new Error('row-pill-dyn')
+      if (!q('slot-1').querySelector('.dot')) throw new Error('row-status-dot')
       eq('edit-name', 'Smoke permanent')
       eq('edit-focusHotkey', '^!#1')
       eq('edit-widthPercent', '61')
+      // Смена рода стоит на утверждённом месте, но выключена: порт её
+      // не принимает, и кнопка не должна обещать больше, чем есть.
+      if (!q('make-dynamic') || !q('make-dynamic').disabled) throw new Error('conversion-perm')
       q('slot-5').click()
       await wait(() => text('slot-width') === '43', 5000)
       if (q('slots').querySelector('input,select')) throw new Error('dynamic-editable')
       if (!text('slot-detail').includes('Монитор 2')) throw new Error('dynamic-override')
+      if (!q('make-permanent') || !q('make-permanent').disabled) throw new Error('conversion-dyn')
+      // Таблица динамического слота называет источник каждого значения.
+      // Сравнение точное: «из [dynamic]» — подстрока «из [dynamicSlot5]».
+      const sources = [...q('slot-detail').querySelectorAll('.detail-row .s')].map((el) => el.textContent.trim())
+      if (!sources.includes('из [dynamicSlot5]')) throw new Error('dyn-source-own')
+      if (!sources.includes('из [dynamic]')) throw new Error('dyn-source-shared')
+      if (!text('slot-detail').includes('Ctrl + Alt + 5')) throw new Error('dyn-hotkey')
       q('slot-1').click()
       await wait(() => q('edit-name'), 5000)
       setText('edit-name', 'Unsaved slot')
@@ -164,12 +181,18 @@
       setText('blurCheckMs', '250')
       post('smoke.slots-done')
 
-      // Bind and release guards and live operations
+      // Bind and release guards and live operations.
+      //
+      // Утверждённого UI у этих операций нет, поэтому драйвер зовёт их
+      // самим протоколом. Проверяется то же, что и раньше: коды отказов
+      // порта и живое состояние слота, доехавшее до списка событием
+      // slot.statusChanged. Замена canonical state из ответа bind/release
+      // остаётся за unit-тестами settings-ui/test/canonical.test.ts.
       tab('Slots')
       await wait(() => watching && q('slot-4'), 5000)
       q('slot-4').click()
-      await wait(() => q('bind-slot'), 5000)
-      if (!q('release-slot').disabled) throw new Error('release-should-be-disabled')
+      await wait(() => q('slot-detail'), 5000)
+      if (q('bind-slot') || q('release-slot')) throw new Error('invented-bind-ui')
 
       const badBind = await rpc('slot.bind', { slot: 0 })
       if (badBind.ok || badBind.error?.code !== 'invalid_request') throw new Error('bind-invalid-slot')
@@ -187,25 +210,25 @@
       if (emptyRelease.ok || emptyRelease.error?.code !== 'not_bound') throw new Error('release-empty-slot')
 
       // With no eligible active window, dynamic slot returns no_eligible_active_window
-      q('bind-slot').click()
-      await wait(() => document.body.innerText.includes('не годится для ящика'), 5000)
+      const noWindow = await rpc('slot.bind', { slot: 4 })
+      if (noWindow.ok || noWindow.error?.code !== 'no_eligible_active_window')
+        throw new Error('bind-without-window')
 
       // Activate external fixture window
       post('smoke.bind-target')
       await wait(async () => {
-        q('bind-slot').click()
-        await wait(() => q('slot-4').dataset.status === 'available', 500).catch(() => {})
-        return q('slot-4').dataset.status === 'available'
+        const r = await rpc('slot.bind', { slot: 4 })
+        return r.ok && r.result.status.state === 'available'
       }, 5000)
 
+      // Живое состояние доехало до списка и до карточки слота.
+      await wait(() => q('slot-4').dataset.status === 'available', 5000)
       await wait(() => text('slot-title') === 'Bind fixture window', 5000)
-      if (q('release-slot').disabled) throw new Error('release-button-disabled')
 
-      // Release slot 4 via UI button click
-      q('release-slot').click()
+      const released = await rpc('slot.release', { slot: 4 })
+      if (!released.ok || released.result.status.state !== 'empty') throw new Error('release-failed')
       await wait(() => q('slot-4').dataset.status === 'empty', 5000)
       await wait(() => text('slot-title') === '—', 5000)
-      if (!q('release-slot').disabled) throw new Error('release-button-still-enabled')
 
       // Release again returns not_bound
       const relAgain = await rpc('slot.release', { slot: 4 })
@@ -234,7 +257,9 @@
       if (!text('slot-1').includes('Smoke permanent')) throw new Error('slot-baseline-on-error')
       setText('edit-name', '') // Backend normalizes to Слот 1.
       setText('edit-executable', ' ' + originalExe + ' ')
-      setText('edit-windowClass', 'SmokeMissingClass')
+      // Класс окна форма не правит: его заполняет picker. Здесь он
+      // только показан, и уехать он обязан нетронутым.
+      if (text('slot-class') !== 'AutoHotkeyGUI') throw new Error('slot-class-shown')
       setText('edit-focusHotkey', '^!#2')
       setPick('edit-monitorKind', 'cursor')
       setPick('edit-edge', 'top')
@@ -278,7 +303,7 @@
       await wait(() => q('slot-9') && watching, 5000)
       eq('edit-name', 'Слот 1')
       eq('edit-executable', originalExe)
-      eq('edit-windowClass', 'SmokeMissingClass')
+      if (text('slot-class') !== 'AutoHotkeyGUI') throw new Error('slot-class-after-save')
       eq('edit-widthPercent', '62')
       eq('edit-edge', 'top')
       if (!text('restart').includes('1')) throw new Error('slot-restart-hint')

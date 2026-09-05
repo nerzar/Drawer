@@ -1,114 +1,344 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { settings, pickSlot, bindSlot, releaseSlot } from '../bridge/settings'
-import { useSlotStatus, slotBehavior, slotLabel, monitorLabel, edgeLabels, statusLabels } from '../bridge/slots'
+import { settings, pickSlot } from '../bridge/settings'
+import { EDGE_OPTIONS } from '../bridge/general'
+import {
+  useSlotStatus,
+  edgeLabels,
+  monitorLabel,
+  slotBehavior,
+  slotLabel,
+  statusFor,
+} from '../bridge/slots'
 
 const selectedNumber = ref(1)
 const slots = computed(() => settings.canonical?.slots ?? [])
 const selectedSlot = computed(() => slots.value.find((s) => s.number === selectedNumber.value))
+
+// Что действует у выбранного слота: у постоянного — его собственные
+// значения, у динамического — унаследованные с учётом его секции.
 const behavior = computed(() => selectedSlot.value && slotBehavior(selectedSlot.value))
-const watchError = useSlotStatus()
+
+// Правится черновик, а не canonical: вернуться в canonical значения
+// могут единственным путём — Применить/ОК.
 const draft = computed(() => settings.slotDrafts[selectedNumber.value])
-const textFields = [
-  { key: 'name', label: 'Имя' }, { key: 'executable', label: 'Файл (exe)' },
-  { key: 'windowClass', label: 'Класс окна' }, { key: 'focusHotkey', label: 'Хоткей фокуса' },
-  { key: 'widthPercent', label: 'Размер (%)' },
-]
+const watchError = useSlotStatus()
+
 const bad = (key) => settings.field === `slots.${selectedNumber.value}.${key}`
+
+// Откуда у динамического слота взялось значение. Сравнивается с
+// применённым General, а не с черновиком: подпись описывает то, что
+// действует сейчас, а не то, что человек набрал и ещё не сохранил.
+function source(key) {
+  const shared = settings.canonical?.general.dynamicDefaults
+  if (!shared || !behavior.value) return ''
+  return JSON.stringify(behavior.value[key]) === JSON.stringify(shared[key])
+    ? 'из [dynamic]'
+    : `из [dynamicSlot${selectedNumber.value}]`
+}
 </script>
 
 <template>
   <div class="content">
     <h1 class="page-title">Слоты Drawer</h1>
-    <p class="page-sub">Настройки постоянных слотов и состояние окон. Для динамических слотов доступно назначение и освобождение.</p>
-    <p v-if="watchError" role="alert">Обновление статусов недоступно: {{ watchError }}</p>
-    <p v-if="!settings.canonical">{{ settings.message || 'Читаем настройки…' }}</p>
+    <p class="page-sub">Настройте слоты для приложений и горячие клавиши.</p>
+    <p v-if="watchError" class="page-sub" role="alert">
+      Обновление состояний недоступно: {{ watchError }}
+    </p>
+
+    <div v-if="!settings.canonical" class="page-sub">
+      {{ settings.message || 'Читаем настройки…' }}
+    </div>
+
     <div v-else class="split" data-testid="slots">
       <div class="list" aria-label="Слоты">
-        <button v-for="slot in slots" :key="slot.number" class="slotrow"
-          :data-testid="`slot-${slot.number}`" :data-status="slot.status.state"
+        <button
+          v-for="slot in slots"
+          :key="slot.number"
+          class="slotrow"
+          type="button"
+          :data-testid="`slot-${slot.number}`"
+          :data-status="slot.status.state"
           :aria-pressed="slot.number === selectedNumber"
           :style="{ background: slot.number === selectedNumber ? 'var(--accent-tint)' : 'transparent' }"
-          @click="selectedNumber = slot.number">
-          <div class="avatar" :class="{ 'avatar-empty': slot.kind === 'dynamic' }">{{ slot.number }}</div>
+          @click="selectedNumber = slot.number"
+        >
+          <div class="avatar" :class="{ 'avatar-empty': slot.kind !== 'permanent' }">
+            <!-- Какое приложение занимает слот, знает только config.ini,
+                 и своей иконки у него нет. Общий знак окна честнее
+                 подставленной наугад: он говорит «слот занят», не
+                 притворяясь, что узнал программу. -->
+            <svg v-if="slot.kind === 'permanent'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="14" rx="1.5" />
+              <line x1="3" y1="8" x2="21" y2="8" />
+            </svg>
+          </div>
           <div style="flex: 1; min-width: 0">
-            <div class="slotrow-name">{{ slotLabel(slot) }}</div>
-            <div class="slotrow-meta">{{ edgeLabels[slotBehavior(slot).edge] }} · {{ monitorLabel(slotBehavior(slot).monitor) }} · {{ slotBehavior(slot).widthPercent }}%</div>
+            <div class="slotrow-name">{{ slot.number }}. {{ slotLabel(slot) }}</div>
+            <div class="slotrow-meta">
+              {{ edgeLabels[slotBehavior(slot).edge] }} ·
+              {{ monitorLabel(slotBehavior(slot).monitor) }} · {{ slotBehavior(slot).widthPercent }}%
+            </div>
           </div>
           <div class="slotrow-right">
-            <div class="status" :title="slot.status.windowTitle || ''">{{ statusLabels[slot.status.state] }}</div>
-            <div class="pill">{{ slot.kind === 'permanent' ? 'Постоянный' : 'Динамический' }}</div>
+            <div class="status" :style="{ color: statusFor(slot.status).color }">
+              <span class="dot" :style="{ background: statusFor(slot.status).dot }"></span>
+              {{ statusFor(slot.status).text }}
+            </div>
+            <div
+              class="pill"
+              :style="{
+                background: slot.kind === 'permanent' ? 'var(--accent-tint)' : 'var(--neutral-bg)',
+                color: slot.kind === 'permanent' ? 'var(--accent-fg)' : 'var(--neutral-text)',
+              }"
+            >
+              {{ slot.kind === 'permanent' ? 'Постоянный' : 'Динамический' }}
+            </div>
           </div>
         </button>
       </div>
+
       <div v-if="selectedSlot" class="detail" data-testid="slot-detail">
-        <div class="detail-head"><h2>Слот {{ selectedSlot.number }}</h2></div>
-        <div class="detail-divider"></div>
-        <div class="detail-row"><div class="l">Имя</div><div class="v">{{ slotLabel(selectedSlot) }}</div></div>
-        <div class="detail-row"><div class="l">Состояние</div><div class="v">{{ statusLabels[selectedSlot.status.state] }}</div></div>
-        <div class="detail-row"><div class="l">Заголовок окна</div><div class="v" data-testid="slot-title">{{ selectedSlot.status.windowTitle || '—' }}</div></div>
-        <fieldset v-if="selectedSlot.kind === 'permanent' && draft" class="slot-editor" :disabled="settings.status === 'saving' || settings.pickerActive">
-          <div class="row">
-            <button class="btn-primary-sm" data-testid="pick-exe" @click="pickSlot(selectedNumber, 'exe')">Обзор EXE…</button>
-            <button class="btn-primary-sm" data-testid="pick-window" @click="pickSlot(selectedNumber, 'window')">Выбрать окно…</button>
-          </div>
-          <div v-for="field in textFields" :key="field.key" class="row">
-            <label :for="`slot-${field.key}`">{{ field.label }}</label>
-            <input :id="`slot-${field.key}`" :data-testid="`edit-${field.key}`" type="text"
-              :class="{ 'field-bad': bad(field.key) }" :aria-invalid="bad(field.key)" v-model="draft[field.key]" />
-          </div>
-          <div class="row">
-            <label for="slot-monitor">Монитор</label>
-            <select id="slot-monitor" class="dd" data-testid="edit-monitorKind" v-model="draft.monitorKind" :class="{ 'field-bad': bad('monitor') }">
-              <option value="cursor">Под курсором</option><option value="number">По номеру</option>
-              <option v-if="draft.monitorKind === 'invalid'" value="invalid">Некорректно: {{ draft.monitorRaw }}</option>
-            </select>
-          </div>
-          <div v-if="draft.monitorKind === 'number'" class="row">
-            <label for="slot-monitor-number">Номер монитора</label>
-            <input id="slot-monitor-number" type="text" data-testid="edit-monitorNumber" v-model="draft.monitorNumber" :class="{ 'field-bad': bad('monitor.number') }" />
-          </div>
-          <div class="row">
-            <label for="slot-edge">Край</label>
-            <select id="slot-edge" class="dd" data-testid="edit-edge" v-model="draft.edge" :class="{ 'field-bad': bad('edge') }">
-              <option v-for="(label, edge) in edgeLabels" :key="edge" :value="edge">{{ label }}</option>
-            </select>
-          </div>
-          <label class="check-row"><input type="checkbox" data-testid="edit-activateOnShow" v-model="draft.activateOnShow" />Активировать при выезде</label>
-          <label class="check-row"><input type="checkbox" data-testid="edit-hideOnBlur" v-model="draft.hideOnBlur" />Убирать при потере фокуса</label>
-          <p class="page-sub">Хоткей фокуса применяется после перезапуска.</p>
-        </fieldset>
-        <template v-else>
-        <div class="row" style="margin-bottom: 12px">
-          <button class="btn-primary-sm" data-testid="bind-slot"
-            :disabled="settings.status === 'saving' || settings.pickerActive"
-            @click="bindSlot(selectedNumber)">Назначить активное окно</button>
-          <button class="btn-primary-sm" data-testid="release-slot"
-            :disabled="settings.status === 'saving' || settings.pickerActive || selectedSlot.status.state === 'empty'"
-            @click="releaseSlot(selectedNumber)">Освободить окно</button>
+        <div class="detail-head">
+          <h2>Слот {{ selectedSlot.number }}</h2>
+          <!-- Смена рода слота ещё не подключена к Ящику: порт принимает
+               правки только существующих постоянных слотов. Кнопка стоит
+               на своём месте выключенной — придумывать вместо неё другой
+               путь значило бы завести UI, которого нет в дизайне. -->
+          <button
+            v-if="selectedSlot.kind === 'permanent'"
+            class="btn-danger-hd"
+            type="button"
+            data-testid="make-dynamic"
+            disabled
+            title="Смена рода слота ещё не подключена"
+          >
+            Сделать динамическим…
+          </button>
+          <button
+            v-else
+            class="btn-primary-sm"
+            type="button"
+            data-testid="make-permanent"
+            disabled
+            title="Смена рода слота ещё не подключена"
+          >
+            Сделать постоянным…
+          </button>
         </div>
-        <div class="detail-row"><div class="l">Монитор</div><div class="v">{{ monitorLabel(behavior.monitor) }}</div></div>
-        <div class="detail-row"><div class="l">Край</div><div class="v">{{ edgeLabels[behavior.edge] }}</div></div>
-        <div class="detail-row"><div class="l">Размер (%)</div><div class="v" data-testid="slot-width">{{ behavior.widthPercent }}</div></div>
-        <div class="detail-row"><div class="l">Активировать при выезде</div><div class="v">{{ behavior.activateOnShow ? 'Да' : 'Нет' }}</div></div>
-        <div class="detail-row"><div class="l">Убирать при потере фокуса</div><div class="v">{{ behavior.hideOnBlur ? 'Да' : 'Нет' }}</div></div>
+        <div class="detail-divider"></div>
+
+        <!-- Живое состояние окна. В макете его не было — тогда его не
+             было и в Ящике; строка та же, что у остальных фактов. -->
+        <div class="detail-row">
+          <div class="l">Состояние</div>
+          <div class="v">{{ statusFor(selectedSlot.status).text }}</div>
+        </div>
+        <div class="detail-row" style="margin-bottom: 14px">
+          <div class="l">Окно</div>
+          <div class="v" data-testid="slot-title">{{ selectedSlot.status.windowTitle || '—' }}</div>
+        </div>
+
+        <template v-if="selectedSlot.kind === 'permanent'">
+          <fieldset v-if="draft" class="editor" :disabled="settings.status === 'saving' || settings.pickerActive">
+            <div class="row">
+              <label for="slot-name">Имя</label>
+              <div class="field">
+                <input
+                  id="slot-name"
+                  class="in-name"
+                  type="text"
+                  data-testid="edit-name"
+                  :class="{ 'field-bad': bad('name') }"
+                  :aria-invalid="bad('name')"
+                  v-model="draft.name"
+                />
+              </div>
+            </div>
+            <div class="row">
+              <label for="slot-exe">Файл (exe)</label>
+              <div class="field">
+                <input
+                  id="slot-exe"
+                  class="in-exe"
+                  type="text"
+                  data-testid="edit-executable"
+                  :class="{ 'field-bad': bad('executable') }"
+                  :aria-invalid="bad('executable')"
+                  v-model="draft.executable"
+                />
+                <button class="btn-icon" type="button" title="Обзор…" data-testid="pick-exe" @click="pickSlot(selectedNumber, 'exe')">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
+                    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+                  </svg>
+                </button>
+                <button class="btn-icon" type="button" title="Окно…" data-testid="pick-window" @click="pickSlot(selectedNumber, 'window')">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
+                    <rect x="3" y="4" width="18" height="14" rx="1.5" />
+                    <line x1="3" y1="8" x2="21" y2="8" />
+                  </svg>
+                </button>
+                <div class="info-ico" tabindex="0">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="transform: translate(3%, 2%)">
+                    <circle cx="12" cy="12" r="9" />
+                    <line x1="12" y1="11" x2="12" y2="16" />
+                    <circle cx="12" cy="8" r="1" fill="currentColor" stroke="none" />
+                  </svg>
+                  <div class="tip">
+                    Класс окна (ahk_class): <code data-testid="slot-class">{{ draft.windowClass || '—' }}</code>.
+                    Уточняет, какое именно окно ловить, если под этим exe их несколько.
+                    Заполняется кнопкой «Окно…».
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="row">
+              <label for="slot-monitor">Монитор</label>
+              <div class="field">
+                <select
+                  id="slot-monitor"
+                  class="dd"
+                  data-testid="edit-monitorKind"
+                  :class="{ narrow: draft.monitorKind === 'number', 'field-bad': bad('monitor') }"
+                  v-model="draft.monitorKind"
+                >
+                  <option value="cursor">Под курсором</option>
+                  <option value="number">Номер монитора</option>
+                  <!-- Значение из файла, которого не бывает у контролов.
+                       Пункт есть, пока его не заменили: подставить cursor
+                       значило бы поменять настройку молча. -->
+                  <option v-if="draft.monitorKind === 'invalid'" value="invalid">
+                    в файле: {{ draft.monitorRaw }}
+                  </option>
+                </select>
+                <input
+                  v-if="draft.monitorKind === 'number'"
+                  class="num-sm"
+                  type="text"
+                  data-testid="edit-monitorNumber"
+                  :class="{ 'field-bad': bad('monitor.number') }"
+                  v-model="draft.monitorNumber"
+                />
+              </div>
+            </div>
+            <div class="row">
+              <label for="slot-edge">Край</label>
+              <div class="field">
+                <select id="slot-edge" class="dd" data-testid="edit-edge" v-model="draft.edge">
+                  <option v-for="o in EDGE_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
+                </select>
+              </div>
+            </div>
+            <div class="row">
+              <label for="slot-width">Ширина (%)</label>
+              <div class="field">
+                <input
+                  id="slot-width"
+                  class="num-sm"
+                  type="text"
+                  data-testid="edit-widthPercent"
+                  :class="{ 'field-bad': bad('widthPercent') }"
+                  :aria-invalid="bad('widthPercent')"
+                  v-model="draft.widthPercent"
+                />
+              </div>
+            </div>
+            <label class="check-row">
+              <input type="checkbox" data-testid="edit-activateOnShow" v-model="draft.activateOnShow" />
+              <span>Активировать окно при выезде</span>
+            </label>
+            <label class="check-row">
+              <input type="checkbox" data-testid="edit-hideOnBlur" v-model="draft.hideOnBlur" />
+              <span>Убирать окно, когда фокус ушёл</span>
+            </label>
+            <div class="row">
+              <label for="slot-hotkey">Горячая клавиша</label>
+              <div class="field">
+                <input
+                  id="slot-hotkey"
+                  type="text"
+                  style="width: 126px"
+                  data-testid="edit-focusHotkey"
+                  :class="{ 'field-bad': bad('focusHotkey') }"
+                  v-model="draft.focusHotkey"
+                />
+              </div>
+            </div>
+            <div class="hotkey-cap">после перезапуска</div>
+          </fieldset>
         </template>
-        <p v-if="settings.bad" role="alert">{{ settings.message }}</p>
-        <div class="free-note">{{ selectedSlot.kind === 'dynamic' ? 'Показаны действующие параметры этого динамического слота, включая индивидуальные настройки.' : 'Применить и ОК сохраняют настройки General и постоянных слотов. Список слева показывает применённые значения.' }}</div>
+
+        <template v-else>
+          <div class="detail-row">
+            <div class="l">Имя</div>
+            <div class="v">{{ slotLabel(selectedSlot) }}</div>
+            <div class="s">по умолчанию</div>
+          </div>
+          <div class="detail-row">
+            <div class="l">Файл (exe)</div>
+            <div class="v">(пусто)</div>
+            <div class="s">по умолчанию</div>
+          </div>
+          <div class="detail-row">
+            <div class="l">Монитор</div>
+            <div class="v">{{ monitorLabel(behavior.monitor) }}</div>
+            <div class="s">{{ source('monitor') }}</div>
+          </div>
+          <div class="detail-row">
+            <div class="l">Край</div>
+            <div class="v">{{ edgeLabels[behavior.edge] }}</div>
+            <div class="s">{{ source('edge') }}</div>
+          </div>
+          <div class="detail-row">
+            <div class="l">Ширина (%)</div>
+            <div class="v" data-testid="slot-width">{{ behavior.widthPercent }}</div>
+            <div class="s">{{ source('widthPercent') }}</div>
+          </div>
+          <div class="detail-row">
+            <div class="l">Активировать при выезде</div>
+            <div class="v">{{ behavior.activateOnShow ? 'Да' : 'Нет' }}</div>
+            <div class="s">{{ source('activateOnShow') }}</div>
+          </div>
+          <div class="detail-row">
+            <div class="l">Убирать при потере фокуса</div>
+            <div class="v">{{ behavior.hideOnBlur ? 'Да' : 'Нет' }}</div>
+            <div class="s">{{ source('hideOnBlur') }}</div>
+          </div>
+          <div class="detail-row" style="border-bottom: none">
+            <div class="l">Горячая клавиша</div>
+            <div class="v">Ctrl + Alt + {{ selectedSlot.number }}</div>
+            <div class="s">по номеру</div>
+          </div>
+
+          <div class="free-note">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent-fg)" stroke-width="2" stroke-linecap="round" style="flex: 0 0 auto">
+              <circle cx="12" cy="12" r="9" />
+              <line x1="12" y1="8" x2="12" y2="13" />
+              <circle cx="12" cy="16" r="1" fill="var(--accent-fg)" stroke="none" />
+            </svg>
+            <div>
+              Слот использует общие настройки динамических слотов (вкладка General).
+              Сделайте его постоянным, чтобы задать своё приложение и хоткей.
+            </div>
+          </div>
+        </template>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.slot-editor { border: 0; padding: 16px 0 0; margin: 0; min-width: 0; }
-.field-bad { outline: 1px solid #e2857f; }
 .content {
   flex: 1;
   padding: 26px 36px 20px;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  /* Окно Ящика — 980 px, и список слотов занимает из них 358. Без
+     этого правая колонка требует свою минимальную ширину целиком и
+     выталкивает содержимое за край окна вместо того, чтобы ужать
+     поля. */
+  min-width: 0;
 }
 .page-title {
   font-size: 21px;
@@ -235,6 +465,12 @@ const bad = (key) => settings.field === `slots.${selectedNumber.value}.${key}`
   background: var(--border);
   margin: 12px 0 14px;
 }
+.editor {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
 .row {
   display: flex;
   align-items: center;
@@ -251,13 +487,19 @@ const bad = (key) => settings.field === `slots.${selectedNumber.value}.${key}`
 .field {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 6px;
+  flex: 1;
+  min-width: 0;
 }
+/* Ширины полей — предельные, а не жёсткие: в узком окне поле ужимается,
+   а кнопки и знак вопроса рядом остаются целыми. */
 input[type='text'],
 select.dd {
   font: inherit;
   font-size: 12.5px;
   height: 28px;
+  min-width: 0;
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 0 9px;
@@ -274,6 +516,9 @@ select.dd {
   background-repeat: no-repeat;
   background-position: right 10px center;
   background-size: 15px 15px;
+}
+select.dd.narrow {
+  width: 128px;
 }
 .in-name {
   width: 212px;
@@ -299,6 +544,7 @@ select.dd {
 }
 .num-sm {
   width: 52px;
+  flex: 0 0 auto;
   text-align: right;
 }
 .info-ico {
@@ -313,11 +559,14 @@ select.dd {
   align-items: center;
   justify-content: center;
 }
+/* Подсказка прижата к правому краю, а не отцентрована по значку:
+   карточка обрезает всё, что вылезло вбок (overflow), а в подсказке
+   теперь лежит значение — класс окна, и прочитать его нужно целиком. */
 .info-ico .tip {
   position: absolute;
-  left: 50%;
+  right: 0;
   top: 26px;
-  transform: translate(-50%, -4px);
+  transform: translateY(-4px);
   width: 230px;
   background: #26282f;
   border: 1px solid var(--border-strong);
@@ -336,7 +585,7 @@ select.dd {
 .info-ico:focus .tip {
   opacity: 1;
   visibility: visible;
-  transform: translate(-50%, 0);
+  transform: translateY(0);
 }
 .info-ico .tip code {
   font-family: 'Cascadia Code', Consolas, monospace;
@@ -369,7 +618,11 @@ select.dd {
   border-bottom: 1px dashed var(--border);
 }
 .detail-row .l {
-  width: 160px;
+  /* 160 из макета — ровно ширина самой длинной подписи, и значение
+     впритык к ней читается как одно слово. Двенадцать пикселей —
+     промежуток, а не новая колонка. */
+  width: 172px;
+  padding-right: 12px;
   color: var(--text-2);
   flex: 0 0 auto;
   max-width: 48%;
@@ -419,5 +672,15 @@ select.dd {
 }
 .btn-danger-hd:hover {
   background: rgba(229, 135, 138, 0.08);
+}
+.field-bad {
+  border-color: #a04a45;
+}
+button[disabled],
+fieldset[disabled] {
+  opacity: 0.5;
+}
+.btn-danger-hd[disabled]:hover {
+  background: transparent;
 }
 </style>
