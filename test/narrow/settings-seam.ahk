@@ -18,6 +18,13 @@
 ; трогают реальный рантайм и требуют настоящих окон, поэтому вместо
 ; выполнения функции проверяется её исходный текст — конкретный gate и
 ; порядок стадий, а не поведение вслепую.
+;
+; Точка 3 (C1, стабильный Slot ID): модель пересборки apps из LoadConfig.
+; Сравнивает разрешение слота по номеру и по индексу и показывает, какой
+; именно промах снят. Ни окон, ни config.ini не касается.
+;
+; Точка 4 (C1): статическая проверка, что apps-index-идентичности в
+; src/drawer.ahk больше нет — ни в регистрации хоткея, ни в ключах managed.
 
 drawerPath := A_ScriptDir "\..\..\src\drawer.ahk"
 
@@ -86,6 +93,89 @@ if !FileExist(drawerPath) {
         posManagedClr > 0 && posGate < posManagedClr)
     Assert("2f: старого безусловного 'if dynSlots.Has(n) {' (без && permSlots.Has(n)) в функции нет",
         InStr(body, "if dynSlots.Has(n) {") = 0)
+}
+
+; ---------------------------------------------------------------
+; Точка 3 (C1): стабильный Slot ID. LoadConfig пересобирает apps в
+; порядке номеров слотов, поэтому позиция в массиве — не идентичность:
+; появление постоянного слота с меньшим номером сдвигает всё, что за ним.
+; Здесь моделируется ровно эта пересборка и сравниваются два способа
+; разрешить слот из уже зарегистрированного колбэка: по номеру (как
+; сейчас) и по индексу (как было до C1). Окон, фокуса и config.ini
+; проверка не касается — это чистая арифметика идентичности.
+; ---------------------------------------------------------------
+
+; Тот же порядок, которым apps наполняется в LoadConfig: Loop 9 по
+; возрастанию номера, постоянные слоты пушатся подряд.
+BuildSlots(slotNums) {
+    apps := [], permSlots := Map()
+    for n in slotNums
+        apps.Push({ slot: n, name: "app" n })
+    for i, a in apps
+        permSlots[a.slot] := i
+    return { apps: apps, permSlots: permSlots }
+}
+
+; Как разрешает колбэк после C1: держит номер, спрашивает permSlots в
+; момент нажатия. Копия PermApp() из src/drawer.ahk.
+ResolveBySlot(m, n) {
+    return m.permSlots.Has(n) ? m.apps[m.permSlots[n]] : 0
+}
+; Как разрешал колбэк до C1: держит индекс, снятый при регистрации.
+ResolveByIndex(m, i) {
+    return (i >= 1 && i <= m.apps.Length) ? m.apps[i] : 0
+}
+
+before := BuildSlots([2, 5])
+boundSlot  := 5                         ; focusHotkey стоит на слоте 5
+boundIndex := before.permSlots[5]       ; ...и до C1 запоминался как индекс 2
+Assert("3a: до пересборки оба способа дают слот 5",
+    ResolveBySlot(before, boundSlot).slot = 5
+ && ResolveByIndex(before, boundIndex).slot = 5)
+
+; Слот 1 стал постоянным: индексы 2 и 5 съехали на единицу.
+after := BuildSlots([1, 2, 5])
+Assert("3b: после conversion раннего слота колбэк по НОМЕРУ по-прежнему слот 5",
+    ResolveBySlot(after, boundSlot).slot = 5)
+Assert("3c: колбэк по ИНДЕКСУ попадает в чужой слот (баг, который снят C1)",
+    ResolveByIndex(after, boundIndex).slot = 2)
+
+; Слот 5 перестал быть постоянным: по номеру — молчание, по индексу —
+; снова чужой слот.
+gone := BuildSlots([1, 2])
+Assert("3d: слот перестал быть постоянным -> по номеру ничего не делаем",
+    ResolveBySlot(gone, boundSlot) = 0)
+Assert("3e: по индексу тот же колбэк попал бы в слот 2",
+    ResolveByIndex(gone, boundIndex).slot = 2)
+
+; managed переживает пересборку только с ключом-номером.
+managedBySlot := Map(),  managedBySlot[5] := 4242
+managedByIndex := Map(), managedByIndex[boundIndex] := 4242
+Assert("3f: managed по номеру находит окно слота 5 и после пересборки",
+    managedBySlot.Has(5) && managedBySlot[5] = 4242)
+Assert("3g: managed по индексу после пересборки отдал бы окно слота 5 слоту 2",
+    managedByIndex.Has(after.permSlots[2]) && managedByIndex[after.permSlots[2]] = 4242)
+
+; ---------------------------------------------------------------
+; Точка 4 (C1): исходник src/drawer.ahk не содержит прежней
+; apps-index-идентичности.
+; ---------------------------------------------------------------
+if !FileExist(drawerPath) {
+    Assert("4: src/drawer.ahk найден рядом с test/narrow", false)
+} else {
+    src4 := FileRead(drawerPath, "UTF-8")
+    Assert("4a: focus-хоткей регистрируется номером слота",
+        InStr(src4, "OnFocusHotkey.Bind(a.slot)") > 0)
+    Assert("4b: прежней регистрации по индексу apps нет",
+        InStr(src4, "OnFocusHotkey.Bind(i)") = 0)
+    Assert("4c: PermApp(n) — единственная точка разрешения номера в запись apps",
+        InStr(src4, "PermApp(n) {") > 0)
+    Assert("4d: managed нигде не индексируется индексом apps",
+        InStr(src4, "managed[i]") = 0 && InStr(src4, "managed.Has(i)") = 0)
+    Assert("4e: apps[...] читается только внутри PermApp",
+        StrSplit(src4, "apps[permSlots[n]]").Length = 2
+     && InStr(src4, "apps[permSlots[r.n]]") = 0
+     && InStr(src4, "apps[i]") = 0)
 }
 
 ; ---------------------------------------------------------------

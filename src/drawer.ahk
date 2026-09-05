@@ -132,10 +132,10 @@ IniBool(path, section, key, def) {
     return def
 }
 
-managed   := Map()   ; индекс приложения -> hwnd
+managed   := Map()   ; номер слота -> захваченный hwnd
 state     := Map()   ; hwnd -> { orig, geom }
 watched   := Map()   ; выдвинутые окна с hideOnBlur: hwnd -> настройки
-permSlots := Map()   ; номер слота -> индекс в apps
+permSlots := Map()   ; номер слота -> индекс в apps (живёт до LoadConfig)
 dynSlots  := Map()   ; номер слота -> hwnd
 notified  := Map()   ; текст уведомления -> true, пока оно ещё актуально
 handles   := Map()   ; номер слота -> кромка припаркованного окна
@@ -170,11 +170,11 @@ Loop 9 {
     } catch as e
         MsgBox("Хоткей назначения слота " n " не назначен:`n" e.Message, "Ящик")
 }
-for i, a in apps {
+for a in apps {
     if (Opt(a, "focusHotkey", "") = "")
         continue
     try {
-        Hotkey(Hooked(a.focusHotkey), OnFocusHotkey.Bind(i))
+        Hotkey(Hooked(a.focusHotkey), OnFocusHotkey.Bind(a.slot))
         live++
     } catch as e
         MsgBox("Хоткей фокуса " a.focusHotkey " (" a.name ") не назначен:`n" e.Message, "Ящик")
@@ -401,10 +401,10 @@ Vanished(hwnd) {
 
 ; Каким слотом управляется это окно и с какими настройками.
 SlotOf(hwnd) {
-    global apps, managed, permSlots, dynSlots
-    for n, i in permSlots {
-        if (managed.Has(i) && managed[i] = hwnd)
-            return apps[i]
+    global managed, permSlots, dynSlots
+    for n in permSlots {
+        if (managed.Has(n) && managed[n] = hwnd)
+            return PermApp(n)
     }
     for n, h in dynSlots {
         if (h = hwnd)
@@ -413,9 +413,20 @@ SlotOf(hwnd) {
     return 0
 }
 
-OnFocusHotkey(i, *) {
+; Колбэк держит НОМЕР слота, а не индекс в apps. apps пересобирается
+; при каждом LoadConfig в порядке номеров, поэтому появление постоянного
+; слота с меньшим номером сдвигает индексы всех следующих за ним — а
+; хоткей регистрируется один раз при старте и продолжал бы звать прежнее
+; число, попадая в чужой слот или в несуществующий индекс. Номер слота
+; такого сдвига не знает, а permSlots спрашивается в момент нажатия:
+; слот, переставший быть постоянным, теперь просто ничего не делает.
+;
+; Сама клавиша остаётся той, что была назначена при старте:
+; перерегистрации нет, и правка focusHotkey по-прежнему вступает в силу
+; после перезапуска — ровно так, как подписано в форме настроек.
+OnFocusHotkey(n, *) {
     try
-        FocusApp(i)
+        FocusApp(n)
     catch as e
         Notify("Сбой: " e.Message, "Ящик", 3)
 }
@@ -425,7 +436,7 @@ OnFocusHotkey(i, *) {
 ToggleSlot(n) {
     global permSlots, dynSlots
     if permSlots.Has(n) {
-        ToggleApp(permSlots[n])
+        ToggleApp(n)
         return
     }
     if !dynSlots.Has(n)          ; нечего показывать — молчим
@@ -443,9 +454,9 @@ ToggleSlot(n) {
 ; приложение. Постоянный слот перезаписать нельзя — иначе настройка из
 ; файла молча потерялась бы до перезапуска.
 BindSlot(n) {
-    global apps, permSlots, dynSlots
+    global permSlots, dynSlots
     if permSlots.Has(n) {
-        Notify("Слот " n " занят постоянной привязкой: " apps[permSlots[n]].name, "Ящик", 2)
+        Notify("Слот " n " занят постоянной привязкой: " PermApp(n).name, "Ящик", 2)
         return
     }
     if !(hwnd := PickActive()) {
@@ -498,32 +509,44 @@ SlotCfg(n) {
              hideOnBlur:     Opt(own, "hideOnBlur",     dynamic.hideOnBlur) }
 }
 
+; Настройки постоянного слота по его номеру — 0, если слот не постоянный.
+; Единственное место, где индекс в apps ещё используется, и используется
+; он тут же, без сохранения: индекс действителен только до следующего
+; LoadConfig, потому что apps пересобирается в порядке номеров. Всё, что
+; живёт дольше одного вызова — managed, колбэки хоткеев, снимки в плане
+; Settings, — обязано помнить номер слота.
+PermApp(n) {
+    global apps, permSlots
+    return permSlots.Has(n) ? apps[permSlots[n]] : 0
+}
+
 ; Постоянный слот: окно ищется по настройкам приложения. Приложение не
 ; запущено — показывать нечего, молчим: это то же самое, что нажать на
 ; пустой слот.
-ToggleApp(i) {
-    global apps
-    a := apps[i]
-    if !(hwnd := AppWindow(i, a))
+ToggleApp(n) {
+    if !(a := PermApp(n))
+        return
+    if !(hwnd := AppWindow(n, a))
         return
     ToggleWindow(hwnd, a)
 }
 
-FocusApp(i) {
-    global apps
-    a := apps[i]
-    if !(hwnd := AppWindow(i, a))
+FocusApp(n) {
+    if !(a := PermApp(n))
+        return
+    if !(hwnd := AppWindow(n, a))
         return
     FocusWindow(hwnd, a)
 }
 
 ; Захваченное окно помним: припаркованное окно поиском по площади
-; можно спутать с другим окном того же приложения.
-AppWindow(i, a) {
+; можно спутать с другим окном того же приложения. Ключ — номер слота:
+; он переживает перечитывание конфига, а индекс в apps — нет.
+AppWindow(n, a) {
     global managed
-    hwnd := (managed.Has(i) && WinExist("ahk_id " managed[i])) ? managed[i] : FindWindow(a)
+    hwnd := (managed.Has(n) && WinExist("ahk_id " managed[n])) ? managed[n] : FindWindow(a)
     if hwnd
-        managed[i] := hwnd
+        managed[n] := hwnd
     return hwnd
 }
 
@@ -947,15 +970,14 @@ Cleanup(*) {
 ; Слоты по порядку номеров: номер, окно и его настройки. Порядок задаёт
 ; и порядок кромок в стопке, поэтому массив, а не Map.
 HandleSlots() {
-    global apps, managed, permSlots, dynSlots
+    global managed, permSlots, dynSlots
     out := []
     Loop 9 {
         n := A_Index
         if permSlots.Has(n) {
-            i := permSlots[n]
-            if !(managed.Has(i) && WinExist("ahk_id " managed[i]))
+            if !(managed.Has(n) && WinExist("ahk_id " managed[n]))
                 continue
-            out.Push({ n: n, hwnd: managed[i], cfg: apps[i] })
+            out.Push({ n: n, hwnd: managed[n], cfg: PermApp(n) })
         } else if dynSlots.Has(n) {
             if !WinExist("ahk_id " dynSlots[n])
                 continue
@@ -1548,12 +1570,12 @@ SettingsVal(cfg, key) {
 ; объект, который ящик спросит при нажатии хоткея, поэтому показанное и
 ; работающее разойтись не могут.
 SettingsRows() {
-    global apps, permSlots, dynamicSlots
+    global permSlots, dynamicSlots
     rows := []
     Loop 9 {
         n := A_Index
         if permSlots.Has(n) {
-            rows.Push({ n: n, kind: "perm", cfg: apps[permSlots[n]],
+            rows.Push({ n: n, kind: "perm", cfg: PermApp(n),
                         sections: ["slot" n] })
             continue
         }
@@ -1583,9 +1605,9 @@ SettingsStatusColor(status) {
 ; настроек не должно менять, какое окно приложения слот схватит по
 ; следующему хоткею — иначе беглый взгляд на статус подменял бы выбор,
 ; который иначе сделал бы FindWindow() в момент реального нажатия.
-SettingsAppPeek(i, a) {
+SettingsAppPeek(n, a) {
     global managed
-    return (managed.Has(i) && WinExist("ahk_id " managed[i])) ? managed[i] : FindWindow(a)
+    return (managed.Has(n) && WinExist("ahk_id " managed[n])) ? managed[n] : FindWindow(a)
 }
 
 ; ------------------------------ ВЫБОР ------------------------------
@@ -1688,12 +1710,11 @@ SettingsPickExe() {
 ; истины не заводится: постоянный слот ищется как для хоткея, но
 ; результат никуда не пишется; динамический берётся из dynSlots как есть.
 SettingsSlotStatus(r) {
-    global permSlots, dynSlots, apps
+    global dynSlots
     if (r.kind = "def")
         return ""
     if (r.kind = "perm") {
-        i := permSlots[r.n]
-        if !(hwnd := SettingsAppPeek(i, apps[i]))
+        if !(hwnd := SettingsAppPeek(r.n, PermApp(r.n)))
             return "приложение не запущено"
     } else {
         if !(dynSlots.Has(r.n) && WinExist("ahk_id " dynSlots[r.n]))
@@ -1711,11 +1732,10 @@ SettingsSlotStatus(r) {
 ; только по полному пути. Тот же поиск, что и у статуса — вторым
 ; источником истины не заводится.
 SettingsSlotIconPath(r) {
-    global permSlots, dynSlots, apps
+    global dynSlots
     hwnd := 0
     if (r.kind = "perm") {
-        i := permSlots[r.n]
-        hwnd := SettingsAppPeek(i, apps[i])
+        hwnd := SettingsAppPeek(r.n, PermApp(r.n))
     } else if (dynSlots.Has(r.n) && WinExist("ahk_id " dynSlots[r.n]))
         hwnd := dynSlots[r.n]
     if !hwnd
@@ -1756,9 +1776,9 @@ SettingsEffective(ui, r) {
 ; состоянием слота — дальше в нём меняется только то поле, которое
 ; действительно тронули, а не всё сразу.
 SettingsEditSeed(n) {
-    global permSlots, apps
+    global permSlots
     if permSlots.Has(n) {
-        a := apps[permSlots[n]]
+        a := PermApp(n)
         return { kind: "perm", name: a.name, exe: a.exe, cls: a.cls,
                  monitor: a.monitor, edge: a.edge, width: a.width,
                  activateOnShow: a.activateOnShow, hideOnBlur: a.hideOnBlur,
@@ -2890,10 +2910,10 @@ SettingsLive(sec, key) {
 ; постоянного слота: если слот сейчас не постоянный или у него нет этого
 ; поля, сравнивать не с чем, и значение считается новым безусловно.
 SettingsLiveSlot(n, key) {
-    global permSlots, apps
+    global permSlots
     if !permSlots.Has(n)
         return ""
-    cfg := apps[permSlots[n]]
+    cfg := PermApp(n)
     if !cfg.HasOwnProp(key)
         return ""
     v := cfg.%key%
@@ -2970,9 +2990,9 @@ SettingsSlotsPlan(edits, &err) {
     ; этого снимка она обнулила бы managed вместо того, чтобы оставить
     ; его как есть.
     oldBySlot := Map(), oldIdent := Map()
-    for i, a in apps {
-        if managed.Has(i)
-            oldBySlot[a.slot] := managed[i]
+    for a in apps {
+        if managed.Has(a.slot)
+            oldBySlot[a.slot] := managed[a.slot]
         oldIdent[a.slot] := { exe: a.exe, cls: a.cls }
     }
     return { writes: writes, deletes: deletes, touched: touched,
@@ -3103,9 +3123,10 @@ SettingsPersistVerified(generalWrites, slotPlan, &outcome) {
 ;    трогается, если его exe/cls не изменились;
 ;  - динамическая привязка номера, который правил пользователь, снимается
 ;    явно: постоянный и динамический не бывают одним слотом одновременно;
-;  - permSlots и managed переиндексируются ПО НОМЕРУ СЛОТА, а не по
-;    индексу в apps[]: добавление или удаление [slotN] сдвигает индексы
-;    соседних постоянных слотов;
+;  - managed ключуется НОМЕРОМ СЛОТА, а не индексом в apps[]: добавление
+;    или удаление [slotN] сдвигает индексы соседних постоянных слотов, а
+;    номер слота такого сдвига не знает. permSlots пересобирается здесь же
+;    и дальше LoadConfig не живёт;
 ;  - snapshot oldBySlot/oldIdent берётся из slotPlan, то есть сделан ДО
 ;    любой дисковой операции — а не после, как было бы багом;
 ;  - dynSlots для тронутых номеров освобождается только если ФАКТИЧЕСКИ
@@ -3139,12 +3160,12 @@ SettingsReconcileRuntime(slotPlan) {
 
     managed.Clear()
     oldBySlot := slotPlan.oldBySlot
-    for i, a in apps {
+    for a in apps {
         if !oldBySlot.Has(a.slot)
             continue
         ident := slotPlan.oldIdent[a.slot]
         if (ident.exe = a.exe && ident.cls = a.cls)
-            managed[i] := oldBySlot[a.slot]
+            managed[a.slot] := oldBySlot[a.slot]
         else
             Release(oldBySlot[a.slot])
         oldBySlot.Delete(a.slot)
