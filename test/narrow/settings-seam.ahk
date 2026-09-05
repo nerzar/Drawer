@@ -1030,12 +1030,13 @@ if FileExist(drawerPath) {
         InStr(src15, "SettingsSlotFieldLabel(n, key := `"`") {") > 0)
 
     pPlan := InStr(src15, "SettingsSlotsPlan(edits, &err) {")
-    pPlanEnd := InStr(src15, "; UI-adapter: тонкая обёртка")
+    pPlanEnd := InStr(src15, "; Отказ плана одним видом")
     codePlan := (pPlan > 0 && pPlanEnd > pPlan) ? NoComments(SubStr(src15, pPlan, pPlanEnd - pPlan)) : ""
     Assert("15b: каждый выход плана несёт адрес поля",
         codePlan != "" && InStr(codePlan, "oldIdent: Map() }") = 0
-     && StrSplit(codePlan, "field: field").Length = 4
-     && InStr(codePlan, "oldIdent: oldIdent, field: `"`"") > 0)
+     && StrSplit(codePlan, "return {").Length = 2
+     && InStr(codePlan, "oldIdent: oldIdent, field: `"`"") > 0
+     && InStr(src15, "SettingsSlotsPlanFail(field) {") > 0)
     Assert("15c: неназванный контрол превращается в адрес слота",
         InStr(codePlan, "field := `"slots.`" n") > 0)
     Assert("15d: exe и размер окна называют свой контрол",
@@ -1055,6 +1056,62 @@ if FileExist(drawerPath) {
          && InStr(srcPort, "`"файл (exe)`"") = 0
          && InStr(srcPort, "`"горячая клавиша`"") = 0)
     }
+}
+
+; ---------------------------------------------------------------
+; Точка 16: смена рода слота, надстройка динамического, фокус и кромка
+; Статические проверки: все четыре поведения живут в путях, которые
+; трогают настоящие окна и config.ini, и проверяются здесь по исходнику.
+if FileExist(drawerPath) {
+    src16 := FileRead(drawerPath, "UTF-8")
+
+    pDyn := InStr(src16, "SettingsDynSlotWrites(n, e, &err, &field?) {")
+    pPlan16 := InStr(src16, "SettingsSlotsPlan(edits, &err) {")
+    codeDyn := (pDyn > 0 && pPlan16 > pDyn) ? NoComments(SubStr(src16, pDyn, pPlan16 - pDyn)) : ""
+    Assert("16a: надстройка динамического слота пишет только отличия от общих",
+        codeDyn != "" && InStr(codeDyn, "if (c.val = c.shared) {") > 0
+     && InStr(codeDyn, "keyDeletes.Push({ sec: sec, key: c.key })") > 0)
+    Assert("16b: у надстройки только пять ключей поведения — ни имени, ни exe",
+        codeDyn != "" && InStr(codeDyn, "e.name") = 0 && InStr(codeDyn, "e.exe") = 0
+     && InStr(codeDyn, "e.focusHotkey") = 0)
+    Assert("16c: опустевшая надстройка сносится секцией",
+        InStr(codeDyn, "empty: kept = 0") > 0)
+
+    pPlanEnd16 := InStr(src16, "; Отказ плана одним видом")
+    codePlan16 := (pPlan16 > 0 && pPlanEnd16 > pPlan16)
+                  ? NoComments(SubStr(src16, pPlan16, pPlanEnd16 - pPlan16)) : ""
+    Assert("16d: [slotN] сносится только у слота, который был постоянным",
+        codePlan16 != "" && InStr(src16, "if PermApp(n)`r`n                    deletes.Push(n)") > 0)
+    Assert("16e: надстройку под снос называет план, а не запись по touched",
+        InStr(codePlan16, "dynDeletes.Push(n)") > 0
+     && InStr(src16, "for n in slotPlan.dynDeletes {") > 0
+     && InStr(src16, "for n in slotPlan.touched {`r`n        if delSet") = 0)
+    Assert("16f: удаление ключа надстройки сверяется чтением",
+        InStr(src16, "for d in slotPlan.keyDeletes {") > 0
+     && InStr(src16, "SettingsReadKey(configPath, d.sec, d.key) != `"`"") > 0)
+    Assert("16g: номер слота берётся из имени секции, а не по позиции",
+        InStr(src16, "SettingsSectionSlot(sec) {") > 0
+     && InStr(src16, "Integer(SubStr(w.sec, 5))") = 0)
+
+    Assert("16h: фокус возвращается в настройки, если пользователь был там",
+        InStr(src16, "FocusCandidate(hwnd, skip, service := false) {") > 0
+     && InStr(src16, "return FocusCandidate(hwnd, skip, true) ? hwnd : 0") > 0
+     && InStr(src16, "if FocusCandidate(st.prev, parked, true) {") > 0)
+    Assert("16i: наугад из Z-порядка настройки по-прежнему не выбираются",
+        InStr(src16, "RedirectFocus(parked) {`r`n    for hwnd in WinGetList() {`r`n        if FocusCandidate(hwnd, parked) {") > 0)
+
+    Assert("16j: кромку получает каждый слот группы, а не только припаркованный",
+        InStr(src16, "if !g.parked`r`n                continue") = 0
+     && InStr(src16, "HandleDrop(") = 0)
+    Assert("16k: выезд окна пересобирает кромки, а не сносит свою",
+        InStr(src16, "окно выехало — кромка остаётся на месте") > 0)
+
+    Assert("16l: иконка окна считается один раз на окно",
+        InStr(src16, "if iconUriCache.Has(hwnd)") > 0
+     && InStr(src16, "iconUriCache[hwnd] := uri") > 0)
+    Assert("16m: поток для PNG создаётся на HGLOBAL — иначе его нечем прочитать",
+        InStr(src16, "CreateStreamOnHGlobal") > 0
+     && InStr(src16, "DllCall(`"shlwapi\SHCreateMemStream`"") = 0)
 }
 
 ; ---------------------------------------------------------------

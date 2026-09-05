@@ -30,6 +30,21 @@ export function useSlotStatus() {
 
 export const slotBehavior = (slot: SlotState) => slot.kind === 'permanent' ? slot.value : slot.effective
 export const slotLabel = (slot: SlotState) => slot.kind === 'permanent' ? slot.value.name : slot.label
+
+// Чем строка списка подписана. У постоянного слота имя задал человек. У
+// динамического имени нет вовсе — там стоит «Слот N», и пока слот занят,
+// это худшая из возможных подписей: девять одинаковых строк. Поэтому
+// занятый динамический слот подписывается приложением своего окна.
+export function rowLabel(slot: SlotState): string {
+  if (slot.kind === 'permanent') return slot.value.name
+  const app = 'application' in slot.status ? slot.status.application : ''
+  return app || slot.label
+}
+
+// Иконка окна слота, если она доехала. Пусто — форма покажет свой знак.
+export function slotIcon(slot: SlotState): string {
+  return ('icon' in slot.status && slot.status.icon) || ''
+}
 export function monitorLabel(monitor: MonitorRef): string {
   if (monitor.kind === 'cursor') return 'Под курсором'
   if (monitor.kind === 'number') return `Монитор ${monitor.number}`

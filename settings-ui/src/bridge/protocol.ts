@@ -54,9 +54,19 @@ export type PermanentSlotValue = SlotBehavior & {
   focusHotkey: string
 }
 
+// application — как называется приложение окна: описание из ресурсов exe
+// («Блокнот»), иначе имя файла. Заголовок для списка не годится: у
+// динамического слота он меняется на каждый документ.
+// icon — data-URI PNG; в WebView2 картинку иначе не передать. Иконки
+// может не быть вовсе, поэтому поле необязательное.
 export type SlotStatus =
   | { state: 'empty' | 'applicationNotRunning' }
-  | { state: 'available' | 'parked' | 'shown'; windowTitle: string }
+  | {
+      state: 'available' | 'parked' | 'shown'
+      windowTitle: string
+      application: string
+      icon?: string
+    }
 
 export type SlotState =
   | {
@@ -80,8 +90,13 @@ export type SettingsState = {
   slots: SlotState[]
 }
 
+// Правка слота. Род на wire — тот, каким слот должен стать: постоянный
+// со всеми девятью полями или динамический с пятью ключами надстройки
+// [dynamicSlotN]. Что при этом происходит с секциями — удалить [slotN],
+// снести опустевшую надстройку, убрать вернувшийся к общему ключ —
+// решает план в AHK: он один знает, чем слот был.
 export type SlotEdit =
-  | { number: SlotNumber; kind: 'dynamic' }
+  | { number: SlotNumber; kind: 'dynamic'; value: SlotBehavior }
   | { number: SlotNumber; kind: 'permanent'; value: PermanentSlotValue }
 
 export type SettingsDraft = { general: GeneralSettings; slotEdits: SlotEdit[] }

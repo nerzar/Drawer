@@ -150,7 +150,8 @@ class DrawerSettingsPort {
         if (err != "")
             return true
         slotPlan := SettingsSlotsPlan(edits, &err)
-        if (err != "" || slotPlan.writes.Length || slotPlan.deletes.Length)
+        if (err != "" || slotPlan.writes.Length || slotPlan.deletes.Length
+                      || slotPlan.dynDeletes.Length || slotPlan.keyDeletes.Length)
             return true
         input := this._GeneralInput(JsonGet(draft, "general", 0), &err, &field)
         if (err != "")
@@ -398,11 +399,29 @@ class DrawerSettingsPort {
             path := "slots." n
             if edits.Has(n)
                 return this._Bad("Повторная правка слота " n, path, &err, &field)
-            if (JsonGet(item, "kind", "") != "permanent" || !PermApp(n))
-                return this._Bad("Доступна только правка существующего постоянного слота", path, &err, &field)
+            kind := JsonGet(item, "kind", "")
+            if (kind != "permanent" && kind != "dynamic")
+                return this._Bad("Род слота — permanent или dynamic", path, &err, &field)
             v := JsonGet(item, "value", 0)
             if !(v is Map)
                 return this._Bad("Нет конфигурации слота", path, &err, &field)
+            ; У динамического слота правится только поведение: имени, exe
+            ; и хоткея у него нет, а секция [dynamicSlotN] знает ровно эти
+            ; пять ключей. Само превращение постоянного в динамический —
+            ; тот же род на wire: план сам увидит, что [slotN] существует.
+            if (kind = "dynamic") {
+                edits[n] := {
+                    kind: "dyn",
+                    width: this._Int(v, "widthPercent", path ".widthPercent", &err, &field),
+                    edge: this._Text(v, "edge", path ".edge", &err, &field),
+                    monitor: this._MonitorIn(JsonGet(v, "monitor", 0), &err, &field, path ".monitor"),
+                    activateOnShow: this._Bool(v, "activateOnShow", path ".activateOnShow", &err, &field),
+                    hideOnBlur: this._Bool(v, "hideOnBlur", path ".hideOnBlur", &err, &field)
+                }
+                if (err != "")
+                    return 0
+                continue
+            }
             edits[n] := {
                 kind: "perm",
                 name: this._Text(v, "name", path ".name", &err, &field),
@@ -490,8 +509,16 @@ class DrawerSettingsPort {
     ; это два разных варианта SlotStatus, а не одно поле с пустой строкой.
     _StatusDto(st) {
         dto := Map("state", String(st.state))
-        if (st.state = "available" || st.state = "parked" || st.state = "shown")
-            dto["windowTitle"] := String(st.title)
+        if !(st.state = "available" || st.state = "parked" || st.state = "shown")
+            return dto
+        dto["windowTitle"] := String(st.title)
+        ; Имя приложения и его иконка — то, чем строка списка опознаётся
+        ; на глаз. Заголовок для этого не годится: у динамического слота
+        ; он меняется на каждый документ. Иконка едет data-URI: другого
+        ; способа отдать картинку в WebView2 нет.
+        dto["application"] := String(Opt(st, "app", ""))
+        if (Opt(st, "icon", "") != "")
+            dto["icon"] := String(st.icon)
         return dto
     }
 

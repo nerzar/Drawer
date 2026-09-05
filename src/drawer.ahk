@@ -30,6 +30,7 @@ if !FileExist(configPath) {
 apps         := []
 dynamic      := {}
 dynamicSlots := Map()
+iconUriCache := Map()   ; hwnd -> data-URI иконки окна (см. SlotIconUri)
 animMs       := 160
 animSteps    := 14
 blurMs       := 250
@@ -697,12 +698,131 @@ SlotStatus(n) {
     global permSlots
     if !(hwnd := SlotWindow(n))
         return { state: permSlots.Has(n) ? "applicationNotRunning" : "empty",
-                 title: "" }
+                 title: "", app: "", icon: "" }
     title := ""
     try title := WinGetTitle("ahk_id " hwnd)
+    app := WindowAppName(hwnd)
+    icon := SlotIconUri(hwnd)
     if !HandleManaged(hwnd)
-        return { state: "available", title: title }
-    return { state: HandleParked(hwnd) ? "parked" : "shown", title: title }
+        return { state: "available", title: title, app: app, icon: icon }
+    return { state: HandleParked(hwnd) ? "parked" : "shown",
+             title: title, app: app, icon: icon }
+}
+
+; Как называется приложение, которому принадлежит окно. Заголовок для
+; этого не годится: у динамического слота он меняется на каждый открытый
+; документ, а в списке слотов нужно имя, которое не прыгает. Спрашиваем
+; описание из ресурсов exe («Блокнот», «Google Chrome»), а если его нет —
+; само имя файла без расширения.
+WindowAppName(hwnd) {
+    exe := ""
+    try exe := WinGetProcessName("ahk_id " hwnd)
+    if (exe = "")
+        return ""
+    path := ""
+    try path := ProcessGetPath(WinGetPID("ahk_id " hwnd))
+    if (path != "") {
+        try {
+            desc := Trim(FileGetVersionInfo(path, "FileDescription"))
+            if (desc != "")
+                return desc
+        }
+    }
+    return RegExReplace(exe, "i)\.exe$")
+}
+
+; Иконка окна как data-URI PNG — в WebView2 картинку иначе не передать.
+; Считается один раз на окно: статус слотов опрашивается каждые 400 мс, и
+; вытаскивать иконку заново на каждый тик было бы девять извлечений в
+; секунду ни за чем. Мёртвые окна выметаются, когда кэш разрастётся.
+SlotIconUri(hwnd) {
+    global iconUriCache
+    if iconUriCache.Has(hwnd)
+        return iconUriCache[hwnd]
+    if (iconUriCache.Count > 32) {
+        for h in iconUriCache.Clone()
+            if !WinExist("ahk_id " h)
+                iconUriCache.Delete(h)
+    }
+    uri := ""
+    if (ic := HandleIcon(hwnd)) {
+        try uri := IconToPngUri(ic)
+        DllCall("DestroyIcon", "Ptr", ic)
+    }
+    iconUriCache[hwnd] := uri
+    return uri
+}
+
+; HICON -> data:image/png;base64. GDI+ поднимается на время вызова и
+; гасится тут же: держать его постоянно в программе, которая достаёт
+; иконку раз в несколько минут, незачем. Пустая строка означает «не
+; получилось» — форма покажет свой значок окна.
+IconToPngUri(hicon) {
+    si := Buffer(A_PtrSize = 8 ? 24 : 16, 0)
+    NumPut("UInt", 1, si, 0)
+    token := 0
+    if DllCall("gdiplus\GdiplusStartup", "Ptr*", &token, "Ptr", si, "Ptr", 0, "UInt")
+        return ""
+    uri := ""
+    try uri := IconToPngUriCore(hicon)
+    DllCall("gdiplus\GdiplusShutdown", "Ptr", token)
+    return uri
+}
+
+IconToPngUriCore(hicon) {
+    bmp := 0
+    if DllCall("gdiplus\GdipCreateBitmapFromHICON", "Ptr", hicon, "Ptr*", &bmp, "UInt")
+        return ""
+    uri := ""
+    try uri := BitmapToPngUri(bmp)
+    DllCall("gdiplus\GdipDisposeImage", "Ptr", bmp)
+    return uri
+}
+
+BitmapToPngUri(bmp) {
+    ; CLSID кодировщика PNG: {557CF406-1A04-11D3-9A73-0000F81EF32E}.
+    clsid := Buffer(16, 0)
+    if DllCall("ole32\CLSIDFromString", "Str", "{557CF406-1A04-11D3-9A73-0000F81EF32E}",
+               "Ptr", clsid, "UInt")
+        return ""
+    ; Именно CreateStreamOnHGlobal: у потока из SHCreateMemStream нет
+    ; HGLOBAL, и GetHGlobalFromStream ниже отдал бы мусор.
+    stream := 0
+    if DllCall("ole32\CreateStreamOnHGlobal", "Ptr", 0, "Int", 1, "Ptr*", &stream, "UInt")
+        return ""
+    uri := ""
+    try {
+        if !DllCall("gdiplus\GdipSaveImageToStream", "Ptr", bmp, "Ptr", stream,
+                    "Ptr", clsid, "Ptr", 0, "UInt")
+            uri := StreamToPngUri(stream)
+    }
+    ObjRelease(stream)
+    return uri
+}
+
+StreamToPngUri(stream) {
+    hglobal := 0
+    if DllCall("ole32\GetHGlobalFromStream", "Ptr", stream, "Ptr*", &hglobal, "UInt")
+        return ""
+    size := DllCall("GlobalSize", "Ptr", hglobal, "UPtr")
+    if (!size || size > 400000)      ; 400 КБ — иконкой это уже не бывает
+        return ""
+    if !(mem := DllCall("GlobalLock", "Ptr", hglobal, "Ptr"))
+        return ""
+    b64 := ""
+    try {
+        chars := 0
+        ; 0x40000001 — CRYPT_STRING_NOCRLF | CRYPT_STRING_BASE64.
+        if DllCall("crypt32\CryptBinaryToStringW", "Ptr", mem, "UInt", size,
+                   "UInt", 0x40000001, "Ptr", 0, "UInt*", &chars, "Int") {
+            out := Buffer(chars * 2, 0)
+            if DllCall("crypt32\CryptBinaryToStringW", "Ptr", mem, "UInt", size,
+                       "UInt", 0x40000001, "Ptr", out, "UInt*", &chars, "Int")
+                b64 := StrGet(out, "UTF-16")
+        }
+    }
+    DllCall("GlobalUnlock", "Ptr", hglobal)
+    return b64 = "" ? "" : "data:image/png;base64," b64
 }
 
 ; Постоянный слот: окно ищется по настройкам приложения. Приложение не
@@ -791,7 +911,6 @@ StateOf(hwnd) {
 ; событию активации: там окно уже стало активным само, и спрашивать об
 ; этом Windows поздно.
 Show(hwnd, cfg, st, forceActivate := false, prev := 0) {
-    HandleDrop(hwnd)             ; кромка слота уступает место самому окну
     st.prev := FocusCandidate(prev, hwnd) ? prev : PrevActive(hwnd)
     if (WinGetMinMax("ahk_id " hwnd) != 0)
         WinRestore("ahk_id " hwnd)
@@ -816,6 +935,7 @@ Show(hwnd, cfg, st, forceActivate := false, prev := 0) {
         Slide(hwnd, g.hx, g.hy, g.sx, g.sy, g.w, g.h)
     if activate
         Watch(hwnd, cfg)
+    SetTimer(HandlesSync, -1)    ; окно выехало — кромка остаётся на месте
 }
 
 Hide(hwnd, st) {
@@ -839,7 +959,7 @@ Hide(hwnd, st) {
 ; вместо активации. Возвращаем фокус тому, что работало до показа, а
 ; если его больше нет — верхнему подходящему окну по Z-порядку.
 RestoreFocus(parked, st) {
-    if FocusCandidate(st.prev, parked) {
+    if FocusCandidate(st.prev, parked, true) {
         WinActivate("ahk_id " st.prev)
         return
     }
@@ -860,15 +980,22 @@ RedirectFocus(parked) {
 ; что уже спрятано за краем, в кандидаты не годятся.
 PrevActive(skip) {
     hwnd := WinExist("A")
-    return FocusCandidate(hwnd, skip) ? hwnd : 0
+    ; Настройки здесь допустимы: пользователь в них и стоял.
+    return FocusCandidate(hwnd, skip, true) ? hwnd : 0
 }
 
 ; Годится ли окно, чтобы отдать ему фокус. Проверка по факту: окно за
 ; пределами всех мониторов не годится, кем бы оно ни было припарковано.
-FocusCandidate(hwnd, skip) {
+;
+; service — можно ли отдать фокус собственному окну настроек. По умолчанию
+; нельзя: наугад выбирать настройки из Z-порядка значило бы вытаскивать их
+; поверх работы. Но если пользователь нажал хоткей, СТОЯ в настройках, то
+; вернуть фокус туда — единственно верное: иначе слот уезжает, а вместо
+; настроек наверх выходит случайное чужое окно, и открытая форма пропадает.
+FocusCandidate(hwnd, skip, service := false) {
     if (!hwnd || hwnd = skip)
         return false
-    if IsServiceWindow(hwnd)     ; фокус пользователя настройкам не отдаём
+    if (!service && IsServiceWindow(hwnd))
         return false
     try {
         if !WinExist("ahk_id " hwnd)
@@ -1306,17 +1433,18 @@ HandlesSync() {
         key := mi "|" edge
         if !groups.Has(key)
             groups[key] := []
-        groups[key].Push({ n: s.n, hwnd: s.hwnd, mi: mi, edge: edge,
-                           parked: HandleParked(s.hwnd) })
+        groups[key].Push({ n: s.n, hwnd: s.hwnd, mi: mi, edge: edge })
     }
 
-    ; А кромку получает только припаркованный: выдвинутое окно и так на
-    ; экране, кромка ему не нужна. Соседи свои сохраняют.
+    ; Кромку получает каждый слот группы, а не только припаркованный.
+    ; Выдвинутое окно закрывает собой край, и кромка лежит поверх него
+    ; (+AlwaysOnTop): это единственный способ убрать окно мышью и
+    ; единственный признак, что край всё ещё занят этим слотом. Раньше
+    ; кромка на время выезда исчезала, и место в стопке выглядело
+    ; свободным.
     keep := Map()
     for key, grp in groups {
         for i, g in grp {
-            if !g.parked
-                continue
             if !(b := HandleBase(g.mi, g.edge, i - 1, grp.Length))
                 continue
             keep[g.n] := { hwnd: g.hwnd, mi: g.mi, edge: g.edge, base: b }
@@ -1495,16 +1623,6 @@ HandleDestroy(n) {
 ; Слот выдвигается — его кромка должна исчезнуть до того, как окно
 ; поедет. Кромки остальных слотов остаются на местах: с них и берётся
 ; переход мышью на соседнее припаркованное окно.
-HandleDrop(hwnd) {
-    global handles
-    for n, hd in handles.Clone() {
-        if (hd.hwnd = hwnd)
-            HandleDestroy(n)
-    }
-    HandleTimer()
-    SetTimer(HandlesSync, -1)
-}
-
 HandlesDestroyAll() {
     global handles
     for n, hd in handles.Clone()
@@ -3315,6 +3433,53 @@ SettingsSlotWrites(n, e, &err, &field?) {
     return out
 }
 
+; Правка динамического слота в дисковый вид. Секция [dynamicSlotN] —
+; надстройка над [dynamic], и ключ в ней нужен ровно тогда, когда значение
+; отличается от общего. Совпал с общим — ключ уходит из секции, и слот
+; снова следует за General; ушли все — секция удаляется целиком. Иначе
+; правка одного поля молча пришпилила бы к слоту и остальные четыре.
+SettingsDynSlotWrites(n, e, &err, &field?) {
+    global dynamic, dynamicSlots
+    if (err != "")
+        return { writes: [], keyDeletes: [], empty: true }
+    field := ""
+    lbl := "Слот " n ": "
+    w    := SettingsNum(String(e.width), 5, 100, lbl "размер окна", &err)
+    if (err != "")
+        field := "slots." n ".widthPercent"
+    mon  := SettingsMonitorIn(String(e.monitor), lbl "монитор", true, &err)
+    edge := SettingsEdgeIn(e.edge, lbl "край", true, &err)
+    act  := SettingsBoolIn(e.activateOnShow, lbl "активация", &err)
+    blur := SettingsBoolIn(e.hideOnBlur, lbl "автоскрытие", &err)
+    if (err != "")
+        return { writes: [], keyDeletes: [], empty: true }
+    sec := "dynamicSlot" n
+    own := dynamicSlots.Has(n) ? dynamicSlots[n] : 0
+    cand := [{ key: "monitor", val: mon, shared: String(Opt(dynamic, "monitor", "cursor")) },
+             { key: "edge", val: edge, shared: String(Opt(dynamic, "edge", "right")) },
+             { key: "width", val: String(w), shared: String(Opt(dynamic, "width", 60)) },
+             { key: "activateOnShow", val: act ? "true" : "false",
+               shared: Opt(dynamic, "activateOnShow", true) ? "true" : "false" },
+             { key: "hideOnBlur", val: blur ? "true" : "false",
+               shared: Opt(dynamic, "hideOnBlur", true) ? "true" : "false" }]
+    writes := [], keyDeletes := [], kept := 0
+    for c in cand {
+        ; На диске ключа нет, пока секции нет вовсе: own отражает
+        ; прочитанный config.ini, где отсутствующий ключ уже подменён
+        ; общим значением, — сравнивать надо с ним же.
+        live := own ? String(Opt(own, c.key, c.shared)) : ""
+        if (c.val = c.shared) {
+            if (own && live != "")
+                keyDeletes.Push({ sec: sec, key: c.key })
+            continue
+        }
+        kept++
+        if (live != c.val)
+            writes.Push({ sec: sec, key: c.key, val: c.val })
+    }
+    return { writes: writes, keyDeletes: keyDeletes, empty: kept = 0 }
+}
+
 ; validate/plan для Slots: тот же семантический вход/выход, каким сможет
 ; пользоваться WebView-порт (slotEdits DTO) — Map номер слота -> правка,
 ; без обращения к setUI. Внутри переиспользует существующие
@@ -3329,7 +3494,11 @@ SettingsSlotsPlan(edits, &err) {
     ; слот и подсвечивать контрол. Пустым остаётся только там, где
     ; указывать не на что, — номер слота вне 1…9.
     field := ""
-    writes := [], deletes := [], touched := Map()
+    ; deletes — секции [slotN] под снос (слот стал динамическим);
+    ; dynDeletes — секции [dynamicSlotN] под снос (слот стал постоянным
+    ; или его надстройка опустела); keyDeletes — отдельные ключи
+    ; надстройки, вернувшиеся к общему значению.
+    writes := [], deletes := [], dynDeletes := [], keyDeletes := [], touched := Map()
     if edits {
         for n, e in edits {
             ; Номер и тип слота native задаёт сам строкой списка, поэтому
@@ -3339,17 +3508,30 @@ SettingsSlotsPlan(edits, &err) {
             ; молча трактовался бы как "perm".
             if (!IsInteger(n) || n < 1 || n > 9) {
                 err := "Слот " n ": номер вне диапазона 1…9"
-                return { writes: [], deletes: [], touched: Map(), oldBySlot: Map(),
-                         oldIdent: Map(), field: field }
+                return SettingsSlotsPlanFail(field)
             }
             if (e.kind != "perm" && e.kind != "dyn") {
                 err := "Слот " n ": тип должен быть perm или dyn"
                 field := "slots." n
-                return { writes: [], deletes: [], touched: Map(), oldBySlot: Map(),
-                         oldIdent: Map(), field: field }
+                return SettingsSlotsPlanFail(field)
             }
             if (e.kind = "dyn") {
-                deletes.Push(n)
+                ; Слот был постоянным — секция [slotN] уходит. Правка
+                ; надстройки уже динамического слота секцию не трогает.
+                if PermApp(n)
+                    deletes.Push(n)
+                got := SettingsDynSlotWrites(n, e, &err, &field)
+                if (err != "") {
+                    if (field = "")
+                        field := "slots." n
+                    return SettingsSlotsPlanFail(field)
+                }
+                for w in got.writes
+                    writes.Push(w)
+                for d in got.keyDeletes
+                    keyDeletes.Push(d)
+                if got.empty
+                    dynDeletes.Push(n)
                 touched[n] := true
                 continue
             }
@@ -3357,11 +3539,13 @@ SettingsSlotsPlan(edits, &err) {
             if (err != "") {
                 if (field = "")
                     field := "slots." n
-                return { writes: [], deletes: [], touched: Map(), oldBySlot: Map(),
-                         oldIdent: Map(), field: field }
+                return SettingsSlotsPlanFail(field)
             }
             for w in got
                 writes.Push(w)
+            ; Слот стал (или остался) постоянным: надстройка ему больше не
+            ; нужна и при каждом старте попадала бы в диагностику.
+            dynDeletes.Push(n)
             touched[n] := true
         }
     }
@@ -3375,8 +3559,15 @@ SettingsSlotsPlan(edits, &err) {
             oldBySlot[a.slot] := managed[a.slot]
         oldIdent[a.slot] := { exe: a.exe, cls: a.cls }
     }
-    return { writes: writes, deletes: deletes, touched: touched,
+    return { writes: writes, deletes: deletes, dynDeletes: dynDeletes,
+             keyDeletes: keyDeletes, touched: touched,
              oldBySlot: oldBySlot, oldIdent: oldIdent, field: "" }
+}
+
+; Отказ плана одним видом: писать нечего, а адрес поля довезти надо.
+SettingsSlotsPlanFail(field) {
+    return { writes: [], deletes: [], dynDeletes: [], keyDeletes: [],
+             touched: Map(), oldBySlot: Map(), oldIdent: Map(), field: field }
 }
 
 ; UI-adapter: тонкая обёртка над буфером setUI.edits.
@@ -3408,6 +3599,17 @@ SettingsVerifyDeleted(path, sec) {
         return IniRead(path, sec, , "") = ""
     catch
         return false
+}
+
+; Значение одного ключа или пустая строка, если его нет. Нечитаемый файл
+; и отсутствующий ключ здесь одинаковы намеренно: вызывающий проверяет
+; факт удаления, и «не смогли прочитать» он трактует как «ещё на месте»
+; только вместе со сверкой после записи.
+SettingsReadKey(path, sec, key) {
+    try
+        return IniRead(path, sec, key, "")
+    catch
+        return ""
 }
 
 ; Провал persistence одной записью: код контракта плюс человеческий
@@ -3476,10 +3678,6 @@ SettingsPersistVerified(generalWrites, slotPlan, &outcome) {
         }
     }
 
-    delSet := Map()
-    for n in slotPlan.deletes
-        delSet[n] := true
-
     for n in slotPlan.deletes {
         try
             IniDelete(configPath, "slot" n)
@@ -3497,15 +3695,15 @@ SettingsPersistVerified(generalWrites, slotPlan, &outcome) {
             return
         }
     }
-    ; Секция [dynamicSlotN] у слота, ставшего постоянным, ни на что не
-    ; влияет, но LoadConfig сообщает о ней при каждом старте. Раньше её
-    ; удаление шло голым try и молча глотало отказ — единственная
-    ; дисковая операция Save без сверки. Сначала читаем: если секции нет,
-    ; файл не трогаем вовсе, иначе IniDelete по заведомо отсутствующей
-    ; секции поднимал бы mayHavePersisted на каждом Save со слотами.
-    for n in slotPlan.touched {
-        if delSet.Has(n)
-            continue
+    ; Секция [dynamicSlotN] сносится в двух случаях: слот стал постоянным
+    ; (надстройка ни на что не влияет, но LoadConfig сообщает о ней при
+    ; каждом старте) и надстройка опустела — все её значения вернулись к
+    ; общим. Оба случая план называет сам списком dynDeletes; раньше это
+    ; вычислялось здесь по touched и потому стирало бы любую правку
+    ; надстройки. Сначала читаем: если секции нет, файл не трогаем вовсе,
+    ; иначе IniDelete по заведомо отсутствующей секции поднимал бы
+    ; mayHavePersisted на каждом Save со слотами.
+    for n in slotPlan.dynDeletes {
         if SettingsVerifyDeleted(configPath, "dynamicSlot" n)
             continue
         try
@@ -3519,6 +3717,26 @@ SettingsPersistVerified(generalWrites, slotPlan, &outcome) {
         if !SettingsVerifyDeleted(configPath, "dynamicSlot" n) {
             SettingsPersistFail(&outcome, "verify_failed",
                 "Проверка не прошла: [dynamicSlot" n "] не удалился")
+            return
+        }
+    }
+
+    ; Ключ надстройки, вернувшийся к общему значению. Удаляется тем же
+    ; порядком, что и секции: пишем, потом читаем и убеждаемся.
+    for d in slotPlan.keyDeletes {
+        if (SettingsReadKey(configPath, d.sec, d.key) = "")
+            continue
+        try
+            IniDelete(configPath, d.sec, d.key)
+        catch as e {
+            SettingsPersistFail(&outcome, "write_failed",
+                "Не удалить [" d.sec "] " d.key ": " e.Message)
+            return
+        }
+        outcome.mayHavePersisted := true
+        if (SettingsReadKey(configPath, d.sec, d.key) != "") {
+            SettingsPersistFail(&outcome, "verify_failed",
+                "Проверка не прошла: [" d.sec "] " d.key " не удалился")
             return
         }
     }
@@ -3660,14 +3878,25 @@ SettingsStateSnapshot() {
 SettingsChangedSlots(slotPlan) {
     seen := Map()
     for w in slotPlan.writes
-        seen[Integer(SubStr(w.sec, 5))] := true
+        seen[SettingsSectionSlot(w.sec)] := true
+    for d in slotPlan.keyDeletes
+        seen[SettingsSectionSlot(d.sec)] := true
     for n in slotPlan.deletes
+        seen[n] := true
+    for n in slotPlan.dynDeletes
         seen[n] := true
     out := []
     Loop 9
         if seen.Has(A_Index)
             out.Push(A_Index)
     return out
+}
+
+; Номер слота по имени секции: [slot3] и [dynamicSlot3] — один и тот же
+; слот 3. Раньше номер вырезался из строки по фиксированной позиции, и
+; надстройка динамического слота ломала бы разбор.
+SettingsSectionSlot(sec) {
+    return Integer(RegExReplace(sec, "^\D+"))
 }
 
 ; Слоты, у которых изменился focusHotkey. Хоткеи регистрируются один раз
@@ -3679,7 +3908,7 @@ SettingsRestartRequired(slotPlan) {
     out := []
     for w in slotPlan.writes
         if (w.key = "focusHotkey")
-            out.Push(Integer(SubStr(w.sec, 5)))
+            out.Push(SettingsSectionSlot(w.sec))
     return out
 }
 
@@ -3706,6 +3935,7 @@ SettingsRestartRequired(slotPlan) {
 ; Apply/OK, и вылет из него уронил бы не Save, а всё окно настроек.
 SettingsApplyPlan(generalWrites, slotPlan, &outcome) {
     hasSlotWork := slotPlan.writes.Length || slotPlan.deletes.Length
+                || slotPlan.dynDeletes.Length || slotPlan.keyDeletes.Length
     outcome := { saved: false, code: "", err: "", retryable: false,
                  changedWrites: 0, changedDeletes: 0,
                  changedSlots: [], restartRequired: [],
@@ -3751,8 +3981,12 @@ SettingsApplyPlan(generalWrites, slotPlan, &outcome) {
         return
     }
     outcome.saved := true
+    ; Удалённый ключ надстройки — такое же изменение строки файла, как
+    ; записанный: иначе Save, который только вернул слот к общим
+    ; значениям, отчитался бы «менять нечего».
     outcome.changedWrites := generalWrites.Length + slotPlan.writes.Length
-    outcome.changedDeletes := slotPlan.deletes.Length
+                           + slotPlan.keyDeletes.Length
+    outcome.changedDeletes := slotPlan.deletes.Length + slotPlan.dynDeletes.Length
     outcome.changedSlots := SettingsChangedSlots(slotPlan)
     outcome.restartRequired := SettingsRestartRequired(slotPlan)
 }
@@ -3822,6 +4056,7 @@ SettingsSave(closeAfter) {
         return
     }
     hasSlotWork := slotPlan.writes.Length || slotPlan.deletes.Length
+                || slotPlan.dynDeletes.Length || slotPlan.keyDeletes.Length
 
     outcome := ""
     SettingsApplyPlan(vals, slotPlan, &outcome)

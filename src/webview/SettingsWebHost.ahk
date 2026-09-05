@@ -49,11 +49,17 @@ SettingsWebOpen() {
     webAdapter := SettingsWebViewAdapter("Ящик — настройки", webDir, loader, dataDir,
         SettingsWebJson, SettingsWebCloseRequested, SettingsWebDestroyed)
     webBridge := SettingsJsonBridge(webAdapter, DrawerSettingsPort(webAdapter.Window), 5000, SettingsWebTrace)
-    webHwnd := webAdapter.Hwnd
     ; Окно ящика, а не пользователя: в слот его привязать нельзя, и
     ; переход в него не считается потерей фокуса (Р18, реестр C2).
-    ServiceWindowAdd(webHwnd)
+    ;
+    ; Регистрация — ПОСЛЕ Show(), и это не косметика: до показа
+    ; WebViewToo отдаёт hwnd заготовки, а показывает другое окно. В
+    ; реестр попадал номер, которого на экране нет, и настоящее окно
+    ; настроек переставало быть служебным: FindWindow ловил его в
+    ; постоянный слот с exe ящика, WatchBlur считал уход в настройки
+    ; потерей фокуса, а RestoreFocus не возвращал туда фокус.
     webAdapter.Show()
+    ServiceWindowAdd(webAdapter.Hwnd)
 }
 
 SettingsWebJson(adapter, json) {

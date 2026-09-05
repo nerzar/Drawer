@@ -9,7 +9,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { CanonicalGate, reconcileSlotDrafts } from '../src/bridge/canonical'
-import { slotDraftsFromState, slotEditsToWire, type SlotDrafts } from '../src/bridge/slotDraft'
+import { resetToShared, slotDraftsFromState, slotEditsToWire, type SlotDrafts } from '../src/bridge/slotDraft'
 import type { PermanentSlotValue, SettingsState, SlotBehavior, SlotState } from '../src/bridge/protocol'
 
 // ---------------------------- фикстуры ----------------------------
@@ -101,19 +101,22 @@ test('слот остался постоянным — грязный черно
   assert.equal(next[1]!.name, 'не сохранено')
 })
 
-test('постоянный стал динамическим — черновик выбрасывается', () => {
+test('постоянный стал динамическим — черновик заводится заново', () => {
   const drafts = slotDraftsFromState(state(perm(1)))
   drafts[1]!.name = 'не сохранено'
 
   const next = reconcileSlotDrafts(drafts, state(dyn(1)))
-  assert.equal(next[1], undefined, 'черновик описывает уже не тот слот')
+  assert.equal(next[1]!.baseKind, 'dynamic', 'черновик описывал уже не тот слот')
+  assert.equal(next[1]!.kind, 'dynamic')
+  assert.notEqual(next[1]!.name, 'не сохранено')
 })
 
 test('динамический стал постоянным — черновик заводится из canonical', () => {
   const drafts: SlotDrafts = slotDraftsFromState(state(dyn(1)))
-  assert.equal(drafts[1], undefined)
+  assert.equal(drafts[1]!.baseKind, 'dynamic')
 
   const next = reconcileSlotDrafts(drafts, state(perm(1, 'Files', 'Files.exe')))
+  assert.equal(next[1]!.baseKind, 'permanent')
   assert.equal(next[1]!.name, 'Files')
   assert.equal(next[1]!.executable, 'Files.exe')
 })
@@ -123,8 +126,18 @@ test('смена рода у соседа не трогает чужой гря�
   drafts[2]!.executable = 'edited.exe'
 
   const next = reconcileSlotDrafts(drafts, state(dyn(1), perm(2, 'Files', 'Files.exe')))
-  assert.equal(next[1], undefined)
+  assert.equal(next[1]!.baseKind, 'dynamic')
   assert.equal(next[2]!.executable, 'edited.exe')
+})
+
+test('несохранённая смена рода переживает замену canonical мимо Save', () => {
+  const before = state(perm(1), dyn(2))
+  const drafts = slotDraftsFromState(before)
+  drafts[1]!.kind = 'dynamic'          // человек нажал «Сделать динамическим»
+
+  const next = reconcileSlotDrafts(drafts, state(perm(1), dyn(2)))
+  assert.equal(next[1]!.kind, 'dynamic', 'намерение сменить род не сбрасывается')
+  assert.equal(next[1]!.baseKind, 'permanent')
 })
 
 // --------------------- черновик и canonical раздельны ---------------------
@@ -157,11 +170,55 @@ test('изменённое поле уезжает ровно одной пра�
   assert.equal(edits[0].kind === 'permanent' && edits[0].value.widthPercent, 80)
 })
 
-test('после смены рода правка выброшенного черновика не уезжает', () => {
+test('после смены рода правка пересобранного черновика не уезжает', () => {
   const before = state(perm(1), perm(2, 'Files', 'Files.exe'))
   const drafts = slotDraftsFromState(before)
   drafts[1]!.name = 'не сохранено'
 
   const after = state(dyn(1), perm(2, 'Files', 'Files.exe'))
   assert.deepEqual(slotEditsToWire(reconcileSlotDrafts(drafts, after), after), [])
+})
+
+// -------------------------- смена рода --------------------------
+
+test('«сделать динамическим» уезжает правкой рода с общим поведением', () => {
+  const canonical = state(perm(1), dyn(2))
+  const drafts = slotDraftsFromState(canonical)
+  drafts[1]!.kind = 'dynamic'
+  resetToShared(drafts[1]!, canonical.general.dynamicDefaults)
+
+  const edits = slotEditsToWire(drafts, canonical)
+  assert.equal(edits.length, 1)
+  assert.equal(edits[0].number, 1)
+  assert.equal(edits[0].kind, 'dynamic')
+  assert.deepEqual(edits[0].kind === 'dynamic' && edits[0].value, behavior)
+})
+
+test('«сделать постоянным» уезжает полным значением из засева', () => {
+  const canonical = state(perm(1), dyn(2))
+  const drafts = slotDraftsFromState(canonical)
+  drafts[2]!.kind = 'permanent'
+
+  const edits = slotEditsToWire(drafts, canonical)
+  assert.equal(edits.length, 1)
+  assert.equal(edits[0].number, 2)
+  assert.equal(edits[0].kind === 'permanent' && edits[0].value.name, 'Слот 2')
+})
+
+test('правка надстройки динамического слота уезжает пятью ключами поведения', () => {
+  const canonical = state(perm(1), dyn(2))
+  const drafts = slotDraftsFromState(canonical)
+  drafts[2]!.widthPercent = '35'
+
+  const edits = slotEditsToWire(drafts, canonical)
+  assert.equal(edits.length, 1)
+  assert.equal(edits[0].kind, 'dynamic')
+  const value = edits[0].kind === 'dynamic' ? edits[0].value : null
+  assert.equal(value!.widthPercent, 35)
+  assert.equal(Object.keys(value!).length, 5, 'имени и exe у динамического слота нет')
+})
+
+test('динамический слот без правок в Save не едет', () => {
+  const canonical = state(perm(1), dyn(2), dyn(3))
+  assert.deepEqual(slotEditsToWire(slotDraftsFromState(canonical), canonical), [])
 })

@@ -250,6 +250,8 @@ SmokeWatch() {
     Check "1e: watcher enabled and disabled" (($log -match 'slot-watch enabled=1') -and ($log -match 'slot-watch enabled=0'))
     Check "1f: slot draft, dirty-close and validation" ($log -match 'request smoke\.slot-validation')
     Check "1i: ошибка поля привела к своему слоту и контролу" ($log -match 'request smoke\.slot-routing')
+    Check "1j: смена рода и надстройка динамического слота применились" `
+        (($log -match 'request smoke\.converted') -and ($log -match 'request smoke\.reverted'))
     Check "1g: slot Apply canonical baseline and no-op" ($log -match 'request smoke\.slot-saved')
     Check "1h: slot.bind and slot.release end-to-end with canonical state" ($log -match 'request smoke\.bind-release-verified')
 
@@ -303,6 +305,15 @@ SmokeWatch() {
     Check "5d: файл остался UTF-16 LE с комментариями пользователя" ($after -match 'Ящик' -and $after -match 'Настройки читаются заново')
     # cls формой не правится: его источник — picker. Значит, он обязан
     # доехать до диска нетронутым; пустой черновик записал бы cls= .
+    # Слот 6 съездил в постоянные и обратно: секции [slot6] в файле
+    # остаться не должно. Надстройка слота 7 появилась и ушла, когда её
+    # значение сравнялось с общим.
+    Check "5f: смена рода туда и обратно не оставила секцию" `
+        (($after -notmatch '(?m)^\[slot6\]') -and ($after -notmatch '(?m)^name=Converted six'))
+    Check "5g: надстройка динамического слота ушла вместе с отличием" `
+        ($after -notmatch '(?m)^\[dynamicSlot7\]')
+    Check "5h: чужая надстройка не тронута" `
+        (($after -match '(?m)^\[dynamicSlot5\]') -and ($after -match '(?m)^width=43\s*$'))
     Check "5e: slot fields persisted through Apply and OK" `
         (($after -match '(?m)^name=Saved by OK\s*$') -and ($after -match '(?m)^width=62\s*$') `
          -and ($after -match '(?m)^cls=AutoHotkeyGUI\s*$') -and ($after -match '(?m)^focusHotkey=\^!#2\s*$'))

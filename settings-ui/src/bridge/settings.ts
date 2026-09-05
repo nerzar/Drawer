@@ -153,7 +153,9 @@ function buildDraft() {
 export async function pickSlot(number: SlotNumber, kind: 'exe' | 'window'): Promise<void> {
   const api = settingsClient()
   const draft = settings.slotDrafts[number]
-  if (!api || !draft || settings.pickerActive || settings.closed) return
+  // Черновик есть у каждого слота, но exe и класс окна — поля только
+  // постоянного: у динамического их некуда положить.
+  if (!api || !draft || draft.kind !== 'permanent' || settings.pickerActive || settings.closed) return
   settings.pickerActive = true
   try {
     // User interaction has no RPC deadline. settings.closed disposes pending requests.

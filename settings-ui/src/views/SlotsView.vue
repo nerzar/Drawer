@@ -3,11 +3,14 @@ import { computed, ref, watch } from 'vue'
 import { settings, pickSlot } from '../bridge/settings'
 import { fieldTarget } from '../bridge/fieldError'
 import { EDGE_OPTIONS } from '../bridge/general'
+import { resetToShared } from '../bridge/slotDraft'
 import {
   useSlotStatus,
   edgeLabels,
   monitorLabel,
+  rowLabel,
   slotBehavior,
+  slotIcon,
   slotLabel,
   statusFor,
 } from '../bridge/slots'
@@ -43,15 +46,51 @@ watch(
   { immediate: true },
 )
 
-// Откуда у динамического слота взялось значение. Сравнивается с
-// применённым General, а не с черновиком: подпись описывает то, что
-// действует сейчас, а не то, что человек набрал и ещё не сохранил.
-function source(key) {
+// Какие значения динамический слот держит своими, а какие берёт из
+// General. Считается по применённому состоянию, а не по черновику:
+// подпись описывает то, что действует, а не то, что набрано.
+const OVERRIDE_NAMES = {
+  monitor: 'монитор',
+  edge: 'край',
+  widthPercent: 'ширина',
+  activateOnShow: 'активация',
+  hideOnBlur: 'автоскрытие',
+}
+
+const overrideNote = computed(() => {
   const shared = settings.canonical?.general.dynamicDefaults
-  if (!shared || !behavior.value) return ''
-  return JSON.stringify(behavior.value[key]) === JSON.stringify(shared[key])
-    ? 'из [dynamic]'
-    : `из [dynamicSlot${selectedNumber.value}]`
+  const applied = behavior.value
+  if (!shared || !applied) return ''
+  const own = Object.keys(OVERRIDE_NAMES).filter(
+    (k) => JSON.stringify(applied[k]) !== JSON.stringify(shared[k]),
+  )
+  return own.length
+    ? `своё в [dynamicSlot${selectedNumber.value}]: ${own.map((k) => OVERRIDE_NAMES[k]).join(', ')}`
+    : 'всё из [dynamic] — общих настроек динамических слотов'
+})
+
+// Форма правит черновик, поэтому род слота на экране — из черновика, а
+// не из canonical: переключённая кнопка обязана менять панель сразу, а
+// не после Save.
+const kind = computed(() => draft.value?.kind ?? selectedSlot.value?.kind ?? 'dynamic')
+const locked = computed(() => settings.status === 'saving' || settings.pickerActive)
+
+// Смена рода — правка черновика, как и всё остальное: на диск ничего не
+// уходит до «Применить»/«ОК».
+function makeDynamic() {
+  const d = draft.value
+  const shared = settings.canonical?.general.dynamicDefaults
+  if (!d || !shared || locked.value) return
+  d.kind = 'dynamic'
+  // Поведение возвращается к общим: секция [slotN] уходит, собственной
+  // надстройки у слота не появляется — ровно то, что делает native.
+  resetToShared(d, shared)
+}
+
+function makePermanent() {
+  const d = draft.value
+  if (!d || locked.value) return
+  d.kind = 'permanent'
 }
 </script>
 
@@ -80,18 +119,23 @@ function source(key) {
           :style="{ background: slot.number === selectedNumber ? 'var(--accent-tint)' : 'transparent' }"
           @click="selectedNumber = slot.number"
         >
-          <div class="avatar" :class="{ 'avatar-empty': slot.kind !== 'permanent' }">
-            <!-- Какое приложение занимает слот, знает только config.ini,
-                 и своей иконки у него нет. Общий знак окна честнее
-                 подставленной наугад: он говорит «слот занят», не
-                 притворяясь, что узнал программу. -->
-            <svg v-if="slot.kind === 'permanent'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
+          <div
+            class="avatar"
+            :class="{ 'avatar-empty': slot.kind !== 'permanent' && !slotIcon(slot) }"
+          >
+            <!-- Иконка самого приложения, пока окно у слота есть. Её
+                 отдаёт Ящик data-URI: своей картинки у config.ini нет, а
+                 придумывать её по имени файла — гадание. Без окна остаётся
+                 общий знак: он говорит «слот занят», не притворяясь, что
+                 узнал программу. -->
+            <img v-if="slotIcon(slot)" :src="slotIcon(slot)" alt="" data-testid-icon="1" />
+            <svg v-else-if="slot.kind === 'permanent'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
               <rect x="3" y="4" width="18" height="14" rx="1.5" />
               <line x1="3" y1="8" x2="21" y2="8" />
             </svg>
           </div>
           <div style="flex: 1; min-width: 0">
-            <div class="slotrow-name">{{ slot.number }}. {{ slotLabel(slot) }}</div>
+            <div class="slotrow-name">{{ slot.number }}. {{ rowLabel(slot) }}</div>
             <div class="slotrow-meta">
               {{ edgeLabels[slotBehavior(slot).edge] }} ·
               {{ monitorLabel(slotBehavior(slot).monitor) }} · {{ slotBehavior(slot).widthPercent }}%
@@ -118,17 +162,16 @@ function source(key) {
       <div v-if="selectedSlot" class="detail" data-testid="slot-detail">
         <div class="detail-head">
           <h2>Слот {{ selectedSlot.number }}</h2>
-          <!-- Смена рода слота ещё не подключена к Ящику: порт принимает
-               правки только существующих постоянных слотов. Кнопка стоит
-               на своём месте выключенной — придумывать вместо неё другой
-               путь значило бы завести UI, которого нет в дизайне. -->
+          <!-- Смена рода — правка черновика: панель меняется сразу,
+               config.ini — только по «Применить»/«ОК». -->
           <button
-            v-if="selectedSlot.kind === 'permanent'"
+            v-if="kind === 'permanent'"
             class="btn-danger-hd"
             type="button"
             data-testid="make-dynamic"
-            disabled
-            title="Смена рода слота ещё не подключена"
+            :disabled="locked"
+            title="Секция [slot N] будет удалена по «Применить»"
+            @click="makeDynamic()"
           >
             Сделать динамическим…
           </button>
@@ -137,8 +180,8 @@ function source(key) {
             class="btn-primary-sm"
             type="button"
             data-testid="make-permanent"
-            disabled
-            title="Смена рода слота ещё не подключена"
+            :disabled="locked"
+            @click="makePermanent()"
           >
             Сделать постоянным…
           </button>
@@ -156,8 +199,8 @@ function source(key) {
           <div class="v" data-testid="slot-title">{{ selectedSlot.status.windowTitle || '—' }}</div>
         </div>
 
-        <template v-if="selectedSlot.kind === 'permanent'">
-          <fieldset v-if="draft" class="editor" :disabled="settings.status === 'saving' || settings.pickerActive">
+        <template v-if="kind === 'permanent'">
+          <fieldset v-if="draft" class="editor" :disabled="locked">
             <div class="row">
               <label for="slot-name">Имя</label>
               <div class="field">
@@ -286,41 +329,80 @@ function source(key) {
         </template>
 
         <template v-else>
+          <!-- Имени, файла и своего хоткея у динамического слота нет —
+               это факты, а не поля. Поведение он настраивает: секция
+               [dynamicSlotN] надстраивается над общей [dynamic]. -->
           <div class="detail-row">
             <div class="l">Имя</div>
             <div class="v">{{ slotLabel(selectedSlot) }}</div>
             <div class="s">по умолчанию</div>
           </div>
-          <div class="detail-row">
+          <div class="detail-row" style="margin-bottom: 12px">
             <div class="l">Файл (exe)</div>
             <div class="v">(пусто)</div>
             <div class="s">по умолчанию</div>
           </div>
-          <div class="detail-row">
-            <div class="l">Монитор</div>
-            <div class="v">{{ monitorLabel(behavior.monitor) }}</div>
-            <div class="s">{{ source('monitor') }}</div>
-          </div>
-          <div class="detail-row">
-            <div class="l">Край</div>
-            <div class="v">{{ edgeLabels[behavior.edge] }}</div>
-            <div class="s">{{ source('edge') }}</div>
-          </div>
-          <div class="detail-row">
-            <div class="l">Ширина (%)</div>
-            <div class="v" data-testid="slot-width">{{ behavior.widthPercent }}</div>
-            <div class="s">{{ source('widthPercent') }}</div>
-          </div>
-          <div class="detail-row">
-            <div class="l">Активировать при выезде</div>
-            <div class="v">{{ behavior.activateOnShow ? 'Да' : 'Нет' }}</div>
-            <div class="s">{{ source('activateOnShow') }}</div>
-          </div>
-          <div class="detail-row">
-            <div class="l">Убирать при потере фокуса</div>
-            <div class="v">{{ behavior.hideOnBlur ? 'Да' : 'Нет' }}</div>
-            <div class="s">{{ source('hideOnBlur') }}</div>
-          </div>
+
+          <fieldset v-if="draft" class="editor" :disabled="locked">
+            <div class="row">
+              <label for="dyn-monitor">Монитор</label>
+              <div class="field">
+                <select
+                  id="dyn-monitor"
+                  class="dd"
+                  data-testid="edit-monitorKind"
+                  :class="{ narrow: draft.monitorKind === 'number', 'field-bad': bad('monitor') }"
+                  v-model="draft.monitorKind"
+                >
+                  <option value="cursor">Под курсором</option>
+                  <option value="number">Номер монитора</option>
+                  <option v-if="draft.monitorKind === 'invalid'" value="invalid">
+                    в файле: {{ draft.monitorRaw }}
+                  </option>
+                </select>
+                <input
+                  v-if="draft.monitorKind === 'number'"
+                  class="num-sm"
+                  type="text"
+                  data-testid="edit-monitorNumber"
+                  :class="{ 'field-bad': bad('monitor.number') }"
+                  v-model="draft.monitorNumber"
+                />
+              </div>
+            </div>
+            <div class="row">
+              <label for="dyn-edge">Край</label>
+              <div class="field">
+                <select id="dyn-edge" class="dd" data-testid="edit-edge" v-model="draft.edge">
+                  <option v-for="o in EDGE_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
+                </select>
+              </div>
+            </div>
+            <div class="row">
+              <label for="dyn-width">Ширина (%)</label>
+              <div class="field">
+                <input
+                  id="dyn-width"
+                  class="num-sm"
+                  type="text"
+                  data-testid="edit-widthPercent"
+                  :class="{ 'field-bad': bad('widthPercent') }"
+                  :aria-invalid="bad('widthPercent')"
+                  v-model="draft.widthPercent"
+                />
+              </div>
+            </div>
+            <label class="check-row">
+              <input type="checkbox" data-testid="edit-activateOnShow" v-model="draft.activateOnShow" />
+              <span>Активировать окно при выезде</span>
+            </label>
+            <label class="check-row">
+              <input type="checkbox" data-testid="edit-hideOnBlur" v-model="draft.hideOnBlur" />
+              <span>Убирать окно, когда фокус ушёл</span>
+            </label>
+            <div class="hotkey-cap" data-testid="dyn-source">{{ overrideNote }}</div>
+          </fieldset>
+
           <div class="detail-row" style="border-bottom: none">
             <div class="l">Горячая клавиша</div>
             <div class="v">Ctrl + Alt + {{ selectedSlot.number }}</div>
@@ -334,8 +416,8 @@ function source(key) {
               <circle cx="12" cy="16" r="1" fill="var(--accent-fg)" stroke="none" />
             </svg>
             <div>
-              Слот использует общие настройки динамических слотов (вкладка General).
-              Сделайте его постоянным, чтобы задать своё приложение и хоткей.
+              Значения, совпадающие с общими, слот берёт из вкладки General и следует
+              за ними. Сделайте его постоянным, чтобы задать своё приложение и хоткей.
             </div>
           </div>
         </template>
@@ -414,6 +496,11 @@ function source(key) {
 .avatar-empty {
   background: transparent;
   border: 1.5px dashed var(--border-strong);
+}
+.avatar img {
+  width: 16px;
+  height: 16px;
+  display: block;
 }
 .slotrow-name {
   font-size: 12.5px;

@@ -60,7 +60,10 @@
           v = false
         }
         if (v) return ok(v)
-        if (Date.now() - t0 > ms) return no(new Error('timeout'))
+        // Текст самого условия в сообщении: без него «timeout» ничего не
+        // говорит о том, какой из сорока ожиданий не дождался.
+        if (Date.now() - t0 > ms)
+          return no(new Error('timeout ' + String(fn).replace(/\s+/g, ' ').slice(0, 70)))
         setTimeout(tick, 60)
       }
       tick()
@@ -136,19 +139,17 @@
       eq('edit-name', 'Smoke permanent')
       eq('edit-focusHotkey', '^!#1')
       eq('edit-widthPercent', '61')
-      // Смена рода стоит на утверждённом месте, но выключена: порт её
-      // не принимает, и кнопка не должна обещать больше, чем есть.
-      if (!q('make-dynamic') || !q('make-dynamic').disabled) throw new Error('conversion-perm')
+      if (!q('make-dynamic') || q('make-dynamic').disabled) throw new Error('conversion-perm')
       q('slot-5').click()
-      await wait(() => text('slot-width') === '43', 5000)
-      if (q('slots').querySelector('input,select')) throw new Error('dynamic-editable')
-      if (!text('slot-detail').includes('Монитор 2')) throw new Error('dynamic-override')
-      if (!q('make-permanent') || !q('make-permanent').disabled) throw new Error('conversion-dyn')
-      // Таблица динамического слота называет источник каждого значения.
-      // Сравнение точное: «из [dynamic]» — подстрока «из [dynamicSlot5]».
-      const sources = [...q('slot-detail').querySelectorAll('.detail-row .s')].map((el) => el.textContent.trim())
-      if (!sources.includes('из [dynamicSlot5]')) throw new Error('dyn-source-own')
-      if (!sources.includes('из [dynamic]')) throw new Error('dyn-source-shared')
+      await wait(() => val('edit-widthPercent') === '43', 5000)
+      // Динамический слот настраивается сам: пять ключей поведения есть,
+      // имени и exe у него нет.
+      if (q('edit-name') || q('edit-executable')) throw new Error('dyn-has-name')
+      if (!q('edit-edge') || !q('edit-activateOnShow')) throw new Error('dyn-not-editable')
+      if (!q('make-permanent') || q('make-permanent').disabled) throw new Error('conversion-dyn')
+      // Подпись говорит, что у слота своё, а что он берёт из General.
+      if (!text('dyn-source').includes('своё в [dynamicSlot5]')) throw new Error('dyn-source-own')
+      if (!text('dyn-source').includes('монитор')) throw new Error('dyn-source-monitor')
       if (!text('slot-detail').includes('Ctrl + Alt + 5')) throw new Error('dyn-hotkey')
       q('slot-1').click()
       await wait(() => q('edit-name'), 5000)
@@ -334,9 +335,45 @@
       await apply(() => /Менять нечего/.test(text('status')))
       post('smoke.slot-saved')
       q('slot-9').click()
-      await wait(() => text('slot-width') === '80', 5000)
+      await wait(() => val('edit-widthPercent') === '80', 5000)
       q('slot-5').click()
-      await wait(() => text('slot-width') === '43', 5000)
+      await wait(() => val('edit-widthPercent') === '43', 5000)
+
+      // Смена рода в обе стороны и надстройка динамического слота.
+      // Всё это правки черновика: диска они касаются только по Apply.
+      q('slot-6').click()
+      await wait(() => q('make-permanent'), 5000)
+      q('make-permanent').click()
+      await wait(() => q('edit-name'), 5000)
+      setText('edit-name', 'Converted six')
+      setText('edit-executable', 'notepad.exe')
+      // Надстройка соседнего динамического слота уезжает тем же Save.
+      q('slot-7').click()
+      await wait(() => val('edit-widthPercent') === '80', 5000)
+      setText('edit-widthPercent', '33')
+      await apply(() => /Сохранено/.test(text('status')))
+      await wait(() => q('slot-6') && text('slot-6').includes('Converted six'), 5000)
+      if (!text('slot-6').includes('Постоянный')) throw new Error('conversion-not-applied')
+      q('slot-7').click()
+      await wait(() => val('edit-widthPercent') === '33', 5000)
+      if (!text('dyn-source').includes('ширина')) throw new Error('override-not-own')
+      post('smoke.converted')
+
+      // И обратно: слот 6 снова динамический, надстройка слота 7 уходит,
+      // потому что вернулась к общему значению.
+      q('slot-6').click()
+      await wait(() => q('make-dynamic'), 5000)
+      q('make-dynamic').click()
+      await wait(() => !q('edit-name'), 5000)
+      q('slot-7').click()
+      await wait(() => val('edit-widthPercent') === '33', 5000)
+      setText('edit-widthPercent', '80')
+      await apply(() => /Сохранено/.test(text('status')))
+      await wait(() => text('slot-6').includes('Динамический'), 5000)
+      q('slot-7').click()
+      await wait(() => text('dyn-source').includes('всё из [dynamic]'), 5000)
+      post('smoke.reverted')
+
       tab('General')
       await wait(() => !watching && q('blurCheckMs'), 5000)
 
