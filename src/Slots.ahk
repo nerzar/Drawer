@@ -139,6 +139,7 @@ class Slots {
     ;     а слот остался постоянным, — окно возвращается на исходное место:
     ;     это уже не то приложение, которое слот ищет.
     static Apply(cfg, prevPerm := 0) {
+        DebugLog("[SLOTS] Slots.Apply starting (" (prevPerm ? "reconcile" : "boot") ")")
         old := prevPerm ? prevPerm : { bySlot: Map(), ident: Map() }
 
         dynBind := Map()
@@ -158,6 +159,7 @@ class Slots {
         Loop Slots.COUNT {
             n := A_Index
             if (dynBind[n] && Slots.Get(n).perm) {
+                DebugLog("[CONVERSION] Slot " n " converted from dynamic to permanent (released dyn hwnd=" dynBind[n] ")")
                 Release(dynBind[n])
                 dynBind[n] := 0
             }
@@ -177,11 +179,24 @@ class Slots {
             ; удалением [slotN]) — окно не выгоняем домой, а передаём его
             ; той же самой привязкой дальше: пользователь не терял окно,
             ; он поменял только то, как слот его ищет.
-            else if !s.perm
+            else if !s.perm {
+                DebugLog("[CONVERSION] Slot " n " converted from permanent to dynamic (kept hwnd=" hwnd ")")
                 s.window := hwnd
-            else
+            }
+            else {
+                DebugLog("[CONVERSION] Slot " n " permanent identity changed -> released hwnd=" hwnd)
                 Release(hwnd)
+            }
         }
+
+        Loop Slots.COUNT {
+            n := A_Index, s := Slots.Get(n)
+            if s.perm
+                DebugLog("[SLOTS] Slot " n " [perm]: name='" s.perm.name "' exe='" s.perm.exe "' cls='" s.perm.cls "' hotkey='^!" n "' focusHotkey='" s.perm.focusHotkey "'")
+            else
+                DebugLog("[SLOTS] Slot " n " [dyn]: hotkey='^!" n "' override=" (s.override ? "yes" : "no") (s.window ? (" window=" s.window) : ""))
+        }
+        DebugLog("[SLOTS] Slots.Apply completed")
     }
 }
 
@@ -264,8 +279,11 @@ SlotCapture(n) {
     if !s.perm
         return 0
     hwnd := (s.window && WinExist("ahk_id " s.window)) ? s.window : FindWindow(s.perm)
-    if hwnd
+    if hwnd {
+        if (s.window != hwnd)
+            DebugLog("[CAPTURE] Slot " n " [perm] captured hwnd=" hwnd)
         s.window := hwnd
+    }
     return hwnd
 }
 
@@ -345,17 +363,23 @@ SlotStatus(n) {
 ; управляет запомненным окном. Приложение не запущено или слот пуст —
 ; показывать нечего, молчим.
 ToggleSlot(n) {
+    DebugLog("[TOGGLE] ToggleSlot(" n ")")
     s := Slots.Get(n)
     if s.perm {
         if (hwnd := SlotCapture(n))
             ToggleWindow(hwnd, s.perm)
+        else
+            DebugLog("[TOGGLE] Slot " n " [perm] capture failed (no window)")
         return
     }
-    if !s.window
+    if !s.window {
+        DebugLog("[TOGGLE] Slot " n " [dyn] is empty")
         return
+    }
     if !WinExist("ahk_id " s.window) {
         hwnd := s.window
         s.window := 0            ; окно закрыли — слот просто освобождается
+        DebugLog("[TOGGLE] Slot " n " [dyn] window hwnd=" hwnd " closed -> released")
         Release(hwnd)
         return
     }
@@ -366,32 +390,48 @@ ToggleSlot(n) {
 ; Хоткей фокуса есть только у постоянного слота: слот, переставший быть
 ; постоянным, теперь просто ничего не делает.
 SlotFocus(n) {
+    DebugLog("[FOCUS] SlotFocus(" n ")")
     s := Slots.Get(n)
-    if !s.perm
+    if !s.perm {
+        DebugLog("[FOCUS] Slot " n " is not permanent")
         return
+    }
     if (hwnd := SlotCapture(n))
         FocusWindow(hwnd, s.perm)
+    else
+        DebugLog("[FOCUS] Slot " n " [perm] capture failed (no window)")
 }
 
 ; Связать активное подходящее окно с динамическим слотом.
 ; Возвращает structured result: { ok, code, message, hwnd, title }.
 ; Единая точка связывания для хоткея и WebView-порта.
 SlotBind(n) {
-    if (!IsInteger(n) || n < 1 || n > Slots.COUNT)
+    if (!IsInteger(n) || n < 1 || n > Slots.COUNT) {
+        DebugLog("[BIND] Slot " n " rejected: validation_error")
         return { ok: false, code: "validation_error", message: "Номер слота должен быть 1…9", hwnd: 0, title: "" }
-    if SettingsPickerState().active
+    }
+    if SettingsPickerState().active {
+        DebugLog("[BIND] Slot " n " rejected: busy (picker active)")
         return { ok: false, code: "busy", message: "Открыт picker", hwnd: 0, title: "" }
+    }
     s := Slots.Get(n)
-    if s.perm
+    if s.perm {
+        DebugLog("[BIND] Slot " n " rejected: slot is permanent (" s.perm.name ")")
         return { ok: false, code: "slot_is_permanent",
                  message: "Слот " n " занят постоянной привязкой: " s.perm.name, hwnd: 0, title: "" }
-    if !(hwnd := PickActive())
+    }
+    if !(hwnd := PickActive()) {
+        DebugLog("[BIND] Slot " n " rejected: no eligible active window")
         return { ok: false, code: "no_eligible_active_window",
                  message: "Активное окно не годится для ящика", hwnd: 0, title: "" }
-    if (s.window && s.window != hwnd)
+    }
+    if (s.window && s.window != hwnd) {
+        DebugLog("[BIND] Slot " n " releasing previous window hwnd=" s.window)
         Release(s.window)             ; прежнее окно возвращаем на место
+    }
     s.window := hwnd
     title := WinGetTitle("ahk_id " hwnd)
+    DebugLog("[BIND] Slot " n " bound to hwnd=" hwnd " ('" title "')")
     return { ok: true, code: "", message: "Слот " n " → " title, hwnd: hwnd, title: title }
 }
 
@@ -399,21 +439,30 @@ SlotBind(n) {
 ; привязке и обновить кромки.
 ; Единая точка освобождения для хоткея и WebView-порта.
 SlotRelease(n) {
-    if (!IsInteger(n) || n < 1 || n > Slots.COUNT)
+    if (!IsInteger(n) || n < 1 || n > Slots.COUNT) {
+        DebugLog("[RELEASE] Slot " n " rejected: validation_error")
         return { ok: false, code: "validation_error", message: "Номер слота должен быть 1…9", hwnd: 0 }
-    if SettingsPickerState().active
+    }
+    if SettingsPickerState().active {
+        DebugLog("[RELEASE] Slot " n " rejected: busy (picker active)")
         return { ok: false, code: "busy", message: "Открыт picker", hwnd: 0 }
+    }
     s := Slots.Get(n)
-    if s.perm
+    if s.perm {
+        DebugLog("[RELEASE] Slot " n " rejected: slot is permanent")
         return { ok: false, code: "slot_is_permanent",
                  message: "Слот " n " — постоянный, его нельзя освободить", hwnd: 0 }
-    if !s.window
+    }
+    if !s.window {
+        DebugLog("[RELEASE] Slot " n " rejected: not bound")
         return { ok: false, code: "not_bound",
                  message: "Слот " n " не привязан к окну", hwnd: 0 }
+    }
     hwnd := s.window
     s.window := 0
     Release(hwnd)
     SetTimer(HandlesSync, -1)
+    DebugLog("[RELEASE] Slot " n " released hwnd=" hwnd)
     return { ok: true, code: "", message: "Слот " n " освобождён", hwnd: hwnd }
 }
 
@@ -421,10 +470,12 @@ SlotRelease(n) {
 ; кэш захвата, а не пользовательская привязка, — и программа продолжает
 ; работать: это не выход.
 SlotClearDynamic() {
+    DebugLog("[RELEASE] SlotClearDynamic: clearing all dynamic slots")
     Loop Slots.COUNT {
         s := Slots.Get(A_Index)
         if (s.perm || !s.window)
             continue
+        DebugLog("[RELEASE] Slot " A_Index " cleared hwnd=" s.window)
         Release(s.window)
         s.window := 0
     }

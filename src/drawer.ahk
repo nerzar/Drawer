@@ -11,6 +11,26 @@ CoordMode("Mouse", "Screen")   ; по умолчанию v2 отдаёт коо�
 ; сборкой и тем, что видит тестер.
 VERSION := "0.1.2-beta"
 
+; Постоянный лог отладки с временными метками (timestamp)
+debugLogPath := A_ScriptDir "\drawer-debug.log"
+
+DebugLog(msg) {
+    global debugLogPath
+    p := (IsSet(debugLogPath) && debugLogPath) ? debugLogPath : (A_ScriptDir "\drawer-debug.log")
+    try {
+        stamp := FormatTime(, "yyyy-MM-dd HH:mm:ss") "." A_MSec
+        FileAppend(stamp " " msg "`n", p, "UTF-8")
+    }
+}
+
+OnDrawerException(err, mode) {
+    try {
+        DebugLog("[EXCEPTION] (" mode ") " err.Message " in " err.What " at " err.File ":" err.Line "`nStack:`n" err.Stack)
+    }
+    return 0
+}
+OnError(OnDrawerException)
+
 ; =========================== НАСТРОЙКИ ===========================
 ; Слот — номер от 1 до 9. Хоткеи слота заданы номером и не настраиваются:
 ;   Ctrl+Alt+N        — выдвинуть / убрать окно слота
@@ -23,11 +43,16 @@ VERSION := "0.1.2-beta"
 ; нажатия «Применить» или «ОК».
 configPath := A_ScriptDir "\config.ini"
 if !FileExist(configPath) {
+    DebugLog("[STARTUP] ERROR: config.ini not found at " configPath)
     MsgBox("Не найден config.ini рядом с программой:`n" configPath
          "`n`nВерните config.ini из архива программы или создайте его заново.",
          "Ящик", 16)
     ExitApp()
 }
+
+DebugLog("[STARTUP] Drawer v" VERSION " starting (PID " DllCall("GetCurrentProcessId", "UInt") ")")
+DebugLog("[STARTUP] Directory: " A_ScriptDir ", Config: " configPath)
+try DebugLog("[STARTUP] Monitors detected: " MonitorGetCount())
 
 iconUriCache := Map()   ; hwnd -> data-URI иконки окна (см. SlotIconUri)
 animMs       := 160
@@ -63,6 +88,7 @@ ConfigDiagShow(cfgDiags)
 ; GUI-колбэка Apply посреди реконсиляции.
 LoadConfig(path, &diags) {
     diags := []
+    DebugLog("[CONFIG] LoadConfig reading " path)
 
     animMs    := IniRead(path, "general", "animMs", 160)
     animSteps := IniRead(path, "general", "animSteps", 14)
@@ -133,6 +159,7 @@ LoadConfig(path, &diags) {
         }
     }
 
+    DebugLog("[CONFIG] LoadConfig done: " perm.Count " permanent slot(s), " overrides.Count " override(s)")
     return { animMs: animMs, animSteps: animSteps, blurMs: blurMs,
              handlesOn: handlesOn, accent: handleBg,
              perm: perm, dynamic: dynamic, overrides: overrides }
@@ -168,6 +195,7 @@ ConfigApply(cfg) {
     blurMs    := cfg.blurMs
     handlesOn := cfg.handlesOn
     HANDLE_BG := cfg.accent
+    DebugLog("[CONFIG] ConfigApply: animMs=" animMs " animSteps=" animSteps " blurMs=" blurMs " handles=" (handlesOn ? "true" : "false") " accent=" HANDLE_BG)
 }
 
 ; Слоты: модель, реестр и общие операции над ними. Всё, что программа
@@ -199,13 +227,19 @@ Loop 9 {
     try {
         Hotkey(Hooked("^!" n), OnSlot.Bind(n))
         live++
-    } catch as e
+        DebugLog("[HOTKEY] Registered " Hooked("^!" n) " for Slot " n " (Toggle)")
+    } catch as e {
+        DebugLog("[HOTKEY] Failed to register ^!" n ": " e.Message)
         MsgBox("Хоткей слота " n " не назначен:`n" e.Message, "Ящик")
+    }
     try {
         Hotkey(Hooked("^!+" n), OnSlotBind.Bind(n))
         live++
-    } catch as e
+        DebugLog("[HOTKEY] Registered " Hooked("^!+" n) " for Slot " n " (Bind)")
+    } catch as e {
+        DebugLog("[HOTKEY] Failed to register ^!+" n ": " e.Message)
         MsgBox("Хоткей назначения слота " n " не назначен:`n" e.Message, "Ящик")
+    }
 }
 for a in SlotPermList() {
     if (Opt(a, "focusHotkey", "") = "")
@@ -213,19 +247,29 @@ for a in SlotPermList() {
     try {
         Hotkey(Hooked(a.focusHotkey), OnFocusHotkey.Bind(a.slot))
         live++
-    } catch as e
+        DebugLog("[HOTKEY] Registered " Hooked(a.focusHotkey) " for Slot " a.slot " (Focus, " a.name ")")
+    } catch as e {
+        DebugLog("[HOTKEY] Failed to register focusHotkey '" a.focusHotkey "' (Slot " a.slot "): " e.Message)
         MsgBox("Хоткей фокуса " a.focusHotkey " (" a.name ") не назначен:`n" e.Message, "Ящик")
+    }
 }
 try {
     Hotkey(Hooked("^!0"), OnClearHotkey)
     live++
-} catch as e
+    DebugLog("[HOTKEY] Registered " Hooked("^!0") " (Clear dynamic slots)")
+} catch as e {
+    DebugLog("[HOTKEY] Failed to register ^!0: " e.Message)
     MsgBox("Хоткей очистки слотов не назначен:`n" e.Message, "Ящик")
+}
 try {
     Hotkey(Hooked("^!+0"), (*) => ExitApp())
     live++
-} catch as e
+    DebugLog("[HOTKEY] Registered " Hooked("^!+0") " (Exit Drawer)")
+} catch as e {
+    DebugLog("[HOTKEY] Failed to register ^!+0: " e.Message)
     MsgBox("Хоткей выхода не назначен:`n" e.Message, "Ящик")
+}
+DebugLog("[HOTKEY] Total live hotkeys registered: " live)
 
 ; Постоянный слот, чьё приложение уже запущено на момент старта, получает
 ; кромку сразу, а не только после первого Ctrl+Alt+N (см. SlotsSeedManaged).
@@ -304,6 +348,7 @@ OnMessage(0x0201, HandleClick)      ; WM_LBUTTONDOWN
 ; и подменять им рабочий инструмент рано.
 A_TrayMenu.Insert("1&", "Settings", (*) => SettingsShow())
 A_TrayMenu.Insert("2&", "Settings (WebView2)", (*) => SettingsWebShow())
+A_TrayMenu.Insert("3&", "Нашёл баг…", (*) => BugReportShow())
 
 OnExit(Cleanup)
 ; Единственное уведомление, которое ящик показывает сам по себе. Здесь же
@@ -411,28 +456,37 @@ IsServiceWindow(hwnd) {
 
 ; Ошибка на одном окне не должна ронять программу целиком.
 OnSlot(n, *) {
+    DebugLog("[HOTKEY] Pressed ^!" n " (Toggle Slot " n ")")
     try
         ToggleSlot(n)
-    catch as e
+    catch as e {
+        DebugLog("[EXCEPTION] OnSlot(" n "): " e.Message)
         Notify("Сбой: " e.Message, "Ящик", 3)
+    }
 }
 
 OnSlotBind(n, *) {
+    DebugLog("[HOTKEY] Pressed ^!+" n " (Bind Slot " n ")")
     if SettingsPickerState().active
         return
     try
         BindSlot(n)
-    catch as e
+    catch as e {
+        DebugLog("[EXCEPTION] OnSlotBind(" n "): " e.Message)
         Notify("Сбой: " e.Message, "Ящик", 3)
+    }
 }
 
 OnClearHotkey(*) {
+    DebugLog("[HOTKEY] Pressed ^!0 (Clear slots)")
     if SettingsPickerState().active
         return
     try
         SlotClearDynamic()
-    catch as e
+    catch as e {
+        DebugLog("[EXCEPTION] OnClearHotkey: " e.Message)
         Notify("Сбой: " e.Message, "Ящик", 3)
+    }
 }
 
 ; Колбэк хука должен возвращать управление немедленно, поэтому вся
@@ -530,10 +584,13 @@ Vanished(hwnd) {
 ; перерегистрации нет, и правка focusHotkey по-прежнему вступает в силу
 ; после перезапуска — ровно так, как подписано в форме настроек.
 OnFocusHotkey(n, *) {
+    DebugLog("[HOTKEY] Pressed focusHotkey for Slot " n)
     try
         SlotFocus(n)
-    catch as e
+    catch as e {
+        DebugLog("[EXCEPTION] OnFocusHotkey(" n "): " e.Message)
         Notify("Сбой: " e.Message, "Ящик", 3)
+    }
 }
 
 ; Назначение слота по хоткею Ctrl+Alt+Shift+N. Показывает уведомление.
@@ -553,6 +610,7 @@ ReleaseSlot(n) {
 ; Отпустить окно: вернуть на исходное место и забыть о нём. Окна,
 ; которого уже нет, это не касается — WinMove просто не сработает.
 Release(hwnd) {
+    DebugLog("[RELEASE] Release(hwnd=" hwnd ")")
     global state, watched
     if watched.Has(hwnd)
         watched.Delete(hwnd)
@@ -739,7 +797,9 @@ PickActive() {
 ToggleWindow(hwnd, cfg) {
     Critical()
     st := StateOf(hwnd)
-    if IsDeployed(hwnd, st)
+    deployed := IsDeployed(hwnd, st)
+    DebugLog("[TOGGLE] ToggleWindow hwnd=" hwnd " deployed=" (deployed ? "true" : "false"))
+    if deployed
         Hide(hwnd, st)
     else
         Show(hwnd, cfg, st)
@@ -750,7 +810,9 @@ ToggleWindow(hwnd, cfg) {
 FocusWindow(hwnd, cfg) {
     Critical()
     st := StateOf(hwnd)
-    if !IsDeployed(hwnd, st) {
+    deployed := IsDeployed(hwnd, st)
+    DebugLog("[FOCUS] FocusWindow hwnd=" hwnd " deployed=" (deployed ? "true" : "false"))
+    if !deployed {
         Show(hwnd, cfg, st, true)
         return
     }
@@ -771,6 +833,9 @@ StateOf(hwnd) {
 ; событию активации: там окно уже стало активным само, и спрашивать об
 ; этом Windows поздно.
 Show(hwnd, cfg, st, forceActivate := false, prev := 0) {
+    title := ""
+    try title := WinGetTitle("ahk_id " hwnd)
+    DebugLog("[SHOW] Showing hwnd=" hwnd " ('" title "') forceActivate=" (forceActivate ? "1" : "0") " prev=" prev)
     st.prev := FocusCandidate(prev, hwnd) ? prev : PrevActive(hwnd)
     if (WinGetMinMax("ahk_id " hwnd) != 0)
         WinRestore("ahk_id " hwnd)
@@ -803,6 +868,9 @@ Hide(hwnd, st) {
     if watched.Has(hwnd)
         watched.Delete(hwnd)
     wasActive := WinActive("ahk_id " hwnd) ? true : false
+    title := ""
+    try title := WinGetTitle("ahk_id " hwnd)
+    DebugLog("[HIDE] Hiding hwnd=" hwnd " ('" title "') wasActive=" (wasActive ? "1" : "0"))
     g := st.geom
     ; На внутреннем крае уезжаем сразу на парковку, минуя карман: он лежит
     ; на территории соседнего монитора.
@@ -1140,6 +1208,7 @@ ResolveMonitorForExisting(a, hwnd) {
 ; Настоящее окно приложения: видимое, с заголовком, разумного размера.
 ; Служебные окна JetBrains без заголовка отсеиваются здесь.
 FindWindow(a) {
+    DebugLog("[FIND] FindWindow searching for exe='" a.exe "' cls='" a.cls "'")
     best := 0, bestArea := -1
     for hwnd in WinGetList("ahk_exe " a.exe) {
         try {
@@ -1159,6 +1228,13 @@ FindWindow(a) {
                 best := hwnd
             }
         }
+    }
+    if best {
+        wTitle := ""
+        try wTitle := WinGetTitle("ahk_id " best)
+        DebugLog("[FIND] FindWindow exe='" a.exe "' cls='" a.cls "' -> found hwnd=" best " ('" wTitle "')")
+    } else {
+        DebugLog("[FIND] FindWindow exe='" a.exe "' cls='" a.cls "' -> not found")
     }
     return best
 }
@@ -1647,6 +1723,140 @@ HandleClick(wParam, lParam, msg, hwnd) {
 ; через ServiceWindowAdd()/ServiceWindowDrop(). Сам отбор живёт в ядре
 ; (IsServiceWindow) и о настройках ничего не знает; пользуются им
 ; PickActive, TrackedFore, FocusCandidate, StillFocused и FindWindow.
+
+; ========================= НАШЁЛ БАГ… =========================
+bugGui := 0
+capturedActiveForBug := 0
+
+GetWindowSummary(hwnd) {
+    if (!hwnd || !WinExist("ahk_id " hwnd))
+        return "none (0)"
+    try {
+        title := WinGetTitle("ahk_id " hwnd)
+        cls := WinGetClass("ahk_id " hwnd)
+        exe := WinGetProcessName("ahk_id " hwnd)
+        pid := WinGetPID("ahk_id " hwnd)
+        WinGetPos(&x, &y, &w, &h, "ahk_id " hwnd)
+        return Format("hwnd=0x{:X} ({}) exe='{}' cls='{}' title='{}' [x={} y={} w={} h={}] pid={}",
+                      hwnd, hwnd, exe, cls, title, x, y, w, h, pid)
+    } catch as e {
+        return Format("hwnd=0x{:X} ({}) (error: {})", hwnd, hwnd, e.Message)
+    }
+}
+
+GetNextBugNumber() {
+    global debugLogPath
+    p := (IsSet(debugLogPath) && debugLogPath) ? debugLogPath : (A_ScriptDir "\drawer-debug.log")
+    maxN := 0
+    try {
+        if FileExist(p) {
+            content := FileRead(p, "UTF-8")
+            pos := 1
+            while RegExMatch(content, "BUG #(\d+)", &m, pos) {
+                val := Integer(m[1])
+                if (val > maxN)
+                    maxN := val
+                pos := m.Pos + m.Len
+            }
+        }
+    }
+    return maxN + 1
+}
+
+BugReportShow(*) {
+    global bugGui, capturedActiveForBug, foreWnd
+    if bugGui {
+        try WinActivate("ahk_id " bugGui.Hwnd)
+        return
+    }
+
+    ; Запоминаем активное окно до открытия диалога
+    activeHwnd := WinExist("A")
+    if (IsServiceWindow(activeHwnd) || !TrackedFore(activeHwnd)) {
+        if (IsSet(foreWnd) && foreWnd && WinExist("ahk_id " foreWnd))
+            activeHwnd := foreWnd
+    }
+    capturedActiveForBug := activeHwnd
+
+    g := Gui("+AlwaysOnTop", "Нашёл баг — Ящик")
+    g.MarginX := 12, g.MarginY := 12
+    g.SetFont("s9", "Segoe UI")
+
+    g.Add("Text", "w380", "Опишите, что пошло не так (комментарий):")
+    editComment := g.Add("Edit", "vComment w380 r6", "")
+
+    btnSubmit := g.Add("Button", "Default w130", "Записать в лог")
+    btnCancel := g.Add("Button", "x+8 w90", "Отмена")
+
+    btnSubmit.OnEvent("Click", (*) => BugReportSubmit(g, editComment.Value))
+    btnCancel.OnEvent("Click", (*) => BugReportClose(g))
+    g.OnEvent("Close", (*) => BugReportClose(g))
+    g.OnEvent("Escape", (*) => BugReportClose(g))
+
+    bugGui := g
+    ServiceWindowAdd(g.Hwnd)
+    g.Show("AutoSize Center")
+}
+
+BugReportClose(g) {
+    global bugGui
+    ServiceWindowDrop(g.Hwnd)
+    bugGui := 0
+    try g.Destroy()
+}
+
+BugReportSubmit(g, comment) {
+    global capturedActiveForBug
+    comment := Trim(comment)
+    BugReportRecord(comment, capturedActiveForBug)
+    BugReportClose(g)
+    Notify("Запись о баге добавлена в лог", "Ящик")
+}
+
+BugReportRecord(comment, activeHwnd) {
+    global debugLogPath
+    bugNum := GetNextBugNumber()
+    timeExact := FormatTime(, "yyyy-MM-dd HH:mm:ss") "." A_MSec
+
+    lines := []
+    lines.Push("================================================================================")
+    lines.Push(timeExact " [BUG #" bugNum "]")
+    lines.Push("Time: " timeExact)
+    lines.Push("Comment: " (comment != "" ? comment : "(нет комментария)"))
+    lines.Push("Active window: " GetWindowSummary(activeHwnd))
+    lines.Push("Slots snapshot (1..9):")
+
+    Loop 9 {
+        n := A_Index
+        s := Slots.Get(n)
+        st := SlotStatus(n)
+        statusName := IsObject(st) ? st.state : String(st)
+        wnd := SlotWindow(n)
+        wndHex := wnd ? Format("0x{:X}", wnd) : "0"
+        title := (wnd && WinExist("ahk_id " wnd)) ? WinGetTitle("ahk_id " wnd) : ""
+        exe := (wnd && WinExist("ahk_id " wnd)) ? WinGetProcessName("ahk_id " wnd) : ""
+
+        if s.perm {
+            hk := "^!" n
+            fhk := s.perm.focusHotkey != "" ? s.perm.focusHotkey : "(none)"
+            info := Format("  Slot {} [perm]: HWND={} ({}) status='{}' hotkey='{}' focusHotkey='{}' exe='{}' name='{}' title='{}'",
+                           n, wndHex, wnd, statusName, hk, fhk, s.perm.exe, s.perm.name, title)
+        } else {
+            hk := "^!" n
+            info := Format("  Slot {} [dyn]:  HWND={} ({}) status='{}' hotkey='{}' title='{}' override={}",
+                           n, wndHex, wnd, statusName, hk, title, (s.override ? "yes" : "no"))
+        }
+        lines.Push(info)
+    }
+    lines.Push("================================================================================")
+
+    block := ""
+    for ln in lines
+        block .= ln "`n"
+
+    p := (IsSet(debugLogPath) && debugLogPath) ? debugLogPath : (A_ScriptDir "\drawer-debug.log")
+    try FileAppend(block, p, "UTF-8")
+}
 
 ; Ошибка в настройках не должна ронять ящик — та же защита, что у
 ; хоткеев.
@@ -3894,6 +4104,7 @@ SettingsPersistVerified(generalWrites, slotPlan, &outcome) {
 ; старте) — и только потом пересборка кромок завершает все стадии разом.
 SettingsReconcileRuntime(slotPlan, &diags) {
     global configPath, HANDLE_BG, HANDLE_BG_HOT
+    DebugLog("[SETTINGS] SettingsReconcileRuntime starting")
 
     cfg := LoadConfig(configPath, &diags)
     ConfigApply(cfg)
@@ -3907,6 +4118,7 @@ SettingsReconcileRuntime(slotPlan, &diags) {
     SlotsSeedManaged()
 
     SetTimer(HandlesSync, -1)
+    DebugLog("[SETTINGS] SettingsReconcileRuntime completed")
 }
 
 ; Копия поведения слота одним объектом. Снимок обязан пережить
@@ -4024,8 +4236,12 @@ SettingsApplyPlan(generalWrites, slotPlan, &outcome) {
                  changedSlots: [], restartRequired: [],
                  mayHavePersisted: false, runtimeReloaded: false,
                  state: 0, diagnostics: [] }
-    if (!generalWrites.Length && !hasSlotWork)
+    if (!generalWrites.Length && !hasSlotWork) {
+        DebugLog("[SETTINGS] SettingsApplyPlan: no changes to apply")
         return
+    }
+
+    DebugLog("[SETTINGS] SettingsApplyPlan: generalWrites=" generalWrites.Length " slotWrites=" slotPlan.writes.Length " slotDeletes=" slotPlan.deletes.Length " dynDeletes=" slotPlan.dynDeletes.Length)
 
     persist := "", reloadErr := "", diags := []
     try
@@ -4053,6 +4269,7 @@ SettingsApplyPlan(generalWrites, slotPlan, &outcome) {
         outcome.code := persist.code
         outcome.err := persist.err
         outcome.retryable := !outcome.mayHavePersisted || outcome.runtimeReloaded
+        DebugLog("[SETTINGS] SettingsApplyPlan persistence failed: code=" outcome.code " (" outcome.err ")")
         return
     }
     if (reloadErr != "") {
@@ -4061,6 +4278,7 @@ SettingsApplyPlan(generalWrites, slotPlan, &outcome) {
         ; повтор Save пошёл бы поверх состояния, которого никто не видел.
         outcome.code := "internal_error"
         outcome.err := "Настройки записаны, но перечитать конфиг не удалось: " reloadErr
+        DebugLog("[SETTINGS] SettingsApplyPlan reload error: " reloadErr)
         return
     }
     outcome.saved := true
@@ -4072,6 +4290,7 @@ SettingsApplyPlan(generalWrites, slotPlan, &outcome) {
     outcome.changedDeletes := slotPlan.deletes.Length + slotPlan.dynDeletes.Length
     outcome.changedSlots := SettingsChangedSlots(slotPlan)
     outcome.restartRequired := SettingsRestartRequired(slotPlan)
+    DebugLog("[SETTINGS] SettingsApplyPlan finished: saved=true changedWrites=" outcome.changedWrites " changedDeletes=" outcome.changedDeletes)
 }
 
 ; Состояние формы одной строкой — этого хватает, чтобы понять, трогал ли
@@ -4125,6 +4344,7 @@ SettingsSave(closeAfter) {
     global setUI
     if !setUI || SettingsPickerState().active
         return
+    DebugLog("[SETTINGS] SettingsSave called (closeAfter=" (closeAfter ? "true" : "false") ")")
     err := ""
     if !(vals := SettingsCollect(&err)) {
         SettingsStatus(err, true)
