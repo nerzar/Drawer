@@ -915,7 +915,7 @@ if !FileExist(drawerPath) {
     codeSW := (pSW > 0 && pSP > pSW) ? NoComments(SubStr(src12, pSW, pSP - pSW)) : ""
     Assert("12j: правка слота проходит те же проверки, что и General",
         codeSW != "" && InStr(codeSW, "SettingsTextIn(e.name") > 0
-     && InStr(codeSW, "SettingsTextIn(e.focusHotkey") > 0
+     && InStr(codeSW, "SettingsHotkeyIn(e.focusHotkey") > 0
      && InStr(codeSW, "SettingsMonitorIn(String(e.monitor)") > 0
      && InStr(codeSW, "SettingsEdgeIn(e.edge") > 0
      && InStr(codeSW, "SettingsBoolIn(e.activateOnShow") > 0)
@@ -1269,6 +1269,157 @@ r := ApplyModel(Map(2, true, 5, true), Map(2, 8002, 5, 8005),
 Assert("17j: конвертация одного слота не трогает соседний",
     r.window[2] = 0 && r.window[5] = 8005
  && r.released.Length = 1 && r.released[1] = 8002)
+; ---------------------------------------------------------------
+; Точка 18: контракт хоткея постоянного слота.
+;
+; Хоткей — единственное поле слота, значение которого нельзя проверить
+; сравнением с набором: синтаксис разбирает сам AutoHotkey. До появления
+; SettingsHotkeyIn() поле принимало любой текст, и «Ctrl + Alt + 2» —
+; понятная человеку запись, но не синтаксис AutoHotkey — уезжала в
+; config.ini как есть. Hotkey() бросал уже при СЛЕДУЮЩЕМ запуске, по
+; одному модальному сообщению на слот, а до тех пор ничто на ошибку не
+; указывало: слот выглядел так, будто хоткей у него сбросился.
+;
+; Здесь копия SettingsHotkeyIn(). Она не чистая — регистрирует хоткей, —
+; но регистрирует в контекст, который никогда не истинен, и сразу
+; выключенным, поэтому на host безопасна: сработать он не может. Если
+; тело в src/drawer.ahk изменится, копию нужно обновить вручную — как и
+; копии в точках 1, 5, 7, 9, 17.
+; ---------------------------------------------------------------
+
+HookedCopy(hk) {
+    return (SubStr(hk, 1, 1) = "$") ? hk : "$" hk
+}
+SettingsBadCopy(msg, &err) {
+    if (err = "")
+        err := msg
+    return ""
+}
+SettingsHotkeyInCopy(v, live, label, &err) {
+    static never := (*) => false
+    if (err != "")
+        return ""
+    s := String(v)
+    if (InStr(s, "`r") || InStr(s, "`n"))
+        return SettingsBadCopy(label ": перевод строки недопустим", &err)
+    s := Trim(s)
+    if (s = "" || s = live)
+        return s
+    ok := true
+    HotIf never
+    try {
+        Hotkey(HookedCopy(s), (*) => 0, "Off")
+    } catch {
+        ok := false
+    } finally {
+        HotIf
+    }
+    if !ok
+        return SettingsBadCopy(label ": " s " — не сочетание клавиш AutoHotkey."
+                             . " Например ^!F2 — это Ctrl+Alt+F2", &err)
+    return s
+}
+HotkeyOk(s, live := "") {
+    err := ""
+    SettingsHotkeyInCopy(s, live, "хоткей", &err)
+    return err = ""
+}
+
+; Настоящий хоткей программы, назначенный ДО проверок: ни одна проверка
+; не имеет права его сломать (18f).
+Hotkey(HookedCopy("^!F9"), (*) => 0)
+
+good := true
+for s in ["^!F2", "^!2", "^!#1", "~$+F3", "#Space", "*^!Numpad1", "F13", "vk41", "^!+#F5"]
+    good := good && HotkeyOk(s)
+Assert("18a: синтаксис AutoHotkey принимается (модификаторы, F-клавиши, vk, префиксы)", good)
+
+bad := true
+for s in ["Ctrl + Alt + 2", "Ctrl + Alt +3", "нечто", "^!F99", "Ctrl+Alt+2"]
+    bad := bad && !HotkeyOk(s)
+Assert("18b: понятная человеку запись отвергается — она не сочетание клавиш", bad)
+
+err18 := ""
+Assert("18c: пустой хоткей — это «хоткея нет», а не ошибка",
+    SettingsHotkeyInCopy("", "", "хоткей", &err18) = "" && err18 = "")
+
+err18 := ""
+Assert("18d: пробелы по краям снимаются, а не отвергаются",
+    SettingsHotkeyInCopy("  ^!F3  ", "", "хоткей", &err18) = "^!F3" && err18 = "")
+
+err18 := ""
+SettingsHotkeyInCopy("Ctrl + Alt + 2", "", "Слот 2: хоткей", &err18)
+Assert("18e: отказ называет и поле, и годный пример",
+    InStr(err18, "Слот 2: хоткей") > 0 && InStr(err18, "^!F2") > 0)
+
+reg18 := true
+try
+    Hotkey(HookedCopy("^!F9"), "On")
+catch
+    reg18 := false
+Assert("18f: проверка безвредна — уже назначенный хоткей остался управляемым", reg18)
+
+; Испорченное значение, уже лежащее в config.ini, не должно запирать
+; правку соседних полей: точечная запись его и так не трогает. Именно на
+; этом пользователь спотыкался бы, зайдя починить ширину слота.
+Assert("18r: неизменённое негодное значение проходит, менять соседнее поле не мешает",
+    HotkeyOk("Ctrl + Alt + 2", "Ctrl + Alt + 2"))
+Assert("18s: но стоит его тронуть — и отказ приходит сразу",
+    !HotkeyOk("Ctrl + Alt + 3", "Ctrl + Alt + 2"))
+
+; --- запись и чтение [slotN] focusHotkey на настоящем INI ------------
+hkIni := A_Temp "\drawer-seam-hotkey.ini"
+try FileDelete(hkIni)
+IniWrite("^!F2", hkIni, "slot1", "focusHotkey")
+IniWrite("notepad.exe", hkIni, "slot1", "exe")
+Assert("18g: focusHotkey переживает запись и чтение config.ini",
+    IniRead(hkIni, "slot1", "focusHotkey", "") = "^!F2")
+IniWrite("^!F4 ", hkIni, "slot1", "focusHotkey")
+Assert("18h: IniRead снимает окружающие пробелы — поэтому значение обрезают до записи",
+    IniRead(hkIni, "slot1", "focusHotkey", "") = "^!F4")
+; Слот без ключа — это слот без хоткея, а не слот с мусором.
+Assert("18i: отсутствующий ключ читается пустым значением",
+    IniRead(hkIni, "slot1", "нетТакого", "") = "")
+try FileDelete(hkIni)
+
+; --- статические проверки исходников ---------------------------------
+if !FileExist(drawerPath) || !FileExist(slotsPath) {
+    Assert("18: src/drawer.ahk и src/Slots.ahk найдены рядом с test/narrow", false)
+} else {
+    src18 := FileRead(drawerPath, "UTF-8")
+    src18s := FileRead(slotsPath, "UTF-8")
+
+    pSW18 := InStr(src18, "SettingsSlotWrites(n, e, &err, &field?) {")
+    pSP18 := InStr(src18, "SettingsSlotsPlan(edits, &err) {")
+    codeSW18 := (pSW18 > 0 && pSP18 > pSW18) ? NoComments(SubStr(src18, pSW18, pSP18 - pSW18)) : ""
+    Assert("18j: план проверяет хоткей синтаксисом, а не как обычный текст",
+        codeSW18 != "" && InStr(codeSW18, "SettingsHotkeyIn(e.focusHotkey, SettingsLiveSlot(n, `"focusHotkey`")") > 0
+     && InStr(codeSW18, "SettingsTextIn(e.focusHotkey") = 0)
+    Assert("18k: отказ несёт адрес контрола, а форме есть куда вести",
+        InStr(codeSW18, "field := `"slots.`" n `".focusHotkey`"") > 0)
+
+    pHK := InStr(src18, "SettingsHotkeyIn(v, live, label, &err) {")
+    bodyHK := pHK ? NoComments(SubStr(src18, pHK, 700)) : ""
+    Assert("18l: своего разбора синтаксиса не заводится — спрашивается AutoHotkey",
+        pHK > 0 && InStr(bodyHK, "Hotkey(Hooked(s)") > 0)
+    Assert("18m: проверка выключена и в контексте, который никогда не истинен",
+        InStr(bodyHK, "HotIf never") > 0 && InStr(bodyHK, "`"Off`"") > 0
+     && InStr(bodyHK, "static never := (*) => false") > 0)
+    Assert("18n: контекст возвращается на место при любом исходе",
+        InStr(bodyHK, "finally") > 0)
+
+    ; Регистрация при старте берёт значение из реестра — того же, который
+    ; наполняет LoadConfig, — а не из формы и не из отдельного списка.
+    Assert("18o: хоткей при старте регистрируется значением из реестра",
+        InStr(src18, "for a in SlotPermList() {") > 0
+     && InStr(src18, "Hotkey(Hooked(a.focusHotkey), OnFocusHotkey.Bind(a.slot))") > 0)
+    Assert("18p: focusHotkey читается из [slotN] и живёт в записи слота",
+        InStr(src18, "focusHotkey: IniRead(path, section, `"focusHotkey`", `"`")") > 0
+     && InStr(src18, "focusHotkey: Opt(a, `"focusHotkey`", `"`")") > 0)
+    Assert("18q: засев формы берёт хоткей у самого слота, а не выдумывает его",
+        InStr(src18, "focusHotkey: a.focusHotkey") > 0
+     && InStr(src18s, "perm     := 0") > 0)
+}
 ; ---------------------------------------------------------------
 out := ""
 allOk := true

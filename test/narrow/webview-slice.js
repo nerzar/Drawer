@@ -285,6 +285,27 @@
       // Класс окна форма не правит: его заполняет picker. Здесь он
       // только показан, и уехать он обязан нетронутым.
       if (text('slot-class') !== 'AutoHotkeyGUI') throw new Error('slot-class-shown')
+
+      // Хоткей постоянного слота виден в форме тем же значением, что
+      // лежит в config.ini: canonical -> черновик, без выдумок формы.
+      eq('edit-focusHotkey', '^!#1')
+
+      // «Ctrl + Alt + 2» — понятная человеку запись, но не синтаксис
+      // AutoHotkey. Раньше она молча уезжала в файл и умирала только при
+      // следующем старте, по модальному сообщению на слот; теперь её
+      // отвергает backend и называет поле.
+      setText('edit-focusHotkey', 'Ctrl + Alt + 2')
+      await apply(() => /не сочетание клавиш AutoHotkey/.test(text('status')))
+      if (/slots\.1\.focusHotkey/.test(text('status'))) throw new Error('machine-path-hotkey')
+      await wait(() => q('slot-1').getAttribute('aria-pressed') === 'true', 5000)
+      if (!q('edit-focusHotkey').className.includes('field-bad')) throw new Error('hotkey-field-error')
+      post('smoke.hotkey-rejected')
+      // Неудачный Save черновика не трогает: набранное осталось на месте,
+      // и заново вводить остальные поля не приходится.
+      eq('edit-focusHotkey', 'Ctrl + Alt + 2')
+      eq('edit-widthPercent', '62')
+      post('smoke.hotkey-applied-intact')
+
       setText('edit-focusHotkey', '^!#2')
       setPick('edit-monitorKind', 'cursor')
       setPick('edit-edge', 'top')
@@ -332,9 +353,25 @@
       if (text('slot-class') !== 'AutoHotkeyGUI') throw new Error('slot-class-after-save')
       eq('edit-widthPercent', '62')
       eq('edit-edge', 'top')
+      // Сохранённый хоткей вернулся каноническим ответом AHK, а не остался
+      // висеть черновиком формы.
+      eq('edit-focusHotkey', '^!#2')
+      post('smoke.hotkey-saved')
       if (!text('restart').includes('1')) throw new Error('slot-restart-hint')
       await apply(() => /Менять нечего/.test(text('status')))
       post('smoke.slot-saved')
+
+      // Правка соседнего поля хоткей не трогает: запись точечная, и
+      // reconcile не пересобирает конфигурацию слота из черновика.
+      // Ширина возвращается на 62, чтобы файл остался тем же, что
+      // проверяют дальше.
+      setText('edit-widthPercent', '63')
+      await apply(() => /Сохранено/.test(text('status')))
+      eq('edit-focusHotkey', '^!#2')
+      setText('edit-widthPercent', '62')
+      await apply(() => /Сохранено/.test(text('status')))
+      eq('edit-focusHotkey', '^!#2')
+      post('smoke.hotkey-kept')
       q('slot-9').click()
       await wait(() => val('edit-widthPercent') === '80', 5000)
       q('slot-5').click()

@@ -123,8 +123,16 @@ SmokeSlotWindow() {
 ; global webTrace := "" затёрло бы путь. Таймер срабатывает после того,
 ; как весь auto-execute уже отработал.
 SmokeOpen() {
-    global webTrace
+    global webTrace, live
     webTrace := A_ScriptDir "\bridge.log"
+    ; Регистрация focus-хоткея при старте — часть контракта постоянного
+    ; слота: значение берётся из реестра, тем же SlotPermList(), которым
+    ; ходит сам цикл регистрации. Пишем факт настоящего старта, а не
+    ; копию логики: 18 слотовых хоткеев + очистка + выход дают 20, и
+    ; двадцать первый может быть только focusHotkey слота 1.
+    SettingsWebTrace("boot hotkeys live=" live)
+    for a in SlotPermList()
+        SettingsWebTrace("boot perm slot=" a.slot " focusHotkey=" Opt(a, "focusHotkey", ""))
     SettingsWebShow()
 }
 
@@ -319,6 +327,23 @@ SmokeWatch() {
     Check "5e: slot fields persisted through Apply and OK" `
         (($after -match '(?m)^name=Saved by OK\s*$') -and ($after -match '(?m)^width=62\s*$') `
          -and ($after -match '(?m)^cls=AutoHotkeyGUI\s*$') -and ($after -match '(?m)^focusHotkey=\^!#2\s*$'))
+
+    # --- хоткей постоянного слота: весь путь от config.ini до старта ---
+    # Значение из файла обязано доехать до регистрации при старте. 20 —
+    # это 18 слотовых плюс очистка и выход; 21-й хоткей может быть только
+    # focusHotkey слота 1, взятый из реестра.
+    Check "7a: focusHotkey слота дошёл из config.ini до реестра при старте" `
+        ($log -match '(?m)^.*boot perm slot=1 focusHotkey=\^!#1\s*$')
+    Check "7b: и был зарегистрирован настоящим стартом, а не только прочитан" `
+        ($log -match '(?m)^.*boot hotkeys live=21\s*$')
+    Check "7c: негодный синтаксис отвергнут backend'ом с адресом поля" `
+        ($log -match 'smoke\.hotkey-rejected')
+    Check "7d: отказ не тронул применённое состояние и файл" `
+        ($log -match 'smoke\.hotkey-applied-intact')
+    Check "7e: годный хоткей сохранён и вернулся каноническим" `
+        ($log -match 'smoke\.hotkey-saved')
+    Check "7f: правка соседнего поля хоткей не потеряла" `
+        ($log -match 'smoke\.hotkey-kept')
 
     $mode = if ($Compiled) { "собранный exe" } else { "исходник" }
     "режим: $mode"
