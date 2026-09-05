@@ -754,9 +754,14 @@ wire: иначе «300abc» стало бы 300 ещё до валидации, 
   порт. Границы значений проверяет backend, и его сообщение приходит без
   `field`: вычислять путь поля разбором русского текста — ровно то, от
   чего уводил C3.
-- Picker operation gate не реализован: в slice нет ни одной операции,
-  которую он охраняет. `picker.*`, `slot.bind` и `slot.release`
-  отвечают `unsupported_action`.
+- Production picker и C6 используют общий `SettingsRunPicker` с owner и
+  gate native/WebView. Bridge запускает диалог таймером после выхода из
+  WebMessageReceived; Apply/OK/второй picker/bind/release/watchStatus получают
+  busy. Принятое закрытие отменяет диалог, но Dispose/Destroy выполняются
+  после возврата picker. Native Close также отложен и защищает write-back.
+  Результаты обновляют только slot draft, cancel не меняет его; picker RPC
+  ждёт решения пользователя без обычного 10-секундного таймаута.
+  `slot.bind` и `slot.release` остаются `unsupported_action` вне picker.
 - `settings.cancel` получил `discardChanges` в payload. Разделение труда
   из ADR сохранено: сравнивает draft с применённым состоянием порт (он
   один знает, что действует), спрашивает человека WebView. Ответ

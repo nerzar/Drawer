@@ -40,10 +40,10 @@ const restart = computed(() => restartHint())
       <span v-if="restart" class="restart" data-testid="restart">{{ restart }}</span>
     </div>
     <button class="btn-outline" data-testid="cancel" :disabled="busy" @click="cancelSettings()">Отмена</button>
-    <button class="btn-outline" data-testid="apply" :disabled="busy || !ready" @click="applySettings()">
+    <button class="btn-outline" data-testid="apply" :disabled="busy || !ready || settings.pickerActive" @click="applySettings()">
       Применить
     </button>
-    <button class="btn-primary" data-testid="ok" :disabled="busy || !ready" @click="okSettings()">ОК</button>
+    <button class="btn-primary" data-testid="ok" :disabled="busy || !ready || settings.pickerActive" @click="okSettings()">ОК</button>
   </div>
 </template>
 

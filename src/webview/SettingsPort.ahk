@@ -14,14 +14,37 @@
 ; Через порт проходит вся вкладка General: те же десять ключей, что
 ; правит native ([dynamic] width/edge/monitor/activateOnShow/hideOnBlur и
 ; [general] handles/animMs/animSteps/blurMs/accent), а также существующие
-; permanent Slots через SettingsSlotsPlan. Picker и bind/release отвечают
-; unsupported_action; создание и conversion отклоняются при разборе slotEdits.
+; permanent Slots через SettingsSlotsPlan и общий native picker.
+; Bind/release отвечают unsupported_action; conversion отклоняется в slotEdits.
 
 class DrawerSettingsPort {
     static PROTOCOL_VERSION := 1
 
-    __New() {
+    __New(owner := 0) {
         this._disposed := false
+        this._owner := owner
+        this._ownerHwnd := owner ? owner.Hwnd : 0
+    }
+
+    PickerBusy() {
+        return SettingsPickerState().active
+    }
+
+    CancelPicker() {
+        if this._ownerHwnd
+            SettingsCancelPicker(this._ownerHwnd)
+    }
+
+    Pick(kind) {
+        if (this._disposed || !this._owner || !WinExist("ahk_id " this._ownerHwnd))
+            return SettingsBridgeError("internal_error", "Settings уже закрыт", false)
+        result := SettingsRunPicker(kind, this._owner)
+        if !result
+            return SettingsBridgeOk(Map("selected", JsonB(false)))
+        if (kind = "exe")
+            return SettingsBridgeOk(Map("selected", JsonB(true), "executable", result))
+        return SettingsBridgeOk(Map("selected", JsonB(true), "window",
+            Map("title", result.title, "executable", result.exe, "windowClass", result.cls)))
     }
 
     ; ------------------------- действия -------------------------

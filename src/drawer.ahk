@@ -393,6 +393,8 @@ OnSlot(n, *) {
 }
 
 OnSlotBind(n, *) {
+    if SettingsPickerState().active
+        return
     try
         BindSlot(n)
     catch as e
@@ -400,6 +402,8 @@ OnSlotBind(n, *) {
 }
 
 OnClearHotkey(*) {
+    if SettingsPickerState().active
+        return
     try
         ClearDynamic()
     catch as e
@@ -1061,6 +1065,12 @@ Slide(hwnd, fromX, fromY, toX, toY, w, h) {
 ; не осталось за пределами экранов.
 Cleanup(*) {
     global state, foreHook
+    picker := SettingsPickerState()
+    if picker.active {
+        picker.exitPending := true
+        SettingsCancelPicker(picker.owner)
+        return 1
+    }
     SettingsWebShutdown()
     HandlesDestroyAll()
     if foreHook
@@ -1750,12 +1760,11 @@ SettingsWindowCandidates() {
 ; запереть, поэтому пока диалог открыт, он объявлен служебным окном
 ; (ServiceWindowAdd) — иначе Ctrl+Alt+Shift+N мог бы привязать сам
 ; диалог вместо того окна, которое пользователь пришёл выбирать.
-SettingsPickWindow() {
-    global setGui
+SettingsPickWindow(owner) {
     cands := SettingsWindowCandidates()
-    result := { picked: 0 }
+    result := { picked: 0, done: false }
 
-    g := Gui("+Owner" setGui.Hwnd " -MinimizeBox", "Ящик — выбор окна")
+    g := Gui("+Owner" owner.Hwnd " -MinimizeBox", "Ящик — выбор окна")
     g.BackColor := "17181C"
     try DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", g.Hwnd, "Int", 20, "Int*", 1, "Int", 4)
     g.SetFont("s9 cEDEDEF", "Segoe UI")
@@ -1773,6 +1782,9 @@ SettingsPickWindow() {
     ok.Enabled := cands.Length > 0
 
     finish(use) {
+        if result.done
+            return
+        result.done := true
         if use {
             row := lv.GetNext(0)
             if (row && row <= cands.Length)
@@ -1793,21 +1805,76 @@ SettingsPickWindow() {
     ; hwnd, переиспользованный Windows, останется помечен служебным.
     pickHwnd := g.Hwnd
     ServiceWindowAdd(pickHwnd)
-    g.Show("w484 h360")
-    WinWaitClose("ahk_id " pickHwnd)
-    ServiceWindowDrop(pickHwnd)
+    try {
+        g.Show("w484 h360")
+        WinWaitClose("ahk_id " pickHwnd)
+    } finally {
+        ServiceWindowDrop(pickHwnd)
+        try g.Destroy()
+    }
     return result.picked
 }
 
 ; Диалог выбора .exe. Возвращает голое имя файла с расширением — ровно
 ; то, что ожидает exe= и с чем WinGetProcessName/ahk_exe сравнивают
 ; строкой; полный путь для этого поля не годится.
-SettingsPickExe() {
+SettingsPickExe(owner) {
+    owner.Opt("+OwnDialogs")
     path := FileSelect("1", A_ProgramFiles, "Ящик — выбор приложения", "Исполняемые файлы (*.exe)")
     if (path = "")
         return ""
     SplitPath(path, &fileName)
     return fileName
+}
+
+; One operation for both native Settings and WebView. The dialog itself
+; may pump messages: owner lifetime and write-back must outlive that stack.
+SettingsPickerState() {
+    static state := { active: false, owner: 0, cancelled: false, closeNative: false, exitPending: false }
+    return state
+}
+
+SettingsRunPicker(kind, owner) {
+    state := SettingsPickerState()
+    if state.active
+        throw Error("Picker уже открыт")
+    hwnd := owner.Hwnd
+    state.active := true
+    state.owner := hwnd
+    state.cancelled := false
+    state.closeNative := false
+    try {
+        DllCall("EnableWindow", "Ptr", hwnd, "Int", false)
+        result := kind = "exe" ? SettingsPickExe(owner) : SettingsPickWindow(owner)
+        return state.cancelled ? 0 : result
+    } finally {
+        state.active := false
+        state.owner := 0
+        if WinExist("ahk_id " hwnd)
+            DllCall("EnableWindow", "Ptr", hwnd, "Int", true)
+        if state.closeNative
+            SetTimer(SettingsPickerCloseNative.Bind(hwnd), -1)
+        if state.exitPending
+            SetTimer((*) => ExitApp(), -1)
+    }
+}
+
+SettingsPickerCloseNative(hwnd) {
+    global setGui
+    if (setGui && setGui.Hwnd = hwnd)
+        SettingsClose(true)
+}
+
+SettingsCancelPicker(ownerHwnd) {
+    state := SettingsPickerState()
+    if (!state.active || state.owner != ownerHwnd)
+        return
+    state.cancelled := true
+    ; Close only a direct owned dialog, never the Settings owner.
+    for hwnd in WinGetList() {
+        if (DllCall("GetWindow", "Ptr", hwnd, "UInt", 4, "Ptr") = ownerHwnd)
+            try PostMessage(0x10, 0, 0, , "ahk_id " hwnd)
+    }
 }
 
 ; Единственное место, где состояние слота превращается в текст. Сам
@@ -2155,10 +2222,12 @@ SettingsConvertClick(ui) {
 ; в поля exe/cls (и, если имя ещё не тронуто, в name); привязка
 ; постоянного слота остаётся по процессу, никакого hwnd не хранится.
 SettingsSlotExePick(ui) {
-    if ui.populating || !ui.editingSlot
+    global setGui, setUI
+    if ui.populating || !ui.editingSlot || SettingsPickerState().active
         return
-    exe := SettingsPickExe()
-    if (exe = "")
+    n := ui.editingSlot
+    exe := SettingsRunPicker("exe", setGui)
+    if (!exe || setUI != ui || SettingsPickerState().closeNative || ui.editingSlot != n)
         return
     ui.populating := true
     ui.eExe.Value := exe
@@ -2166,12 +2235,13 @@ SettingsSlotExePick(ui) {
     SettingsSlotEdited(ui, "exe", exe)
 }
 SettingsSlotWindowPick(ui) {
-    if ui.populating || !ui.editingSlot
-        return
-    w := SettingsPickWindow()
-    if !w
+    global setGui, setUI
+    if ui.populating || !ui.editingSlot || SettingsPickerState().active
         return
     n := ui.editingSlot
+    w := SettingsRunPicker("window", setGui)
+    if (!w || setUI != ui || SettingsPickerState().closeNative || ui.editingSlot != n)
+        return
     auto := (Trim(ui.eName.Value) = "" || Trim(ui.eName.Value) = "Слот " n)
     ui.populating := true
     ui.eExe.Value := w.exe
@@ -2866,6 +2936,12 @@ SettingsClose(force := false) {
                    "Ящик", 0x24) != "Yes")
             return true    ; событиям Close и Escape ненулевое значение
     }                      ; означает «окно не закрывать»
+    picker := SettingsPickerState()
+    if (picker.active && setGui && picker.owner = setGui.Hwnd) {
+        picker.closeNative := true
+        SettingsCancelPicker(setGui.Hwnd)
+        return true
+    }
     g := setGui
     ui := setUI
     setGui := 0        ; сначала забыть, потом рушить: IsServiceWindow не
@@ -3641,7 +3717,7 @@ SettingsStatus(text, bad := false) {
 ; SettingsApplyPlan()/SettingsReconcileRuntime(), не этой функции.
 SettingsSave(closeAfter) {
     global setUI
-    if !setUI
+    if !setUI || SettingsPickerState().active
         return
     err := ""
     if !(vals := SettingsCollect(&err)) {

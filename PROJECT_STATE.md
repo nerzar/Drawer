@@ -138,9 +138,16 @@ canonical DTO. Apply/OK отправляют изменённые config values 
 и Slots общими планами, а live status не касается slot draft.
 
 Mock остался в заголовке окна и About. Native Settings сохранён.
-Picker и bind/release через WebView отвечают `unsupported_action`.
+`picker.exe` и `picker.window` используют общий production picker с native
+Settings. EXE/window result меняет только draft, Cancel ничего не меняет.
+Общий gate исключает повторный picker и блокирует Save/bind/release;
+owner отключён на время диалога. Bridge выходит из WebMessageReceived до
+модального вызова и откладывает Dispose/Destroy до выхода picker из стека.
+Native Close также отложен; оба UI защищают поздний write-back. Picker RPC
+не имеет таймаута пользовательского выбора; закрытие отменяет ожидание.
+Bind/release через WebView отвечают `unsupported_action`.
 
-Остаются picker, bind/release, conversion и C6; dynamic Slots пока read-only.
+C6 выполнен. Остаются bind/release и conversion; dynamic Slots пока read-only.
 
 ## Инварианты
 
@@ -217,6 +224,9 @@ status, общий Apply, canonical normalization, no-op и запись чер�
 effective values после Apply и закрытие с активным watcher.
 Гоняет копию `src/` во временной папке; config и окно принадлежат smoke.
 `/validate`, typecheck/build прошли; VM/full suite не запускались.
+`test/narrow/webview-slice.ps1 -Picker` проверяет настоящие window/EXE
+success/cancel, draft-only, busy gate, Close во время FileSelect и native
+C6 Close во время window picker. Содержимое config остаётся прежним.
 Ранее General-only smoke в `-Compiled` прошёл 25/25; новый slice в этом
 режиме не проверялся. Требует собранного фронтенда: `npm run build --prefix settings-ui`.
 
@@ -296,8 +306,8 @@ bridge, после него выполняется C6 native picker parity fix.
 ## Ближайшие задачи
 
 1. C1–C5, упаковка, General и read-only Slots с live status выполнены.
-   Permanent slotEdits выполнены; добавить picker, bind/release и conversion, проверить S4
-   целевыми сценариями; затем закрыть C6 native picker parity fix.
+   Permanent slotEdits, production picker и C6 выполнены; добавить bind/release
+   и conversion, проверить S4 целевыми сценариями.
 3. Завершить структурное разделение, затем перейти к произвольным слотам
    и новым UI-командам.
 4. Закрывать долг тестового стенда из `docs/05-план-работ.md` отдельно от

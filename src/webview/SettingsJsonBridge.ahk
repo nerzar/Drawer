@@ -9,10 +9,8 @@
 ; связан с запросом только через id, поэтому запрос без id не получает
 ; ответа вовсе: отправить его некуда.
 ;
-; Слайс не подключает picker и bind/release, поэтому и
-; picker-gate из ADR здесь нет: гейт без операции, которую он охраняет,
-; был бы непроверяемым кодом. Lifecycle закрытия оставлен минимальный,
-; но настоящий: без него окно нечем закрыть.
+; Picker runs outside WebMessageReceived with an operation gate.
+; Accepted close waits for the modal stack to unwind before disposal.
 
 class SettingsJsonBridge {
     __New(Adapter, Port, CloseTimeoutMs := 5000, Trace := 0) {
@@ -29,6 +27,8 @@ class SettingsJsonBridge {
         this._statusHandler := ObjBindMethod(this, "_PollStatus")
         this._watching := false
         this._statuses := Map()
+        this._picker := false
+        this._pendingClose := 0
     }
 
     HandleJson(Json) {
@@ -58,6 +58,13 @@ class SettingsJsonBridge {
 
         action := Request.action
         this._Trace("request " action " id=" Request.id)
+        if (this._picker || this._port.PickerBusy()) {
+            switch action {
+            case "settings.apply", "settings.ok", "picker.exe", "picker.window", "slot.bind", "slot.release", "slot.watchStatus":
+                this._SendError(Request, "busy", "Открыт picker", true)
+                return
+            }
+        }
         if (this._closeState = "awaitingDecision"
             && action != "settings.cancel" && action != "settings.ok"
             && action != "settings.getInitialState") {
@@ -77,7 +84,12 @@ class SettingsJsonBridge {
                 outcome := this._port.Cancel(Request.payload)
             case "slot.watchStatus":
                 outcome := this._WatchStatus(Request.payload)
-            case "picker.exe", "picker.window", "slot.bind", "slot.release":
+            case "picker.exe", "picker.window":
+                this._picker := true
+                ; Leave WebMessageReceived before entering a native modal loop.
+                SetTimer(ObjBindMethod(this, "_RunPicker", Request), -1)
+                return
+            case "slot.bind", "slot.release":
                 outcome := this._port.Unsupported(action)
             default:
                 this._SendError(Request, "unsupported_action", "Неизвестное действие: " action, false)
@@ -137,6 +149,10 @@ class SettingsJsonBridge {
     }
 
     Dispose() {
+        if this._picker {
+            this._port.CancelPicker()
+            return false
+        }
         if this._disposed
             return false
         this._disposed := true
@@ -152,6 +168,36 @@ class SettingsJsonBridge {
     }
 
     ; ------------------------- отправка -------------------------
+
+    _RunPicker(request) {
+        this._Trace("picker-enter")
+        try {
+            if (this._closeState != "open") {
+                if (this._closeState = "awaitingDecision")
+                    this._Reply(request, SettingsBridgeOk(Map("selected", JsonB(false))))
+                return
+            }
+            outcome := this._port.Pick(request.action = "picker.exe" ? "exe" : "window")
+            if (this._closeState = "open")
+                this._Reply(request, outcome)
+            else if (this._closeState = "awaitingDecision")
+                this._Reply(request, SettingsBridgeOk(Map("selected", JsonB(false))))
+        } catch as e {
+            if (this._closeState = "open")
+                this._SendError(request, "internal_error", e.Message, false)
+            else if (this._closeState = "awaitingDecision")
+                this._Reply(request, SettingsBridgeOk(Map("selected", JsonB(false))))
+        } finally {
+            this._picker := false
+            this._Trace("picker-exit")
+            if this._pendingClose {
+                pending := this._pendingClose
+                this._pendingClose := 0
+                this._FinishClose(pending.reason, pending.origin, pending.forced, pending.sync)
+            } else if (this._closeState = "closed")
+                this.Dispose()
+        }
+    }
 
     _WatchStatus(payload) {
         enabled := JsonGet(payload, "enabled", "")
@@ -238,6 +284,16 @@ class SettingsJsonBridge {
         this._closeState := "closing"
         SetTimer(this._closeTimeoutHandler, 0)
         SetTimer(this._destroyHandler, 0)
+        if this._picker {
+            this._pendingClose := { reason: Reason, origin: Origin, forced: Forced, sync: DestroySynchronously }
+            this._Trace("picker-close-deferred")
+            this._port.CancelPicker()
+            return
+        }
+        this._FinishClose(Reason, Origin, Forced, DestroySynchronously)
+    }
+
+    _FinishClose(Reason, Origin, Forced, DestroySynchronously) {
         this.Dispose()
         this._SendClosed(Reason, Origin, Forced)
         if DestroySynchronously

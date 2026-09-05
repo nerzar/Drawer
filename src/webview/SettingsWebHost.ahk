@@ -48,7 +48,7 @@ SettingsWebOpen() {
 
     webAdapter := SettingsWebViewAdapter("Ящик — настройки", webDir, loader, dataDir,
         SettingsWebJson, SettingsWebCloseRequested, SettingsWebDestroyed)
-    webBridge := SettingsJsonBridge(webAdapter, DrawerSettingsPort(), 5000, SettingsWebTrace)
+    webBridge := SettingsJsonBridge(webAdapter, DrawerSettingsPort(webAdapter.Window), 5000, SettingsWebTrace)
     webHwnd := webAdapter.Hwnd
     ; Окно ящика, а не пользователя: в слот его привязать нельзя, и
     ; переход в него не считается потерей фокуса (Р18, реестр C2).

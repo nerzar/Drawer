@@ -71,7 +71,7 @@ type Pending = {
   action: ActionName
   resolve: (value: never) => void
   reject: (reason: Error) => void
-  timer: ReturnType<typeof setTimeout>
+  timer: ReturnType<typeof setTimeout> | undefined
 }
 
 export class SettingsClient {
@@ -90,13 +90,14 @@ export class SettingsClient {
   request<A extends ActionName>(
     action: A,
     payload: RequestMap[A]['payload'],
+    timeoutMs = this.timeoutMs,
   ): Promise<RequestMap[A]['result']> {
     const id = `req-${++this.seq}`
     return new Promise<RequestMap[A]['result']>((resolve, reject) => {
-      const timer = setTimeout(() => {
+      const timer = timeoutMs === 0 ? undefined : setTimeout(() => {
         this.pending.delete(id)
-        reject(new Error(`Ящик не ответил на ${action} за ${this.timeoutMs} мс`))
-      }, this.timeoutMs)
+        reject(new Error(`Ящик не ответил на ${action} за ${timeoutMs} мс`))
+      }, timeoutMs)
       this.pending.set(id, {
         action,
         resolve: resolve as (value: never) => void,

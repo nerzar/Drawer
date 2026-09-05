@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { settings } from '../bridge/settings'
+import { settings, pickSlot } from '../bridge/settings'
 import { useSlotStatus, slotBehavior, slotLabel, monitorLabel, edgeLabels, statusLabels } from '../bridge/slots'
 
 const selectedNumber = ref(1)
@@ -47,7 +47,11 @@ const bad = (key) => settings.field === `slots.${selectedNumber.value}.${key}`
         <div class="detail-row"><div class="l">Имя</div><div class="v">{{ slotLabel(selectedSlot) }}</div></div>
         <div class="detail-row"><div class="l">Состояние</div><div class="v">{{ statusLabels[selectedSlot.status.state] }}</div></div>
         <div class="detail-row"><div class="l">Заголовок окна</div><div class="v" data-testid="slot-title">{{ selectedSlot.status.windowTitle || '—' }}</div></div>
-        <fieldset v-if="selectedSlot.kind === 'permanent' && draft" class="slot-editor" :disabled="settings.status === 'saving'">
+        <fieldset v-if="selectedSlot.kind === 'permanent' && draft" class="slot-editor" :disabled="settings.status === 'saving' || settings.pickerActive">
+          <div class="row">
+            <button class="btn-primary-sm" data-testid="pick-exe" @click="pickSlot(selectedNumber, 'exe')">Обзор EXE…</button>
+            <button class="btn-primary-sm" data-testid="pick-window" @click="pickSlot(selectedNumber, 'window')">Выбрать окно…</button>
+          </div>
           <div v-for="field in textFields" :key="field.key" class="row">
             <label :for="`slot-${field.key}`">{{ field.label }}</label>
             <input :id="`slot-${field.key}`" :data-testid="`edit-${field.key}`" type="text"

@@ -114,6 +114,14 @@ export type ProtocolErrorBody = {
 // Карта action -> payload/result. Она и делает клиента типизированным:
 // request('settings.apply', ...) возвращает SaveResult, а не unknown.
 export type RequestMap = {
+  'picker.exe': {
+    payload: Record<string, never>
+    result: { selected: false } | { selected: true; executable: string }
+  }
+  'picker.window': {
+    payload: Record<string, never>
+    result: { selected: false } | { selected: true; window: { title: string; executable: string; windowClass: string } }
+  }
   'slot.watchStatus': {
     payload: { enabled: boolean }
     result: { enabled: boolean }

@@ -26,6 +26,8 @@ export const settings = reactive({
   canonical: null as SettingsState | null,
   draft: null as GeneralDraft | null,
   slotDrafts: {} as SlotDrafts,
+  pickerActive: false,
+  closed: false,
   message: '',
   bad: false,
   // Путь поля из ответа — «general.blurCheckMs» и т. п. Подсвечивает
@@ -63,6 +65,7 @@ export async function loadSettings(): Promise<void> {
   // Системный крестик не закрывает окно сам: AHK спрашивает, и ответить
   // должен фронтенд. Без этого закрытие ждало бы таймаута моста.
   api.on('settings.closeRequested', () => void cancelSettings())
+  api.on('settings.closed', () => { settings.closed = true; api.dispose() })
   try {
     adopt(await api.request('settings.getInitialState', {}))
     settings.status = 'ready'
@@ -106,7 +109,7 @@ export function keepEditing(): void {
 
 async function save(action: 'settings.apply' | 'settings.ok'): Promise<void> {
   const api = settingsClient()
-  if (!api || !settings.draft) return
+  if (!api || !settings.draft || settings.pickerActive || settings.closed) return
   settings.status = 'saving'
   settings.message = 'Сохраняем…'
   settings.bad = false
@@ -132,6 +135,33 @@ async function save(action: 'settings.apply' | 'settings.ok'): Promise<void> {
 
 function buildDraft() {
   return { general: draftToWire(settings.draft!), slotEdits: slotEditsToWire(settings.slotDrafts, settings.canonical!) }
+}
+
+export async function pickSlot(number: import('./protocol').SlotNumber, kind: 'exe' | 'window'): Promise<void> {
+  const api = settingsClient()
+  const draft = settings.slotDrafts[number]
+  if (!api || !draft || settings.pickerActive || settings.closed) return
+  settings.pickerActive = true
+  try {
+    // User interaction has no RPC deadline. settings.closed disposes pending requests.
+    if (kind === 'exe') {
+      const result = await api.request('picker.exe', {}, 0)
+      if (result.selected && !settings.closed && settings.slotDrafts[number] === draft)
+        draft.executable = result.executable
+    } else {
+      const result = await api.request('picker.window', {}, 0)
+      if (result.selected && !settings.closed && settings.slotDrafts[number] === draft) {
+        draft.executable = result.window.executable
+        draft.windowClass = result.window.windowClass
+        if (!draft.name.trim() || draft.name.trim() === `Слот ${number}`)
+          draft.name = result.window.title
+      }
+    }
+  } catch (e) {
+    if (!settings.closed) fail(e)
+  } finally {
+    settings.pickerActive = false
+  }
 }
 
 function adopt(state: SettingsState): void {

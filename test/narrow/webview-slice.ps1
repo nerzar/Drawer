@@ -17,7 +17,7 @@
 # Запуск:  pwsh -File test\narrow\webview-slice.ps1
 #          pwsh -File test\narrow\webview-slice.ps1 -Compiled
 
-param([switch]$Compiled)
+param([switch]$Compiled, [switch]$Picker)
 
 $ErrorActionPreference = "Stop"
 $repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -46,7 +46,8 @@ try {
     # webview\*), и список пришлось бы править при каждом новом файле —
     # причём молча, потому что копия просто не загрузилась бы.
     Copy-Item (Join-Path $repo "src\*") $dir -Recurse
-    Copy-Item (Join-Path $PSScriptRoot "webview-slice.js") (Join-Path $dir "webview-slice.js")
+    $driverName = if ($Picker) { 'picker-slice.js' } else { 'webview-slice.js' }
+    Copy-Item (Join-Path $PSScriptRoot $driverName) (Join-Path $dir "webview-slice.js")
 
     $marker = 'A_TrayMenu.Insert("2&", "Settings (WebView2)", (*) => SettingsWebShow())'
     $src = [IO.File]::ReadAllText((Join-Path $repo "src\drawer.ahk"))
@@ -148,6 +149,7 @@ SmokeWatch() {
     ExitApp(0)
 }
 '@
+    if ($Picker) { $inject += [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'picker-slice.ahk')) }
     [IO.File]::WriteAllText((Join-Path $dir "drawer.ahk"), $src.Replace($marker, $marker + "`r`n" + $inject), $utf8)
 
     # --- при -Compiled: собрать exe и увести его в чистую папку ------
@@ -196,6 +198,18 @@ SmokeWatch() {
 
     $logPath = Join-Path $runDir "bridge.log"
     $log = if (Test-Path $logPath) { [IO.File]::ReadAllText($logPath, [Text.Encoding]::UTF8) } else { "" }
+
+    if ($Picker) {
+        Check 'picker success/cancel draft-only' ($log -match 'smoke.picker-success-cancel')
+        Check 'picker operation gate' ($log -match 'smoke.picker-gate')
+        Check 'close deferred until picker returns' ($log -match '(?s)picker-close-deferred.*picker-exit.*bridge-disposed.*webview-destroyed')
+        Check 'native C6 owner and write-back' ($log -match 'smoke.native-picker-safe')
+        Check 'config unchanged by pickers' ([IO.File]::ReadAllText($cfg, [Text.Encoding]::Unicode) -ceq $before)
+        Check 'no smoke failure' ($log -notmatch 'smoke.failed')
+        $results | Format-Table -AutoSize
+        if ($results.Ok -contains $false) { $log; exit 1 }
+        exit 0
+    }
 
     # --- транскрипт моста -------------------------------------------
     Check "1a: мост принял settings.getInitialState" ($log -match 'request settings\.getInitialState')
