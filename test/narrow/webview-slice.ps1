@@ -125,6 +125,17 @@ SmokeSlotWindow() {
         phase := 8
     } else if (phase = 8 && InStr(log, "smoke.slot6-live-done")) {
         fixture.Destroy()
+        phase := 9
+    ; Слот 6 второй раз, четвёртой фикстурой того же имени — конверсия
+    ; прямо из "available", без промежуточного Save (см. точку 8a2 ниже):
+    ; тот же слот и exe, но отдельная фикстура и отдельные маркеры, чтобы
+    ; не путать с первым прогоном выше.
+    } else if (phase = 9 && InStr(log, "smoke.slot6-live2")) {
+        fixture := Gui(, "Slot six fixture")
+        fixture.Show("w300 h240 NoActivate")
+        phase := 10
+    } else if (phase = 10 && InStr(log, "smoke.slot6-live2-done")) {
+        fixture.Destroy()
         SetTimer(SmokeSlotWindow, 0)
     }
 }
@@ -360,17 +371,27 @@ SmokeWatch() {
 
     # --- Permanent -> Dynamic: живое окно не теряется при конверсии ---
     # Слот 6: постоянный с живым окном -> явная конверсия в динамический.
-    # Раньше Slots.Apply() безусловно отпускал окно домой, как при смене
-    # exe/cls, — слот выглядел так, будто окно закрыли. До каждой отметки
-    # ниже сценарий в webview-slice.js не дошёл бы после throw; общий
-    # "no smoke failure" выше уже проверяет отсутствие throw как такового,
-    # эти — что сценарий прошёл именно ДО нужного места, а не просто не упал.
+    # Два независимых бага на одном сценарии: Slots.Apply() безусловно
+    # отпускал окно домой, как при смене exe/cls (8b/8c), и
+    # PermSnapshot() видел окно в снимке, только если оно уже ЗАХВАЧЕНО
+    # (s.window), а не просто найдено статусом — "available" в снимок не
+    # попадало вовсе, и конверсия прямо из этого состояния теряла окно
+    # молча (8a2). До каждой отметки ниже сценарий в webview-slice.js не
+    # дошёл бы после throw; общий "no smoke failure" выше уже проверяет
+    # отсутствие throw как такового, эти — что сценарий прошёл именно ДО
+    # нужного места, а не просто не упал.
     Check "8a: окно постоянного слота 6 найдено статусом и захвачено обычным Save" `
         ($log -match 'smoke\.slot6-live')
     Check "8b: конверсия в динамический сохранила живое окно тем же слотом" `
         ($log -match 'smoke\.reverted')
     Check "8c: закрытое окно не остаётся мнимой привязкой" `
-        ($log -match 'smoke\.slot6-empty')
+        ($log -match 'smoke\.slot6-empty\b')
+    Check "8d: слот 6 сделан постоянным второй раз, окно снова видно как ""available""" `
+        ($log -match 'smoke\.slot6-live2\b')
+    Check "8a2: конверсия прямо из ""available"" (окно найдено, но не захвачено) не теряет его" `
+        ($log -match 'smoke\.available-conversion-kept')
+    Check "8e: второй прогон закрыт, привязка не осталась мнимой" `
+        ($log -match 'smoke\.slot6-empty2')
 
     $mode = if ($Compiled) { "собранный exe" } else { "исходник" }
     "режим: $mode"

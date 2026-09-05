@@ -1087,18 +1087,54 @@ CaptureOrigin(hwnd, mi) {
 ; там, где было, и фокус не трогается. Уже managed окно не трогаем: у
 ; него, возможно, идёт анимация или оно припарковано, и обе величины
 ; правильно пересчитает следующий реальный показ.
+;
+; Монитор берёт ResolveMonitorForExisting(), а не ResolveMonitor()
+; напрямую: хоткея ещё не было, спрашивать курсор не о чем.
 SlotsSeedManaged() {
     for a in SlotPermList() {
         if !(hwnd := SlotCapture(a.slot)) || WindowManaged(hwnd)
             continue
         st := StateOf(hwnd)
         try {
-            mi := ResolveMonitor(a)
+            mi := ResolveMonitorForExisting(a, hwnd)
             if !st.orig
                 st.orig := CaptureOrigin(hwnd, mi)
             st.geom := ComputeGeom(a, mi)
         }
     }
+}
+
+; Монитор для окна, которое уже существует и стоит на экране, — а не тот,
+; что окажется под курсором ровно в момент, когда стартовал Drawer.
+; У monitor=cursor это отдельный случай: пользователь ещё не нажимал
+; хоткей, спрашивать курсор не о чем, а само окно уже говорит, где оно.
+; Без этой подмены кромка постоянного слота, чьё приложение просто
+; оказалось уже запущено, вставала на монитор под курсором в момент
+; старта — обычно вовсе не тот, где висит окно, — и первый реальный
+; показ уводил его следом, а не переключал на месте.
+;
+; Явно заданный номер монитора эта подмена не трогает: там решение уже
+; принял пользователь, а не «под курсором».
+ResolveMonitorForExisting(a, hwnd) {
+    if (a.monitor != "cursor")
+        return ResolveMonitor(a)
+    try {
+        WinGetPos(&x, &y, &w, &h, "ahk_id " hwnd)
+        best := 0, bestArea := 0
+        Loop MonitorGetCount() {
+            MonitorGet(A_Index, &l, &t, &r, &b)
+            ix := Max(x, l), iy := Max(y, t)
+            ax := Min(x + w, r), ay := Min(y + h, b)
+            if (ix < ax && iy < ay) {
+                area := (ax - ix) * (ay - iy)
+                if (area > bestArea)
+                    bestArea := area, best := A_Index
+            }
+        }
+        if best
+            return best
+    }
+    return ResolveMonitor(a)
 }
 
 ; Настоящее окно приложения: видимое, с заголовком, разумного размера.

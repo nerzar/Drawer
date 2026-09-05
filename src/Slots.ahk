@@ -91,14 +91,22 @@ class Slots {
     ; (exe/cls), по которой это окно было захвачено. Settings берёт его
     ; ДО любой дисковой операции и отдаёт обратно в Apply: только так
     ; видно, у какого слота identity изменилась, а у какого нет.
+    ;
+    ; Окно ищем через SlotWindow(), а не берём голый s.window: у слота,
+    ; который ни разу не показывали и не подхватывал SlotsSeedManaged()
+    ; (приложение запущено уже ПОСЛЕ старта Drawer и хоткей ещё не
+    ; нажимали), кэш пуст, хотя статус в списке честно показывает
+    ; "available" — окно есть, просто ящик его ещё не держал. Конверсия
+    ; в динамический слот из такого состояния раньше теряла окно: снимок
+    ; его попросту не видел, и Apply() было нечего восстанавливать.
     static PermSnapshot() {
         bySlot := Map(), ident := Map()
         Loop Slots.COUNT {
             s := Slots.Get(A_Index)
             if !s.perm
                 continue
-            if s.window
-                bySlot[A_Index] := s.window
+            if (hwnd := SlotWindow(A_Index))
+                bySlot[A_Index] := hwnd
             ident[A_Index] := { exe: s.perm.exe, cls: s.perm.cls }
         }
         return { bySlot: bySlot, ident: ident }

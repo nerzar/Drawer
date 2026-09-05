@@ -142,6 +142,23 @@ if !FileExist(drawerPath) || !FileExist(slotsPath) {
     Assert("2i: постоянные привязки берутся только из снимка плана",
         InStr(bodyApply, "old := prevPerm ? prevPerm : { bySlot: Map(), ident: Map() }") > 0
      && InStr(bodyApply, "s.window   := 0") > 0)
+
+    ; PermSnapshot() — сам снимок, который Apply() выше получает готовым.
+    ; Раньше он клал в bySlot голый s.window — окно, которое кто-то уже
+    ; ЗАХВАТИЛ (SlotCapture/Show). Слот, чьё окно статус находит заново
+    ; каждый раз (SlotWindow(), "available"), но никто ещё не показывал и
+    ; не сохранял, в снимок не попадал вовсе — и gate/restore из этой
+    ; точки выше отработать было не над чем: Apply() ничего не терял, а
+    ; терять было нечему СНАЧАЛА. Конверсия такого слота молча теряла
+    ; живое окно, хотя список слотов честно показывал его найденным.
+    posSnapFn := InStr(srcSlots, "static PermSnapshot() {")
+    Assert("2j: PermSnapshot найдена в src/Slots.ahk", posSnapFn > 0)
+    bodySnap := posSnapFn ? SubStr(srcSlots, posSnapFn, 500) : ""
+    Assert("2k: снимок видит окно через SlotWindow() — тот же путь, что и статус списка",
+        InStr(bodySnap, "if (hwnd := SlotWindow(A_Index))") > 0
+     && InStr(bodySnap, "bySlot[A_Index] := hwnd") > 0)
+    Assert("2l: голого s.window в снимке больше нет — не восстановился обратно",
+        InStr(bodySnap, "if s.window") = 0)
 }
 
 ; ---------------------------------------------------------------
@@ -1608,11 +1625,32 @@ if !FileExist(drawerPath) || !FileExist(slotsPath) {
     pSeed := InStr(src18, "SlotsSeedManaged() {")
     bodySeed := pSeed ? NoComments(SubStr(src18, pSeed, 900)) : ""
     Assert("18ae: SlotsSeedManaged считает геометрию тем же путём, что и Show(), но окно не двигает",
-        bodySeed != "" && InStr(bodySeed, "ResolveMonitor(a)") > 0 && InStr(bodySeed, "CaptureOrigin(hwnd, mi)") > 0
+        bodySeed != "" && InStr(bodySeed, "ResolveMonitorForExisting(a, hwnd)") > 0
+     && InStr(bodySeed, "CaptureOrigin(hwnd, mi)") > 0
      && InStr(bodySeed, "ComputeGeom(a, mi)") > 0
      && InStr(bodySeed, "WinMove") = 0 && InStr(bodySeed, "WinActivate") = 0)
     Assert("18af: уже managed окно SlotsSeedManaged не трогает",
         InStr(bodySeed, "WindowManaged(hwnd)") > 0)
+
+    ; --- ResolveMonitorForExisting: монитор уже стоящего окна, не курсора ---
+    ; До фикса засев брал ResolveMonitor(a) — курсор в момент СТАРТА
+    ; DRAWER, никак не связанный с тем, где уже висит окно постоянного
+    ; слота. Кромка вставала на случайный монитор, и первый реальный показ
+    ; уводил окно за ней, вместо чистого тумблера на месте (Р24, слот 3
+    ; GitHub Desktop). Явно заданный номер монитора эта подмена не трогает
+    ; — там решение уже принял пользователь.
+    pRme := InStr(src18, "ResolveMonitorForExisting(a, hwnd) {")
+    bodyRme := pRme ? NoComments(SubStr(src18, pRme, 900)) : ""
+    Assert("18aj: ResolveMonitorForExisting найдена в src/drawer.ahk",
+        pRme > 0)
+    Assert("18ak: явный номер монитора идёт мимо подмены, как решил пользователь",
+        InStr(bodyRme, "if (a.monitor != `"cursor`")") > 0
+     && InStr(bodyRme, "return ResolveMonitor(a)") > 0)
+    Assert("18al: monitor=cursor у уже стоящего окна решает площадь пересечения с монитором, не MouseGetPos",
+        InStr(bodyRme, "WinGetPos(") > 0 && InStr(bodyRme, "MonitorGetCount()") > 0
+     && InStr(bodyRme, "MouseGetPos") = 0)
+    Assert("18am: окно ни на одном мониторе (например, осталось припарковано от убитого процесса) — тот же откат на курсор",
+        StrSplit(bodyRme, "return ResolveMonitor(a)").Length = 3)
     ; Вызов при старте — отдельной строкой, а не сразу за Slots.Apply(
     ; bootConfig): state/handles ещё не объявлены в этой точке файла
     ; (они ниже, глобальными присваиваниями), и вызов раньше свалился бы.

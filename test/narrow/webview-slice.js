@@ -458,6 +458,44 @@
       await wait(() => q('slot-6').dataset.status === 'empty', 5000)
       post('smoke.slot6-empty')
 
+      // Регрессия на вторую причину, найденную в этом раунде: PermSnapshot()
+      // раньше клал в снимок только УЖЕ ЗАХВАЧЕННОЕ окно (s.window, который
+      // пишет лишь SlotCapture/Show), а "available" — окно, которое
+      // SlotWindow() нашёл заново, но никуда не записал, — в снимок не
+      // попадало вовсе. Конверсия отсюда молча теряла окно, хотя список
+      // слотов честно показывал его живым. Слот 6 к этому моменту снова
+      // динамический и пуст — делаем его постоянным ещё раз, третьей
+      // фикстурой, и конвертируем обратно в динамический СРАЗУ из
+      // "available", без промежуточного Save, который успел бы его
+      // захватить.
+      q('slot-6').click()
+      await wait(() => q('make-permanent'), 5000)
+      q('make-permanent').click()
+      await wait(() => q('edit-name'), 5000)
+      setText('edit-name', 'Converted six again')
+      setText('edit-executable', originalExe)
+      await apply(() => /Сохранено/.test(text('status')))
+      await wait(() => text('slot-6').includes('Converted six again'), 5000)
+
+      q('slot-6').click()
+      post('smoke.slot6-live2')
+      await wait(() => q('slot-6').dataset.status === 'available', 5000)
+      await wait(() => text('slot-title') === 'Slot six fixture', 5000)
+
+      q('make-dynamic').click()
+      await wait(() => !q('edit-name'), 5000)
+      await apply(() => /Сохранено/.test(text('status')))
+      await wait(() => text('slot-6').includes('Динамический'), 5000)
+      if (q('slot-6').dataset.status === 'empty') throw new Error('conversion-lost-window-from-available')
+      q('slot-6').click()
+      await wait(() => text('slot-title') === 'Slot six fixture', 5000)
+      post('smoke.available-conversion-kept')
+
+      post('smoke.slot6-live2-done')
+      q('slot-6').click()
+      await wait(() => q('slot-6').dataset.status === 'empty', 5000)
+      post('smoke.slot6-empty2')
+
       tab('General')
       await wait(() => !watching && q('blurCheckMs'), 5000)
 
