@@ -6,6 +6,11 @@
 // Вкладка General ходит этим путём целиком: все её поля читаются из
 // canonical, правятся в draft и уезжают одним settings.apply/ok. Slots
 // имеют отдельный config draft и отправляют изменения через slotEdits.
+//
+// Каналов, приносящих canonical, четыре: загрузка, Save, bind/release и
+// state из ошибки частичной записи. Порядок между ними и судьбу
+// черновиков задаёт canonical.ts — здесь только два входа, которые этим
+// правилам подчиняются: adopt (Save/загрузка) и absorb (всё остальное).
 
 import { reactive } from 'vue'
 import {
@@ -14,8 +19,9 @@ import {
   hasWebViewTransport,
   webViewTransport,
 } from './client'
+import { CanonicalGate, reconcileSlotDrafts } from './canonical'
 import { draftFromState, draftToWire, type GeneralDraft } from './general'
-import type { SettingsState } from './protocol'
+import type { SettingsState, SlotNumber } from './protocol'
 import { slotDraftsFromState, slotEditsToWire, type SlotDrafts } from './slotDraft'
 
 type Status = 'idle' | 'loading' | 'ready' | 'saving' | 'error'
@@ -43,6 +49,9 @@ export const settings = reactive({
 
 let client: SettingsClient | null = null
 
+// Один на окно: порядок ответов общий для всех каналов.
+const gate = new CanonicalGate()
+
 export function settingsClient(): SettingsClient | null {
   if (client) return client
   if (!hasWebViewTransport()) return null
@@ -66,12 +75,14 @@ export async function loadSettings(): Promise<void> {
   // должен фронтенд. Без этого закрытие ждало бы таймаута моста.
   api.on('settings.closeRequested', () => void cancelSettings())
   api.on('settings.closed', () => { settings.closed = true; api.dispose() })
+  const ticket = gate.issue()
   try {
-    adopt(await api.request('settings.getInitialState', {}))
+    const state = await api.request('settings.getInitialState', {})
+    if (gate.acceptSave(ticket)) adopt(state)
     settings.status = 'ready'
     settings.message = ''
   } catch (e) {
-    fail(e)
+    fail(e, ticket)
   }
 }
 
@@ -99,7 +110,7 @@ export async function cancelSettings(discard = false): Promise<void> {
     const result = await api.request('settings.cancel', payload)
     settings.confirmDiscard = !result.closed
   } catch (e) {
-    fail(e)
+    fail(e, gate.issue())
   }
 }
 
@@ -115,13 +126,15 @@ async function save(action: 'settings.apply' | 'settings.ok'): Promise<void> {
   settings.bad = false
   settings.field = ''
   settings.confirmDiscard = false
+  const ticket = gate.issue()
   try {
     const result = await api.request(action, { draft: buildDraft() })
     // Канонический state приходит от AHK и заменяет baseline целиком:
     // Vue не вычисляет, что применилось, — он это узнаёт. Здесь же
     // черновик перестаёт быть грязным, потому что заводится заново из
-    // того, что теперь действует.
-    adopt(result.state)
+    // того, что теперь действует. Снимок сделан после записи, поэтому
+    // он авторитетен и отменяет все ответы, выданные до Save.
+    if (gate.acceptSave(ticket)) adopt(result.state)
     settings.diagnostics = result.diagnostics ?? []
     settings.restartRequired = result.restartRequiredFields ?? []
     settings.status = 'ready'
@@ -129,7 +142,7 @@ async function save(action: 'settings.apply' | 'settings.ok'): Promise<void> {
       ? `Сохранено. Изменённых строк: ${result.changedFields}`
       : 'Менять нечего: всё уже так'
   } catch (e) {
-    fail(e)
+    fail(e, ticket)
   }
 }
 
@@ -137,7 +150,7 @@ function buildDraft() {
   return { general: draftToWire(settings.draft!), slotEdits: slotEditsToWire(settings.slotDrafts, settings.canonical!) }
 }
 
-export async function pickSlot(number: import('./protocol').SlotNumber, kind: 'exe' | 'window'): Promise<void> {
+export async function pickSlot(number: SlotNumber, kind: 'exe' | 'window'): Promise<void> {
   const api = settingsClient()
   const draft = settings.slotDrafts[number]
   if (!api || !draft || settings.pickerActive || settings.closed) return
@@ -158,56 +171,74 @@ export async function pickSlot(number: import('./protocol').SlotNumber, kind: 'e
       }
     }
   } catch (e) {
-    if (!settings.closed) fail(e)
+    if (!settings.closed) fail(e, gate.issue())
   } finally {
     settings.pickerActive = false
   }
 }
 
-export async function bindSlot(number: import('./protocol').SlotNumber): Promise<void> {
+export async function bindSlot(number: SlotNumber): Promise<void> {
+  await slotRuntime('slot.bind', number, `Слот ${number} привязан к активному окну`)
+}
+
+export async function releaseSlot(number: SlotNumber): Promise<void> {
+  await slotRuntime('slot.release', number, `Слот ${number} освобождён`)
+}
+
+// bind/release меняют рантайм, но не config: они возвращают снимок,
+// снятый до любого последующего Save. Отсюда и правила — номер ответа
+// решает, применять ли его, а черновики согласуются, а не пересобираются:
+// несохранённая правка постоянного слота не должна исчезать от того, что
+// человек привязал окно к соседнему.
+async function slotRuntime(
+  action: 'slot.bind' | 'slot.release',
+  number: SlotNumber,
+  done: string,
+): Promise<void> {
   const api = settingsClient()
   if (!api || settings.status === 'saving' || settings.pickerActive || settings.closed) return
   settings.bad = false
   settings.field = ''
+  const ticket = gate.issue()
   try {
-    const result = await api.request('slot.bind', { slot: number })
-    if (result.state) settings.canonical = result.state
-    settings.message = `Слот ${number} привязан к активному окну`
+    const result = await api.request(action, { slot: number })
+    if (result.state && gate.acceptSide(ticket)) absorb(result.state)
+    settings.message = done
   } catch (e) {
-    fail(e)
+    fail(e, ticket)
   }
 }
 
-export async function releaseSlot(number: import('./protocol').SlotNumber): Promise<void> {
-  const api = settingsClient()
-  if (!api || settings.status === 'saving' || settings.pickerActive || settings.closed) return
-  settings.bad = false
-  settings.field = ''
-  try {
-    const result = await api.request('slot.release', { slot: number })
-    if (result.state) settings.canonical = result.state
-    settings.message = `Слот ${number} освобождён`
-  } catch (e) {
-    fail(e)
-  }
-}
-
+// Успешный Save и первая загрузка: применённое состояние становится
+// baseline целиком, черновики заводятся заново из него. Всё, что было
+// набрано и не уехало, здесь и заканчивается — потому что уехало.
 function adopt(state: SettingsState): void {
   settings.canonical = state
   settings.draft = draftFromState(state.general)
   settings.slotDrafts = slotDraftsFromState(state)
 }
 
-function fail(e: unknown): void {
+// Канонический state пришёл мимо Save: baseline заменяется, черновики
+// согласуются по правилу reconcileSlotDrafts. Черновик General не
+// трогаем вовсе — у него нет рода, который мог бы смениться, и терять
+// набранное не за что.
+function absorb(state: SettingsState): void {
+  settings.canonical = state
+  settings.slotDrafts = reconcileSlotDrafts(settings.slotDrafts, state)
+}
+
+function fail(e: unknown, ticket: number): void {
   settings.status = 'error'
   settings.bad = true
   if (e instanceof ProtocolError) {
     settings.message = e.message
     settings.field = e.field ?? ''
     // Частичная запись с успешным reload приносит актуальный canonical:
-    // baseline надо заменить, а draft — сохранить. Поэтому здесь не
-    // adopt(): человек не должен второй раз набирать то, что не уехало.
-    if (e.state) settings.canonical = e.state
+    // baseline надо заменить, а draft — сохранить. Поэтому здесь absorb,
+    // а не adopt: человек не должен второй раз набирать то, что не
+    // уехало. Номер ответа проверяется так же, как у bind/release: этот
+    // снимок тоже мог устареть, пока ошибка ехала.
+    if (e.state && gate.acceptSide(ticket)) absorb(e.state)
     return
   }
   settings.field = ''

@@ -1,2 +1,4 @@
 node_modules/
 dist/
+# сборка тестов: esbuild кладёт сюда бандл для node --test
+.cache/

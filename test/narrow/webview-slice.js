@@ -315,6 +315,10 @@
       await wait(() => watching && q('slot-9'), 5000)
       setText('edit-name', 'Saved by OK')
       post('smoke.done')
+      // Единственный клик, который раньше шёл без ожидания: у кнопки в
+      // этот момент могло быть ещё disabled, и тогда click() молча не
+      // делает ничего — окно остаётся открытым, а драйвер уже отчитался.
+      await wait(() => q('ok') && !q('ok').disabled, 5000)
       q('ok').click()
     } catch (e) {
       post('smoke.failed:' + String((e && e.message) || e).slice(0, 60))

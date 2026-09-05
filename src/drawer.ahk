@@ -163,7 +163,6 @@ setUI     := 0       ; его контролы и значения, с кото�
 serviceWindows := Map()   ; hwnd своего окна -> true, пока оно живо
 foreWnd   := WinExist("A")     ; текущее окно переднего плана
 lastFore  := 0                 ; окно, которое было активно до него
-slotActiveWindowOverride := 0  ; тестовый перехват активного окна для сред без GUI-фокуса
 
 ; Хоткеи ставятся через клавиатурный хук ($). RegisterHotkey отдаёт
 ; комбинацию первому, кто её занял: если предыдущий экземпляр ещё не
@@ -739,9 +738,7 @@ AppWindow(n, a) {
 ; Окно, которое назначается в слот, — активное сейчас. Рабочий стол и
 ; панель задач не берём: их парковка сломала бы оболочку Windows.
 PickActive() {
-    global slotActiveWindowOverride
-    hwnd := (slotActiveWindowOverride ? slotActiveWindowOverride : WinExist("A"))
-    if !hwnd
+    if !(hwnd := WinExist("A"))
         return 0
     if IsServiceWindow(hwnd)     ; собственное окно настроек — не окно слота (Р18)
         return 0

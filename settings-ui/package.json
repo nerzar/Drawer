@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "esbuild test/canonical.test.ts --bundle --platform=node --format=esm --outfile=.cache/canonical.test.mjs && node --test .cache/canonical.test.mjs"
   },
   "dependencies": {
     "vue": "^3.5.42"

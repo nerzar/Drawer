@@ -1000,6 +1000,23 @@ if FileExist(drawerPath) {
      && InStr(srcBridge, 'outcome := this._port.Release(Request.payload)') > 0)
     Assert("13s: slot.bind и slot.release блокируются во время picker",
         InStr(srcBridge, '"slot.bind", "slot.release"') > 0)
+
+    ; Подмена активного окна нужна только тесту, и жить она обязана в
+    ; харнессе: харнесс правит копию drawer.ahk, а отгружаемый exe не
+    ; должен нести глобал, которым обходится выбор целевого окна.
+    Assert("14a: в production нет подмены активного окна",
+        InStr(src13, "slotActiveWindowOverride") = 0)
+    Assert('14b: PickActive берёт окно у WinExist("A") напрямую',
+        InStr(src13, 'PickActive() {`r`n    if !(hwnd := WinExist("A"))') > 0)
+
+    harnessPath := A_ScriptDir "\webview-slice.ps1"
+    if FileExist(harnessPath) {
+        srcHarness := FileRead(harnessPath, "UTF-8")
+        Assert("14c: подмена активного окна живёт в харнессе",
+            InStr(srcHarness, "smokeActiveWindow ? smokeActiveWindow : WinExist") > 0)
+        Assert("14d: харнесс падает, если якорь PickActive уехал",
+            InStr(srcHarness, "Не нашёл якорь PickActive") > 0)
+    }
 }
 
 ; ---------------------------------------------------------------

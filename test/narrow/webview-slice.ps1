@@ -53,6 +53,20 @@ try {
     $src = [IO.File]::ReadAllText((Join-Path $repo "src\drawer.ahk"))
     if ($src.IndexOf($marker) -lt 0) { throw "Не нашёл пункт трея WebView2 — копия для smoke не собрана" }
 
+    # Подмена активного окна живёт ЗДЕСЬ, в копии, а не в production:
+    # bind обязан брать окно у WinExist("A"), и держать в отгружаемом exe
+    # глобал, который это обходит, нельзя. Все остальные проверки
+    # PickActive (служебное окно, класс оболочки, размер, заголовок)
+    # остаются на месте — подменяется только источник hwnd, иначе тест
+    # проверял бы более слабый путь, чем работает у пользователя.
+    $pickHead = 'PickActive() {'
+    $pickLine = '    if !(hwnd := WinExist("A"))'
+    foreach ($anchor in @($pickHead, $pickLine)) {
+        if ($src.IndexOf($anchor) -lt 0) { throw "Не нашёл якорь PickActive для подмены активного окна: $anchor" }
+    }
+    $src = $src.Replace($pickHead, $pickHead + "`r`n    global smokeActiveWindow")
+    $src = $src.Replace($pickLine, '    if !(hwnd := (smokeActiveWindow ? smokeActiveWindow : WinExist("A")))')
+
     $inject = @'
 
 ; ---- инструментация узкого smoke (только в этой копии исходника) ----
@@ -60,6 +74,7 @@ smokeJs := FileRead(A_ScriptDir "\webview-slice.js", "UTF-8")
 smokeTries := 0
 smokeWaited := 0
 smokeNativeDone := false
+smokeActiveWindow := 0
 SetTimer(SmokeOpen, -800)
 SetTimer(SmokeDrive, 700)
 SetTimer(SmokeWatch, 500)
@@ -90,14 +105,14 @@ SmokeSlotWindow() {
         fixture.Destroy()
         phase := 5
     } else if (phase = 5 && InStr(log, "smoke.bind-target")) {
-        global slotActiveWindowOverride
+        global smokeActiveWindow
         fixture := Gui(, "Bind fixture window")
         fixture.Show("w300 h240 NoActivate")
-        slotActiveWindowOverride := fixture.Hwnd
+        smokeActiveWindow := fixture.Hwnd
         phase := 6
     } else if (phase = 6 && InStr(log, "smoke.bind-release-done")) {
-        global slotActiveWindowOverride
-        slotActiveWindowOverride := 0
+        global smokeActiveWindow
+        smokeActiveWindow := 0
         fixture.Destroy()
         SetTimer(SmokeSlotWindow, 0)
     }
