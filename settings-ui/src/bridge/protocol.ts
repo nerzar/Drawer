@@ -126,6 +126,14 @@ export type RequestMap = {
     payload: { enabled: boolean }
     result: { enabled: boolean }
   }
+  'slot.bind': {
+    payload: { slot: SlotNumber }
+    result: { slot: SlotNumber; status: SlotStatus; state: SettingsState }
+  }
+  'slot.release': {
+    payload: { slot: SlotNumber }
+    result: { slot: SlotNumber; status: SlotStatus; state: SettingsState }
+  }
   'settings.getInitialState': {
     payload: Record<string, never>
     result: SettingsState

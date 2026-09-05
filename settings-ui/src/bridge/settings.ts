@@ -164,6 +164,34 @@ export async function pickSlot(number: import('./protocol').SlotNumber, kind: 'e
   }
 }
 
+export async function bindSlot(number: import('./protocol').SlotNumber): Promise<void> {
+  const api = settingsClient()
+  if (!api || settings.status === 'saving' || settings.pickerActive || settings.closed) return
+  settings.bad = false
+  settings.field = ''
+  try {
+    const result = await api.request('slot.bind', { slot: number })
+    if (result.state) settings.canonical = result.state
+    settings.message = `Слот ${number} привязан к активному окну`
+  } catch (e) {
+    fail(e)
+  }
+}
+
+export async function releaseSlot(number: import('./protocol').SlotNumber): Promise<void> {
+  const api = settingsClient()
+  if (!api || settings.status === 'saving' || settings.pickerActive || settings.closed) return
+  settings.bad = false
+  settings.field = ''
+  try {
+    const result = await api.request('slot.release', { slot: number })
+    if (result.state) settings.canonical = result.state
+    settings.message = `Слот ${number} освобождён`
+  } catch (e) {
+    fail(e)
+  }
+}
+
 function adopt(state: SettingsState): void {
   settings.canonical = state
   settings.draft = draftFromState(state.general)

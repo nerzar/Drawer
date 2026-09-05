@@ -761,7 +761,14 @@ wire: иначе «300abc» стало бы 300 ещё до валидации, 
   после возврата picker. Native Close также отложен и защищает write-back.
   Результаты обновляют только slot draft, cancel не меняет его; picker RPC
   ждёт решения пользователя без обычного 10-секундного таймаута.
-  `slot.bind` и `slot.release` остаются `unsupported_action` вне picker.
+- `slot.bind` и `slot.release` подключены end-to-end через единый Slot/runtime API
+  (`SlotBind(n)` и `SlotRelease(n)`). Второй путь исполнения не создаётся: хоткеи
+  и WebView-порт используют одни и те же функции ядра. HWND не утекает во фронтенд:
+  ответы возвращают только номер слота, структурированный `status` и канонический
+  `state`. Операции защищены правилами busy (picker, saving, closed) и возвращают
+  структурированные ошибки (`validation_error`, `busy`, `slot_is_permanent`,
+  `no_eligible_active_window`, `not_bound`). При привязке/освобождении канонический
+  state обновляет baseline на фронтенде.
 - `settings.cancel` получил `discardChanges` в payload. Разделение труда
   из ADR сохранено: сравнивает draft с применённым состоянием порт (он
   один знает, что действует), спрашивает человека WebView. Ответ

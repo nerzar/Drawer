@@ -89,8 +89,10 @@ class SettingsJsonBridge {
                 ; Leave WebMessageReceived before entering a native modal loop.
                 SetTimer(ObjBindMethod(this, "_RunPicker", Request), -1)
                 return
-            case "slot.bind", "slot.release":
-                outcome := this._port.Unsupported(action)
+            case "slot.bind":
+                outcome := this._port.Bind(Request.payload)
+            case "slot.release":
+                outcome := this._port.Release(Request.payload)
             default:
                 this._SendError(Request, "unsupported_action", "Неизвестное действие: " action, false)
                 return

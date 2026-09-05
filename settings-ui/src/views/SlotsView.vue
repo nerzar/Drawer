@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { settings, pickSlot } from '../bridge/settings'
+import { settings, pickSlot, bindSlot, releaseSlot } from '../bridge/settings'
 import { useSlotStatus, slotBehavior, slotLabel, monitorLabel, edgeLabels, statusLabels } from '../bridge/slots'
 
 const selectedNumber = ref(1)
@@ -20,7 +20,7 @@ const bad = (key) => settings.field === `slots.${selectedNumber.value}.${key}`
 <template>
   <div class="content">
     <h1 class="page-title">Слоты Drawer</h1>
-    <p class="page-sub">Настройки постоянных слотов и состояние окон. Динамические слоты — только просмотр.</p>
+    <p class="page-sub">Настройки постоянных слотов и состояние окон. Для динамических слотов доступно назначение и освобождение.</p>
     <p v-if="watchError" role="alert">Обновление статусов недоступно: {{ watchError }}</p>
     <p v-if="!settings.canonical">{{ settings.message || 'Читаем настройки…' }}</p>
     <div v-else class="split" data-testid="slots">
@@ -79,6 +79,14 @@ const bad = (key) => settings.field === `slots.${selectedNumber.value}.${key}`
           <p class="page-sub">Хоткей фокуса применяется после перезапуска.</p>
         </fieldset>
         <template v-else>
+        <div class="row" style="margin-bottom: 12px">
+          <button class="btn-primary-sm" data-testid="bind-slot"
+            :disabled="settings.status === 'saving' || settings.pickerActive"
+            @click="bindSlot(selectedNumber)">Назначить активное окно</button>
+          <button class="btn-primary-sm" data-testid="release-slot"
+            :disabled="settings.status === 'saving' || settings.pickerActive || selectedSlot.status.state === 'empty'"
+            @click="releaseSlot(selectedNumber)">Освободить окно</button>
+        </div>
         <div class="detail-row"><div class="l">Монитор</div><div class="v">{{ monitorLabel(behavior.monitor) }}</div></div>
         <div class="detail-row"><div class="l">Край</div><div class="v">{{ edgeLabels[behavior.edge] }}</div></div>
         <div class="detail-row"><div class="l">Размер (%)</div><div class="v" data-testid="slot-width">{{ behavior.widthPercent }}</div></div>

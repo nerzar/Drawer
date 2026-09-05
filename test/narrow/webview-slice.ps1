@@ -88,6 +88,17 @@ SmokeSlotWindow() {
         phase := 4
     } else if (phase = 4 && InStr(log, "smoke.slots-done")) {
         fixture.Destroy()
+        phase := 5
+    } else if (phase = 5 && InStr(log, "smoke.bind-target")) {
+        global slotActiveWindowOverride
+        fixture := Gui(, "Bind fixture window")
+        fixture.Show("w300 h240 NoActivate")
+        slotActiveWindowOverride := fixture.Hwnd
+        phase := 6
+    } else if (phase = 6 && InStr(log, "smoke.bind-release-done")) {
+        global slotActiveWindowOverride
+        slotActiveWindowOverride := 0
+        fixture.Destroy()
         SetTimer(SmokeSlotWindow, 0)
     }
 }
@@ -219,6 +230,7 @@ SmokeWatch() {
     Check "1e: watcher enabled and disabled" (($log -match 'slot-watch enabled=1') -and ($log -match 'slot-watch enabled=0'))
     Check "1f: slot draft, dirty-close and validation" ($log -match 'request smoke\.slot-validation')
     Check "1g: slot Apply canonical baseline and no-op" ($log -match 'request smoke\.slot-saved')
+    Check "1h: slot.bind and slot.release end-to-end with canonical state" ($log -match 'request smoke\.bind-release-verified')
 
     Check "2a: Apply дошёл до backend" ($log -match 'request settings\.apply')
     Check "2b: пустое поле вернулось structured validation_error" ($log -match 'response settings\.apply ok=false code=validation_error')

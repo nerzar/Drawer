@@ -306,8 +306,8 @@ bridge, после него выполняется C6 native picker parity fix.
 ## Ближайшие задачи
 
 1. C1–C5, упаковка, General и read-only Slots с live status выполнены.
-   Permanent slotEdits, production picker и C6 выполнены; добавить bind/release
-   и conversion, проверить S4 целевыми сценариями.
+   Permanent slotEdits, production picker, C6 и bind/release выполнены; добавить conversion,
+   проверить S4 целевыми сценариями.
 3. Завершить структурное разделение, затем перейти к произвольным слотам
    и новым UI-командам.
 4. Закрывать долг тестового стенда из `docs/05-план-работ.md` отдельно от

@@ -15,7 +15,7 @@
 ; правит native ([dynamic] width/edge/monitor/activateOnShow/hideOnBlur и
 ; [general] handles/animMs/animSteps/blurMs/accent), а также существующие
 ; permanent Slots через SettingsSlotsPlan и общий native picker.
-; Bind/release отвечают unsupported_action; conversion отклоняется в slotEdits.
+; Bind/release подключаются через SlotBind/SlotRelease к рантайму; conversion отклоняется в slotEdits.
 
 class DrawerSettingsPort {
     static PROTOCOL_VERSION := 1
@@ -58,6 +58,51 @@ class DrawerSettingsPort {
         Loop 9
             statuses[A_Index] := this._StatusDto(SlotStatus(A_Index))
         return statuses
+    }
+
+    Bind(payload) {
+        slot := this._SlotNumberIn(payload)
+        if !slot
+            return SettingsBridgeError("invalid_request", "Номер слота должен быть 1…9", false)
+        return this.BindActive(slot)
+    }
+
+    Release(payload) {
+        slot := this._SlotNumberIn(payload)
+        if !slot
+            return SettingsBridgeError("invalid_request", "Номер слота должен быть 1…9", false)
+        return this.ReleaseDynamic(slot)
+    }
+
+    BindActive(slotNumber) {
+        res := SlotBind(slotNumber)
+        if !res.ok
+            return SettingsBridgeError(res.code, res.message, false)
+        return SettingsBridgeOk(Map(
+            "slot", slotNumber,
+            "status", this._StatusDto(SlotStatus(slotNumber)),
+            "state", this.StateDto()
+        ))
+    }
+
+    ReleaseDynamic(slotNumber) {
+        res := SlotRelease(slotNumber)
+        if !res.ok
+            return SettingsBridgeError(res.code, res.message, false)
+        return SettingsBridgeOk(Map(
+            "slot", slotNumber,
+            "status", this._StatusDto(SlotStatus(slotNumber)),
+            "state", this.StateDto()
+        ))
+    }
+
+    _SlotNumberIn(payload) {
+        if !(payload is Map)
+            return 0
+        slot := JsonGet(payload, "slot", 0)
+        if !(slot is Integer) || slot < 1 || slot > 9
+            return 0
+        return Integer(slot)
     }
 
     Apply(payload) {

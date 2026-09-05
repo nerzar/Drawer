@@ -14,7 +14,7 @@
   let initialResponses = 0
   let statusEvents = 0
   let watching = false
-  let canonical
+  const pending = new Map()
   window.chrome.webview.addEventListener('message', ({ data }) => {
     if (typeof data === 'string') data = JSON.parse(data)
     if (data.type === 'response' && data.action === 'settings.getInitialState' && data.ok) {
@@ -23,6 +23,10 @@
     }
     if (data.type === 'event' && data.event === 'slot.statusChanged') statusEvents++
     if (data.type === 'response' && data.action === 'slot.watchStatus' && data.ok) watching = data.result.enabled
+    if (pending.has(data.id)) {
+      pending.get(data.id)(data)
+      pending.delete(data.id)
+    }
   })
   const post = (action) =>
     window.chrome.webview.postMessage({
@@ -31,16 +35,27 @@
       action,
       payload: {},
     })
+  const rpc = (action, payload = {}) =>
+    new Promise((resolve) => {
+      const id = 'smoke-rpc-' + ++seq
+      pending.set(id, resolve)
+      window.chrome.webview.postMessage({
+        type: 'request',
+        id,
+        action,
+        payload,
+      })
+    })
 
   const q = (id) => document.querySelector('[data-testid="' + id + '"]')
 
   const wait = (fn, ms) =>
     new Promise((ok, no) => {
       const t0 = Date.now()
-      const tick = () => {
+      const tick = async () => {
         let v = false
         try {
-          v = fn()
+          v = await fn()
         } catch (e) {
           v = false
         }
@@ -148,8 +163,59 @@
       await wait(() => !watching && q('blurCheckMs'), 5000)
       setText('blurCheckMs', '250')
       post('smoke.slots-done')
-      // Slot-only dirty-close survives tab changes and invalid drafts.
+
+      // Bind and release guards and live operations
       tab('Slots')
+      await wait(() => watching && q('slot-4'), 5000)
+      q('slot-4').click()
+      await wait(() => q('bind-slot'), 5000)
+      if (!q('release-slot').disabled) throw new Error('release-should-be-disabled')
+
+      const badBind = await rpc('slot.bind', { slot: 0 })
+      if (badBind.ok || badBind.error?.code !== 'invalid_request') throw new Error('bind-invalid-slot')
+
+      const permBind = await rpc('slot.bind', { slot: 1 })
+      if (permBind.ok || permBind.error?.code !== 'slot_is_permanent') throw new Error('bind-permanent-slot')
+
+      const badRelease = await rpc('slot.release', { slot: 10 })
+      if (badRelease.ok || badRelease.error?.code !== 'invalid_request') throw new Error('release-invalid-slot')
+
+      const permRelease = await rpc('slot.release', { slot: 1 })
+      if (permRelease.ok || permRelease.error?.code !== 'slot_is_permanent') throw new Error('release-permanent-slot')
+
+      const emptyRelease = await rpc('slot.release', { slot: 4 })
+      if (emptyRelease.ok || emptyRelease.error?.code !== 'not_bound') throw new Error('release-empty-slot')
+
+      // With no eligible active window, dynamic slot returns no_eligible_active_window
+      q('bind-slot').click()
+      await wait(() => document.body.innerText.includes('не годится для ящика'), 5000)
+
+      // Activate external fixture window
+      post('smoke.bind-target')
+      await wait(async () => {
+        q('bind-slot').click()
+        await wait(() => q('slot-4').dataset.status === 'available', 500).catch(() => {})
+        return q('slot-4').dataset.status === 'available'
+      }, 5000)
+
+      await wait(() => text('slot-title') === 'Bind fixture window', 5000)
+      if (q('release-slot').disabled) throw new Error('release-button-disabled')
+
+      // Release slot 4 via UI button click
+      q('release-slot').click()
+      await wait(() => q('slot-4').dataset.status === 'empty', 5000)
+      await wait(() => text('slot-title') === '—', 5000)
+      if (!q('release-slot').disabled) throw new Error('release-button-still-enabled')
+
+      // Release again returns not_bound
+      const relAgain = await rpc('slot.release', { slot: 4 })
+      if (relAgain.ok || relAgain.error?.code !== 'not_bound') throw new Error('release-again-not-bound')
+
+      post('smoke.bind-release-done')
+      post('smoke.bind-release-verified')
+
+      // Slot-only dirty-close survives tab changes and invalid drafts.
+      q('slot-1').click()
       await wait(() => q('edit-name'), 5000)
       q('cancel').click()
       await wait(() => q('confirm'), 5000)

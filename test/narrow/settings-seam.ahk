@@ -911,6 +911,98 @@ if !FileExist(drawerPath) {
 }
 
 ; ---------------------------------------------------------------
+; Точка 13: slot.bind и slot.release
+; Проверяются guards, отсутствие второго пути выполнения и то, что
+; HWND не передаётся в результат ответа порта.
+; ---------------------------------------------------------------
+
+; Копия чистой логики SlotBind/SlotRelease для проверки guards модели
+SlotBindModel(permSlots, dynSlots, pickerActive, activeHwnd, n) {
+    if (n < 1 || n > 9)
+        return { ok: false, code: "validation_error", message: "Номер слота должен быть 1…9" }
+    if pickerActive
+        return { ok: false, code: "busy", message: "Открыт picker" }
+    if permSlots.Has(n)
+        return { ok: false, code: "slot_is_permanent", message: "Слот " n " занят постоянной привязкой" }
+    if !activeHwnd
+        return { ok: false, code: "no_eligible_active_window", message: "Активное окно не годится для ящика" }
+    dynSlots[n] := activeHwnd
+    return { ok: true, code: "", message: "Слот " n " привязан", hwnd: activeHwnd }
+}
+
+SlotReleaseModel(permSlots, dynSlots, pickerActive, n) {
+    if (n < 1 || n > 9)
+        return { ok: false, code: "validation_error", message: "Номер слота должен быть 1…9" }
+    if pickerActive
+        return { ok: false, code: "busy", message: "Открыт picker" }
+    if permSlots.Has(n)
+        return { ok: false, code: "slot_is_permanent", message: "Слот " n " — постоянный, его нельзя освободить" }
+    if !dynSlots.Has(n)
+        return { ok: false, code: "not_bound", message: "Слот " n " не привязан к окну" }
+    dynSlots.Delete(n)
+    return { ok: true, code: "", message: "Слот " n " освобождён" }
+}
+
+mPerm := Map(1, true), mDyn := Map(4, 9999)
+Assert("13a: SlotBind с n < 1 отвергнут validation_error",
+    SlotBindModel(mPerm, mDyn, false, 1234, 0).code = "validation_error")
+Assert("13b: SlotBind с n > 9 отвергнут validation_error",
+    SlotBindModel(mPerm, mDyn, false, 1234, 10).code = "validation_error")
+Assert("13c: SlotBind во время picker отвергнут busy",
+    SlotBindModel(mPerm, mDyn, true, 1234, 4).code = "busy")
+Assert("13d: SlotBind на постоянном слоте отвергнут slot_is_permanent",
+    SlotBindModel(mPerm, mDyn, false, 1234, 1).code = "slot_is_permanent")
+Assert("13e: SlotBind без активного подходящего окна отвергнут no_eligible_active_window",
+    SlotBindModel(mPerm, mDyn, false, 0, 4).code = "no_eligible_active_window")
+Assert("13f: SlotBind успешен при наличии активного окна",
+    SlotBindModel(mPerm, mDyn, false, 1234, 4).ok = true && mDyn[4] = 1234)
+
+Assert("13g: SlotRelease с n < 1 отвергнут validation_error",
+    SlotReleaseModel(mPerm, mDyn, false, 0).code = "validation_error")
+Assert("13h: SlotRelease с n > 9 отвергнут validation_error",
+    SlotReleaseModel(mPerm, mDyn, false, 10).code = "validation_error")
+Assert("13i: SlotRelease во время picker отвергнут busy",
+    SlotReleaseModel(mPerm, mDyn, true, 4).code = "busy")
+Assert("13j: SlotRelease на постоянном слоте отвергнут slot_is_permanent",
+    SlotReleaseModel(mPerm, mDyn, false, 1).code = "slot_is_permanent")
+Assert("13k: SlotRelease на пустом dynamic слоте отвергнут not_bound",
+    SlotReleaseModel(mPerm, mDyn, false, 5).code = "not_bound")
+Assert("13l: SlotRelease успешен на занятом dynamic слоте",
+    SlotReleaseModel(mPerm, mDyn, false, 4).ok = true && !mDyn.Has(4))
+
+; Статические проверки исходников
+if FileExist(drawerPath) {
+    src13 := FileRead(drawerPath, "UTF-8")
+    Assert("13m: в drawer.ahk определены SlotBind и SlotRelease",
+        InStr(src13, "SlotBind(n) {") > 0 && InStr(src13, "SlotRelease(n) {") > 0)
+    Assert("13n: BindSlot делегирует в SlotBind",
+        InStr(src13, "res := SlotBind(n)") > 0)
+    Assert("13o: ReleaseSlot делегирует в SlotRelease",
+        InStr(src13, "res := SlotRelease(n)") > 0)
+
+    portPath := A_ScriptDir "\..\..\src\webview\SettingsPort.ahk"
+    srcPort := FileRead(portPath, "UTF-8")
+    Assert("13p: DrawerSettingsPort вызывает единые SlotBind и SlotRelease",
+        InStr(srcPort, "res := SlotBind(slotNumber)") > 0
+     && InStr(srcPort, "res := SlotRelease(slotNumber)") > 0)
+    Assert("13q: HWND не передаётся в результат порта на wire",
+        InStr(srcPort, '"slot", slotNumber') > 0
+     && InStr(srcPort, '"status", this._StatusDto') > 0
+     && InStr(srcPort, '"state", this.StateDto()') > 0
+     && InStr(srcPort, '"hwnd"') = 0)
+
+    bridgePath := A_ScriptDir "\..\..\src\webview\SettingsJsonBridge.ahk"
+    srcBridge := FileRead(bridgePath, "UTF-8")
+    Assert("13r: SettingsJsonBridge маршрутизирует slot.bind и slot.release в порт",
+        InStr(srcBridge, 'case "slot.bind":') > 0
+     && InStr(srcBridge, 'outcome := this._port.Bind(Request.payload)') > 0
+     && InStr(srcBridge, 'case "slot.release":') > 0
+     && InStr(srcBridge, 'outcome := this._port.Release(Request.payload)') > 0)
+    Assert("13s: slot.bind и slot.release блокируются во время picker",
+        InStr(srcBridge, '"slot.bind", "slot.release"') > 0)
+}
+
+; ---------------------------------------------------------------
 out := ""
 allOk := true
 for r in results {

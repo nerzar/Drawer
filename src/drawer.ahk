@@ -163,6 +163,7 @@ setUI     := 0       ; его контролы и значения, с кото�
 serviceWindows := Map()   ; hwnd своего окна -> true, пока оно живо
 foreWnd   := WinExist("A")     ; текущее окно переднего плана
 lastFore  := 0                 ; окно, которое было активно до него
+slotActiveWindowOverride := 0  ; тестовый перехват активного окна для сред без GUI-фокуса
 
 ; Хоткеи ставятся через клавиатурный хук ($). RegisterHotkey отдаёт
 ; комбинацию первому, кто её занял: если предыдущий экземпляр ещё не
@@ -545,23 +546,68 @@ ToggleSlot(n) {
     ToggleWindow(hwnd, SlotCfg(n))
 }
 
-; Назначение слота: запоминается дескриптор конкретного окна, а не
-; приложение. Постоянный слот перезаписать нельзя — иначе настройка из
-; файла молча потерялась бы до перезапуска.
-BindSlot(n) {
+; Связать активное подходящее окно с динамическим слотом.
+; Возвращает structured result: { ok, code, message, hwnd, title }.
+; Единая точка связывания для хоткея и WebView-порта.
+SlotBind(n) {
     global permSlots, dynSlots
-    if permSlots.Has(n) {
-        Notify("Слот " n " занят постоянной привязкой: " PermApp(n).name, "Ящик", 2)
-        return
-    }
-    if !(hwnd := PickActive()) {
-        Notify("Активное окно не годится для ящика", "Ящик", 2)
-        return
-    }
+    if (n < 1 || n > 9)
+        return { ok: false, code: "validation_error", message: "Номер слота должен быть 1…9", hwnd: 0, title: "" }
+    if SettingsPickerState().active
+        return { ok: false, code: "busy", message: "Открыт picker", hwnd: 0, title: "" }
+    if permSlots.Has(n)
+        return { ok: false, code: "slot_is_permanent",
+                 message: "Слот " n " занят постоянной привязкой: " PermApp(n).name, hwnd: 0, title: "" }
+    if !(hwnd := PickActive())
+        return { ok: false, code: "no_eligible_active_window",
+                 message: "Активное окно не годится для ящика", hwnd: 0, title: "" }
     if (dynSlots.Has(n) && dynSlots[n] != hwnd)
         Release(dynSlots[n])          ; прежнее окно возвращаем на место
     dynSlots[n] := hwnd
-    Notify("Слот " n " → " WinGetTitle("ahk_id " hwnd), "Ящик", 1)
+    title := WinGetTitle("ahk_id " hwnd)
+    return { ok: true, code: "", message: "Слот " n " → " title, hwnd: hwnd, title: title }
+}
+
+; Освободить динамический слот: вернуть окно на исходное место, забыть о
+; привязке и обновить кромки.
+; Единая точка освобождения для хоткея и WebView-порта.
+SlotRelease(n) {
+    global permSlots, dynSlots
+    if (n < 1 || n > 9)
+        return { ok: false, code: "validation_error", message: "Номер слота должен быть 1…9", hwnd: 0 }
+    if SettingsPickerState().active
+        return { ok: false, code: "busy", message: "Открыт picker", hwnd: 0 }
+    if permSlots.Has(n)
+        return { ok: false, code: "slot_is_permanent",
+                 message: "Слот " n " — постоянный, его нельзя освободить", hwnd: 0 }
+    if !dynSlots.Has(n)
+        return { ok: false, code: "not_bound",
+                 message: "Слот " n " не привязан к окну", hwnd: 0 }
+    hwnd := dynSlots[n]
+    dynSlots.Delete(n)
+    Release(hwnd)
+    SetTimer(HandlesSync, -1)
+    return { ok: true, code: "", message: "Слот " n " освобождён", hwnd: hwnd }
+}
+
+; Назначение слота по хоткею Ctrl+Alt+Shift+N. Показывает уведомление.
+BindSlot(n) {
+    res := SlotBind(n)
+    if !res.ok
+        Notify(res.message, "Ящик", 2)
+    else
+        Notify(res.message, "Ящик", 1)
+    return res
+}
+
+; Освобождение динамического слота с показом уведомления.
+ReleaseSlot(n) {
+    res := SlotRelease(n)
+    if !res.ok
+        Notify(res.message, "Ящик", 2)
+    else
+        Notify(res.message, "Ящик", 1)
+    return res
 }
 
 ; Очистка динамических слотов. Постоянные не трогаем, программа
@@ -693,7 +739,9 @@ AppWindow(n, a) {
 ; Окно, которое назначается в слот, — активное сейчас. Рабочий стол и
 ; панель задач не берём: их парковка сломала бы оболочку Windows.
 PickActive() {
-    if !(hwnd := WinExist("A"))
+    global slotActiveWindowOverride
+    hwnd := (slotActiveWindowOverride ? slotActiveWindowOverride : WinExist("A"))
+    if !hwnd
         return 0
     if IsServiceWindow(hwnd)     ; собственное окно настроек — не окно слота (Р18)
         return 0
