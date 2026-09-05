@@ -273,9 +273,12 @@ HANDLE_FAST  := 16
 HANDLE_SYNC  := 4
 OnMessage(0x0201, HandleClick)      ; WM_LBUTTONDOWN
 
-; Единственный собственный пункт в меню трея. Хоткея у настроек нет
-; намеренно: клавиши заданы номером слота и не используются для настроек.
+; Собственные пункты меню трея. Хоткея у настроек нет намеренно: клавиши
+; заданы номером слота и не используются для настроек. Native-окно стоит
+; первым и остаётся полноценным путём: WebView пока умеет только General,
+; и подменять им рабочий инструмент рано.
 A_TrayMenu.Insert("1&", "Settings", (*) => SettingsShow())
+A_TrayMenu.Insert("2&", "Settings (WebView2)", (*) => SettingsWebShow())
 
 OnExit(Cleanup)
 ; Единственное уведомление, которое ящик показывает сам по себе. Здесь же
@@ -309,6 +312,17 @@ Notify(text, title := "Ящик", opt := 1) {
 Opt(cfg, name, def) {
     return cfg.HasOwnProp(name) ? cfg.%name% : def
 }
+
+; ------------------------- WEBVIEW SETTINGS -------------------------
+; Второй клиент того же Settings backend: транспорт, протокол и
+; семантический порт. Ни одной строки записи в config.ini здесь нет —
+; порт зовёт те же SettingsGeneralPlan/SettingsApplyPlan, что и native.
+; Контракт: docs/settings-integration-layer.md.
+#Include webview\Json.ahk
+#Include webview\SettingsWebView.ahk
+#Include webview\SettingsJsonBridge.ahk
+#Include webview\SettingsPort.ahk
+#Include webview\SettingsWebHost.ahk
 
 ; ========================= СЛУЖЕБНЫЕ ОКНА =========================
 ; Часть окон ящик открывает сам: настройки, диалог выбора окна, позже —
@@ -1046,6 +1060,7 @@ Slide(hwnd, fromX, fromY, toX, toY, w, h) {
 ; не осталось за пределами экранов.
 Cleanup(*) {
     global state, foreHook
+    SettingsWebShutdown()
     HandlesDestroyAll()
     if foreHook
         DllCall("UnhookWinEvent", "Ptr", foreHook)

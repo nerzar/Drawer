@@ -711,6 +711,44 @@ hooked-hotkey не является проверяемым конфликтом.
 `restartRequiredFields`, потому что, как и в native Settings, изменение начинает
 действовать только после перезапуска Drawer.
 
+## Что реализовано в первом vertical slice
+
+Production-код: `src/webview/Json.ahk` (codec), `SettingsWebView.ahk`
+(транспорт), `SettingsJsonBridge.ahk` (конверт, диспетчер, lifecycle
+закрытия), `SettingsPort.ahk` (`DrawerSettingsPort`), `SettingsWebHost.ahk`
+(пункт трея, служебное окно, завершение). Фронтенд: `settings-ui/src/bridge/`
+— `protocol.ts` и типизированный `client.ts` с корреляцией по `id`.
+
+Работают `settings.getInitialState`, `settings.apply`, `settings.ok` и
+`settings.cancel`. Apply строит внутренний вход и зовёт
+`SettingsGeneralPlan` → `SettingsApplyPlan`; своей записи у порта нет.
+
+Отклонения от текста ADR, принятые сознательно:
+
+- `SaveResult` содержит `diagnostics: string[]` — замечания перечитанного
+  `config.ini`, которые с C5 возвращает `LoadConfig`. В мосте показать их
+  MsgBox'ом нельзя: он заблокировал бы очередь сообщений WebView.
+- `MonitorRef` получил вариант `{kind:"invalid", raw}`. Значение вроде
+  `monitor=abc` из правленого руками файла не эквивалентно `cursor`:
+  `ResolveMonitor` на нём бросает, и форма должна показать, что там лежит.
+- `accent` на wire нет: цвет в slice не входит, порт подставляет
+  действующее значение, и точечная запись его не трогает.
+- `error.field` заполняется только для ошибок формы DTO, которые ловит сам
+  порт. Границы значений проверяет backend, и его сообщение приходит без
+  `field`: вычислять путь поля разбором русского текста — ровно то, от
+  чего уводил C3.
+- Picker operation gate не реализован: в slice нет ни одной операции,
+  которую он охраняет. `picker.*`, `slot.bind`, `slot.release` и
+  `slot.watchStatus` отвечают `unsupported_action`.
+- `settings.cancel` закрывает окно без сравнения draft с baseline:
+  dirty-confirmation остаётся у native Settings.
+- `settings.closed` отправляется, `slot.statusChanged` — нет: watcher не
+  подключён.
+
+Страница отдаётся не через `file://`, а через
+`SetVirtualHostNameToFolderMapping`: модульные скрипты Vite с `file://`
+браузер блокирует как cross-origin.
+
 ## Последствия
 
 - Vue можно разрабатывать на fixture `SettingsState` без знания способа хранения.

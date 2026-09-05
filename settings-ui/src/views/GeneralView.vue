@@ -1,8 +1,15 @@
 <script setup>
 import { computed } from 'vue'
 import { state, EDGE_OPTIONS, MONITOR_OPTIONS, ANIM_OPTIONS } from '../mock/state'
+import { settings } from '../bridge/settings'
 
 const g = state.general
+
+// Единственное поле slice: значение приходит из AHK и туда же уезжает.
+// Остальные контролы этой вкладки пока сидят на mock-state — их
+// сопоставление с backend не входит в первый vertical slice.
+const applied = computed(() => settings.canonical?.general.blurCheckMs ?? null)
+const badField = computed(() => settings.field === 'general.blurCheckMs')
 
 const animPreset = computed(() => ANIM_OPTIONS.find((o) => o.value === g.animEasing) ?? ANIM_OPTIONS[1])
 
@@ -145,10 +152,22 @@ function pickCustomAccent(event) {
         <h3>Дополнительно</h3>
         <div class="row">
           <label>Проверка потери фокуса (мс)</label>
-          <div class="field"><input class="num-sm" type="text" v-model="g.blurMs" /></div>
+          <div class="field">
+            <input
+              class="num-sm"
+              :class="{ 'field-bad': badField }"
+              type="text"
+              data-testid="blurCheckMs"
+              :disabled="settings.canonical === null"
+              v-model="settings.blurCheckMs"
+            />
+          </div>
         </div>
         <p class="hint" style="margin-top: 12px; margin-bottom: 0">
           Интервал опроса, используется для скрытия окна, когда фокус ушёл.
+          <span v-if="applied !== null" data-testid="blurApplied">
+            Применено сейчас: {{ applied }} мс.
+          </span>
         </p>
       </div>
     </div>
@@ -315,6 +334,12 @@ select.dd {
   justify-content: center;
 }
 .disabled-field {
+  opacity: 0.5;
+}
+.field-bad {
+  border-color: #a04a45;
+}
+input[disabled] {
   opacity: 0.5;
 }
 </style>

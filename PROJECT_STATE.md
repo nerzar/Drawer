@@ -25,6 +25,8 @@ Production-код находится в одном файле `src/drawer.ahk` �
    щелчок.
 3. Settings: General, список слотов, live-статус, выбор exe/окна,
    редактирование постоянных слотов и Dynamic ↔ Permanent.
+4. WebView Settings (`src/webview/`): транспорт WebView2, JSON-протокол и
+   семантический порт поверх того же Settings backend.
 
 Основное состояние хранится в глобальных структурах:
 
@@ -73,10 +75,25 @@ C5 сделал загрузку конфига пригодной для headle
 диск тронут, а перечитать его не удалось. Удаление `[dynamicSlotN]` теперь
 сверяется чтением, как и удаление `[slotN]`.
 
-Production WebView bridge ещё не подключён. `settings-ui/` — Vue-фронтенд
-с mock state/bridge. Принятый integration-контракт перенесён из spike/review
-в `docs/settings-integration-layer.md`; архитектурный gate Claude — GO.
-GO подтверждает направление и порядок подготовки, а не готовность bridge.
+### WebView Settings: первый vertical slice
+
+Подключён рабочий путь `getInitialState → правка General.blurCheckMs →
+Apply → SettingsApplyPlan → канонический state обратно во Vue`. Код лежит
+в `src/webview/`: транспорт (`SettingsWebView.ahk` поверх вендоренного
+WebViewToo), протокол (`SettingsJsonBridge.ahk`), codec (`Json.ahk`),
+семантический порт (`SettingsPort.ahk`) и склейка с рантаймом
+(`SettingsWebHost.ahk`). Порт зовёт тот же backend C1–C5; второй
+реализации записи нет.
+
+Фронтенд `settings-ui/` работает через типизированный клиент
+(`src/bridge/`), а не через mock: `settings.getInitialState` и
+`settings.apply` ходят по настоящему каналу WebView2 с корреляцией по
+`id`. Mock остался только там, куда slice не дошёл: заголовок окна,
+вкладки Slots и About.
+
+Native Settings остаётся первым пунктом трея и полноценным путём.
+Правка слотов, picker, bind/release и watchStatus через WebView отвечают
+`unsupported_action`.
 
 ## Инварианты
 
@@ -143,6 +160,12 @@ VM-оркестратор находится в `test/vm/` и используе
 через `vmrun`. Подтверждён end-to-end прогон набора `off`: 10/10,
 артефакты вернулись на хост, VM выключилась штатно. `apps`/`all` в этой
 VM не подтверждены.
+
+`test/narrow/webview-slice.ps1` — end-to-end smoke WebView-слайса, 16/16
+на host. Гоняет копию `src/` во временной папке, поэтому Apply пишет во
+временный `config.ini`. Окнами, мышью и фокусом не управляет; окно
+WebView2 на несколько секунд появляется на экране. Требует собранного
+фронтенда: `cd settings-ui && npm run build`.
 
 `test/narrow/settings-seam.ahk` — 119/119 на host: копии чистых функций
 (`SettingsVerifyDeleted`, `IsServiceWindow`, `SlotWindow`/`SlotStatus`,
@@ -214,9 +237,9 @@ bridge, после него выполняется C6 native picker parity fix.
 
 ## Ближайшие задачи
 
-1. C1–C5 выполнены. Подключить WebView bridge к тому же backend и
-   проверить S4 целевыми сценариями; затем закрыть C6 native picker
-   parity fix.
+1. C1–C5 и первый WebView-слайс выполнены. Расширить bridge на правку
+   слотов, picker, bind/release и watchStatus, проверить S4 целевыми
+   сценариями; затем закрыть C6 native picker parity fix.
 3. Завершить структурное разделение, затем перейти к произвольным слотам
    и новым UI-командам.
 4. Закрывать долг тестового стенда из `docs/05-план-работ.md` отдельно от

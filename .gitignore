@@ -5,5 +5,8 @@ tmp/
 .tools/
 # build output
 dist/
+# собранный фронтенд Settings: генерируется из settings-ui/
+# (cd settings-ui && npm run build), в репозиторий не кладётся
+src/webview/web/
 # JetBrains IDE settings
 .idea/
