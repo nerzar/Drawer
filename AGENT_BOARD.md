@@ -10,11 +10,11 @@ Blackboard между архитектором ChatGPT и coding agents.
 2. Прочитать актуальный `AGENT_BOARD.md` из `dev/wip/slots-parity`.
 3. Прочитать `docs/agent-reports/REPORT_FORMAT.md` из `dev/wip/slots-parity`.
 4. Взять только задачу, чей Run ID дан оператором.
-5. Перед любыми изменениями проверить `git worktree list`, branch, base и `git status`.
-6. Для параллельной задачи использовать отдельный sibling-worktree: `C:\Users\nerza\Projects\drawer-agent-worktrees\<task-id>`; не создавать worktree внутри другого repo/worktree.
-7. Незакоммиченную работу другого агента не reset/clean/discard.
-8. Выполнить задачу целиком, но не расширять scope без необходимости.
-9. VM/full suite не является default gate. Запускать только разумные целевые проверки, если задача прямо не требует больше.
+5. Перед изменениями проверить `git worktree list`, branch, base и `git status`.
+6. Параллельные задачи всегда работают в отдельных sibling-worktree: `C:\Users\nerza\Projects\drawer-agent-worktrees\<task-id>`.
+7. Worktree нельзя создавать внутри другого repo/worktree. Незакоммиченную работу другого агента нельзя reset/clean/discard.
+8. Выполнить задачу целиком, не расширяя scope без необходимости.
+9. VM/full suite не является default gate; только разумные целевые проверки, если задача не требует иного.
 10. Перед завершением: factual report по `REPORT_FORMAT.md`, commit, push в private remote `dev`, verify remote HEAD = local HEAD, clean tree.
 11. Публичный `origin` не трогать.
 12. `docs/ARCHITECT_STATE.md` coding agents не редактируют.
@@ -27,18 +27,18 @@ Blackboard между архитектором ChatGPT и coding agents.
 
 Отчёт обязан содержать: Task ID, Run ID, client, **фактически использованную модель**, chat/session ID если доступен, chat title если доступен, Search anchor, timestamps, worktree, branch, base SHA, final SHA.
 
-**Модель в отчёте берётся из фактического выбора клиента/оператора, а не копируется слепо из старого AGENT_BOARD.** Если есть расхождение — явно написать его.
+**Модель в отчёте брать из фактического выбора клиента/оператора, а не копировать слепо из старого board.** Если есть расхождение — явно написать его.
 
 ## Ресурсы моделей сейчас
 
 - Codex GPT quota исчерпана после C02; новые GPT-задачи Codex не назначать до сообщения оператора о reset.
 - OpenCode подключён через сторонний provider. Gemini 3.8 Flash там не заработал.
-- Qualification run I02 фактически выполнялся в OpenCode на **GPT 5.6 Luna, выбранной оператором в UI APInex**. Агентский report ошибочно записал Gemini 3.8 Flash из старого board; считать это metadata bug, а не фактической моделью.
-- OpenCode + Luna прошёл практический harness-test: worktree/Git/merge/AHK/PowerShell/npm/build/report/push без ручной Git-помощи.
-- Для следующих OpenCode-задач после Luna можно отдельно тестировать Qwen 3.8 MAX, затем DeepSeek V4 Pro; не считать названия стороннего provider доказательством идентичности официальному endpoint — оцениваем практическое качество.
+- OpenCode + заявленная provider-модель `GPT 5.6 Luna` успешно прошёл реальный harness-test на I02: worktree/Git/merge/AHK/PowerShell/npm/build/report/push без ручной Git-помощи.
+- Названия моделей стороннего provider не считаем доказательством официального endpoint; оцениваем практическое качество.
+- Следующий qualification OpenCode: `Qwen 3.8 MAX` на G02. Если Qwen не справляется/ломает tool-use — сохранить безопасное состояние и остановиться; не переключать модель внутри того же Run ID.
 - Antigravity доступен. G04 фактически был выполнен на Gemini 3.8 Flash High, потому что Sonnet не был выбран оператором.
-- **Следующий Antigravity run должен явно использовать Claude Sonnet 4.6 (Thinking)** — это первый настоящий qualification run Sonnet-пула.
-- Claude Opus 4.6 Thinking держать для тяжёлых correctness/runtime/architecture escalation, не для дешёвого cleanup.
+- Текущий Antigravity I03 должен фактически использовать **Claude Sonnet 4.6 (Thinking)** — первый настоящий qualification run этого пула.
+- Claude Opus 4.6 Thinking держать для тяжёлых correctness/runtime/architecture escalation.
 - Astra не использовать без отдельного решения.
 
 ## Общие технические правила
@@ -47,7 +47,7 @@ Blackboard между архитектором ChatGPT и coding agents.
 - Не плодить новые слои/harnesses/docs/абстракции без необходимости.
 - `drawer-debug.log` и tray action `Нашёл баг…` сохранять.
 - Frontend typecheck: `npm --prefix settings-ui run typecheck`; внешний `npx vue-tsc` не использовать как gate.
-- Stable product contract hotkeys: один настраиваемый show/hide hotkey на slot; `Ctrl+Alt+N` default only; `Ctrl+Alt+Shift+N` — fixed dynamic bind.
+- Stable hotkey contract: один настраиваемый show/hide hotkey на slot; `Ctrl+Alt+N` default only; `Ctrl+Alt+Shift+N` — fixed dynamic bind.
 
 ---
 
@@ -55,29 +55,28 @@ Blackboard между архитектором ChatGPT и coding agents.
 
 - Private repo: `nerzar/Drawer.Dev`, remote `dev`.
 - Diagnostics base `b2ec249` вручную принята пользователем.
-- Wave 1 integration: `dev/integration/slots-settings-wave1@ac63ead`.
+- Wave 1: `dev/integration/slots-settings-wave1@ac63ead`.
 - C02: `dev/fix/settings-general-override-atomic@f75dcc6`.
 - B01: `dev/fix/integration-production-build@1bd8f6e`.
-- **I02 завершена и проверена архитектором:** `dev/integration/slots-settings-wave2@4cc0d77`.
-- I02 содержит Wave 1 + C02 + B01 + orchestration docs. `SettingsDynamicFinal` присутствует; duplicate `ApplyDwmTitlebarTheme` удалён; production build fixes присутствуют.
-- I02 gates: AHK validate green, settings-seam green, frontend tests 25/25, typecheck/build green, production build green, fresh/rebuild config safety green, embedded assets green.
-- `webview-slice` больше не блокируется compile duplicate, но в текущей среде остаётся CDP `inject-timeout` после boot/getInitialState/dirty-Apply/dispose. Считать environment blocker, пока не доказано обратное.
-- G04 завершена отдельно: `dev/fix/settings-custom-animation-preset@37cb31d`, frontend-only, tests 33/33, typecheck/build green.
-- G04 исправляет «Своя»: явный custom-mode не откатывается до ввода, значения не меняются при переключении, wire DTO остаётся прежним.
-- `wip/slots-parity` пока остаётся orchestration branch; кодовую base не двигать до I03 и architect review.
+- **I02 architect-reviewed:** `dev/integration/slots-settings-wave2@4cc0d77`.
+- I02 содержит Wave 1 + C02 + B01. `SettingsDynamicFinal` присутствует; duplicate `ApplyDwmTitlebarTheme` удалён; production build fixes присутствуют.
+- I02 gates: AHK validate green, settings-seam green, frontend 25/25, typecheck/build green, production build green, fresh/rebuild config safety green, embedded assets green.
+- `webview-slice` больше не блокируется compile duplicate, но остаётся CDP `inject-timeout` после успешных boot/getInitialState/dirty-Apply/dispose; считать environment blocker, пока не доказано обратное.
+- G04: `dev/fix/settings-custom-animation-preset@37cb31d`, frontend-only, tests 33/33, typecheck/build green.
+- `wip/slots-parity` пока orchestration branch; кодовую base не двигать до I03 + architect review + P01.
 
 ## Проверка I02 архитектором
 
 Проверено на remote:
 - branch HEAD `4cc0d77`;
-- merge B01 присутствует (`07c7d10`), C02 входит в историю;
+- B01 merge `07c7d10`, C02 входит в историю;
 - `src/drawer.ahk` содержит `SettingsDynamicFinal(...)` и одну полную `ApplyDwmTitlebarTheme(...)`;
-- `src/webview/SettingsWebView.ahk` вызывает DWM helper, но не объявляет duplicate;
+- `src/webview/SettingsWebView.ahk` вызывает helper, но duplicate не объявляет;
 - `build/build.ps1` содержит `/silent`, PS5.1-compatible ISO-8859-1 check и сохраняет существующий `config.ini`.
 
 ---
 
-# DONE / WAITING FOR FINAL WAVE INTEGRATION
+# DONE / WAITING
 
 ## TASK I02 — C02 + B01 integration
 
@@ -88,7 +87,7 @@ Blackboard между архитектором ChatGPT и coding agents.
 **Branch:** `dev/integration/slots-settings-wave2`  
 **Reviewed HEAD:** `4cc0d77`
 
-Metadata note: report `docs/agent-reports/2026-09-06-opencode-i02.md` ошибочно пишет Gemini 3.8 Flash из старого board. При следующей интеграции добавить короткую correction note, не переписывая историю так, будто агент сам это знал.
+Metadata note: self-report ошибочно записал Gemini 3.8 Flash из stale board. I03 добавляет correction note с подтверждением оператора.
 
 ## TASK G04 — custom animation preset `Своя`
 
@@ -102,13 +101,13 @@ Metadata note: report `docs/agent-reports/2026-09-06-opencode-i02.md` ошибо
 
 ---
 
-# ACTIVE
+# ACTIVE — параллельные отдельные worktree
 
 ## TASK I03 — интегрировать G04 в Wave 2 и подготовить базу к ручной приёмке
 
-**Status:** READY  
+**Status:** ACTIVE  
 **Executor:** Antigravity  
-**MODEL: Claude Sonnet 4.6 (Thinking) — ОБЯЗАТЕЛЬНО выбрать в UI перед отправкой prompt**  
+**MODEL: Claude Sonnet 4.6 (Thinking) — фактически выбрать в UI**  
 **Run ID:** `RUN-20260906-ANTIGRAVITY-I03-01`  
 **Base:** `dev/integration/slots-settings-wave2@4cc0d77`  
 **Input:** `dev/fix/settings-custom-animation-preset@37cb31d`  
@@ -117,31 +116,75 @@ Metadata note: report `docs/agent-reports/2026-09-06-opencode-i02.md` ошибо
 
 ### Цель
 
-Получить одну чистую candidate-base для A01: Wave 2 + проверенный frontend-fix G04 + актуальные orchestration docs. Это integration/review task, не новая feature-wave.
+Получить clean candidate-base для A01: Wave 2 + проверенный frontend-fix G04 + актуальные orchestration docs. Это integration/review task, не новая feature-wave.
 
 ### Обязательно
 
-1. Создать новый sibling-worktree I03 от exact base `4cc0d77`; не работать в I02/G04/shared checkout.
-2. Интегрировать G04 по смыслу. Не переписывать его заново без причины.
-3. Проверить, что G04 не меняет backend/wire contract: `animCustom` остаётся только draft/UI состоянием; на wire уходят прежние `durationMs/steps`.
+1. Новый sibling-worktree I03 от exact base `4cc0d77`; не работать в I02/G04/shared checkout.
+2. Интегрировать G04 по смыслу, не переписывать без причины.
+3. Проверить, что `animCustom` остаётся только draft/UI состоянием; wire по-прежнему `durationMs/steps`.
 4. Подтянуть актуальные `AGENT_BOARD.md` и `REPORT_FORMAT.md` из `dev/wip/slots-parity`.
-5. В `docs/agent-reports/2026-09-06-opencode-i02.md` добавить **correction note**, что оператор подтверждает фактически выбранную в OpenCode модель `GPT 5.6 Luna` через APInex UI, а строка Gemini в исходном self-report была скопирована из stale board. Не выдавать это за автоматически обнаруженную модель.
+5. В `docs/agent-reports/2026-09-06-opencode-i02.md` добавить correction note: оператор подтверждает фактически выбранную модель `GPT 5.6 Luna` через APInex UI; старая строка Gemini была stale metadata.
 6. Не брать G02/G03/C03 и не менять slot/runtime semantics.
-7. Проверить branch diff: кроме I02 + G04 + docs/correction не должно быть лишних изменений.
+7. Diff должен содержать только I02 + G04 + docs/correction.
 
 ### Проверки
 
-- AHK `/validate src/drawer.ahk`;
-- settings-seam;
-- `npm --prefix settings-ui test` — ожидается не меньше 33 тестов;
+AHK validate; settings-seam; frontend tests >=33; typecheck; frontend build; production build; quick fresh-config + rebuild-preserves-config. WebView slice максимум один раз; повтор того же CDP timeout зафиксировать и не ретраить бесконечно. VM/full suite не запускать.
+
+Перед завершением: factual report, commit, push `dev/integration/slots-settings-wave3`, verify remote HEAD = local HEAD, clean tree. `wip/slots-parity` не двигать.
+
+## TASK G02 — stale windowClass + picker identity
+
+**Status:** READY_PARALLEL_WITH_I03_WAITING_FOR_A01_INTEGRATION  
+**Executor:** OpenCode  
+**MODEL: `Qwen 3.8 MAX` — фактически выбрать в OpenCode/APInex UI**  
+**Run ID:** `RUN-20260906-OPENCODE-G02-01`  
+**Purpose:** второй qualification run OpenCode, теперь на другой provider-модели  
+**Base:** `dev/integration/slots-settings-wave2@4cc0d77`  
+**Branch:** `fix/settings-picker-identity`  
+**Worktree:** `C:\Users\nerza\Projects\drawer-agent-worktrees\G02`
+
+### Почему можно параллельно
+
+I03 интегрирует только G04 (`GeneralView.vue`, `general.ts`, animation test/package test-list + docs). G02 занимается identity постоянного слота и picker flow. **G02 не интегрировать в candidate-base до A01**, даже если закончит раньше.
+
+### Цель
+
+Убрать stale `windowClass` и сделать identity постоянного слота согласованным при ручной смене exe, `picker.exe`, `picker.window` и dynamic→permanent, не меняя общую FindWindow/slot архитектуру.
+
+### Подтвердить текущий дефект
+
+На Wave 2 `picker.exe` меняет `draft.executable`, но не очищает `draft.windowClass`; старый `ahk_class` может остаться от другого приложения/окна и затем попасть в permanent rule. Не считать это единственным сценарием — проверить кодом и тестами.
+
+### Обязательное поведение
+
+1. Если пользователь **реально меняет exe вручную**, `windowClass` старого exe не должен тихо пережить изменение.
+2. Если `picker.exe` выбирает новый executable, stale class старого окна не должен остаться.
+3. `picker.window` должен согласованно установить executable + windowClass из одного выбранного окна; default/пустое имя можно разумно засеять title как сейчас.
+4. Dynamic→Permanent должен использовать чистый identity seed, который backend уже отдаёт через `permanentDefaults` для живого dynamic window. Не выдумывать exe/class на frontend и не превращать dynamic в persistent identity до Apply.
+5. Если живого окна нет, не придумывать валидный permanent identity; существующая backend validation должна остаться источником истины.
+6. Не расширять задачу до выбора конкретного permanent-window (`F12`) и не переписывать `FindWindow`.
+7. Сохранить Apply/Cancel draft semantics.
+
+### Жёсткая граница параллельности
+
+Можно менять по необходимости: `settings-ui/src/views/SlotsView.vue`, `settings-ui/src/bridge/settings.ts`, `settings-ui/src/bridge/slotDraft.ts`, связанные slot/frontend tests; backend picker/port только если фактически доказано, что frontend-only fix недостаточен.
+
+**Не менять**, потому что этим владеет I03/G04: `settings-ui/src/views/GeneralView.vue`, `settings-ui/src/bridge/general.ts`, `settings-ui/package.json`, `settings-ui/test/animationPreset.test.ts`. Не менять `build/build.ps1`, DWM/titlebar, hotkey product contract.
+
+Если нужен frontend regression, предпочесть существующий test entrypoint/file или отдельный targeted command; **не править `settings-ui/package.json` в этой параллельной ветке**.
+
+### Проверки
+
+- `npm --prefix settings-ui test`;
 - `npm --prefix settings-ui run typecheck`;
 - `npm --prefix settings-ui run build`;
-- production `build/build.ps1`;
-- quick fresh-config + rebuild-preserves-config;
-- webview-slice можно повторить один раз; если снова тот же CDP `inject-timeout` после успешного boot/bridge stages — зафиксировать и не тратить время на бесконечные retries;
-- VM/full suite не запускать.
+- targeted regression для stale-class/picker identity;
+- если затронут AHK/backend: AHK validate + settings-seam;
+- production build и VM/full suite не нужны.
 
-Перед завершением: factual report, commit, push `dev/integration/slots-settings-wave3`, verify remote HEAD = local HEAD, clean tree. **Не двигать `wip/slots-parity` самостоятельно.**
+Перед завершением: factual report, commit, push `dev/fix/settings-picker-identity`, verify remote HEAD = local HEAD, clean tree. **Не merge в Wave 3 / wip.** В отчёте отдельно оценить OpenCode+Qwen tool-use/качество относительно предыдущего Luna run.
 
 ---
 
@@ -151,18 +194,18 @@ Metadata note: report `docs/agent-reports/2026-09-06-opencode-i02.md` ошибо
 
 **Status:** BLOCKED_ON_I03_ARCH_REVIEW
 
-После проверки I03 архитектор даст короткую promotion-команду агенту: безопасно привести `dev/wip/slots-parity` и локальный рабочий checkout `C:\Users\nerza\Projects\drawer-settings-integration` к принятой candidate-base без потери чужой работы. Пользователь Git руками не делает.
+После проверки I03 архитектор даст агенту короткую promotion-задачу: безопасно привести `dev/wip/slots-parity` и локальный checkout `C:\Users\nerza\Projects\drawer-settings-integration` к принятой candidate-base без потери чужой работы. Пользователь Git руками не делает.
 
 ## TASK A01 — короткая ручная приёмка
 
 **Status:** BLOCKED_ON_P01  
 **Executor:** пользователь
 
-Человеческий checklist без внутренних терминов:
-- новый custom show/hide hotkey работает сразу после Apply, старый перестаёт;
+Человеческий checklist:
+- custom show/hide hotkey работает сразу после Apply, старый перестаёт;
 - Tab выходит из hotkey field;
 - permanent name редактируется;
-- dynamic bind → кромка сразу появляется → hotkey показывает/убирает;
+- dynamic bind → кромка сразу → hotkey показывает/убирает;
 - Release освобождает dynamic slot;
 - Reset slot settings возвращает наследование General;
 - permanent↔dynamic с живым окном не теряет окно;
@@ -170,7 +213,7 @@ Metadata note: report `docs/agent-reports/2026-09-06-opencode-i02.md` ошибо
 - системный titlebar тёмный и About без mock-элементов;
 - «Своя» сразу открывает поля анимации и не откатывается до ввода.
 
-При баге: tray `Нашёл баг…` → сообщить номер BUG + что сделал + что произошло.
+При баге: tray `Нашёл баг…` → номер BUG + что сделал + что произошло.
 
 ---
 
@@ -182,11 +225,10 @@ Metadata note: report `docs/agent-reports/2026-09-06-opencode-i02.md` ошибо
 
 Structured partial-save/reload/reconcile должен доходить до UI; без ложного `Сохранено`, потери draft/field diagnostics и исчезновения warning после no-op. Один persistence path.
 
-## TASK G02 — stale windowClass + picker identity
-**Status:** BLOCKED_ON_A01
-**Preferred:** OpenCode Luna/Qwen test or Antigravity Sonnet
+## TASK G02 integration
+**Status:** BLOCKED_ON_G02_RESULT_AND_A01
 
-Смена exe не оставляет class старого app; picker согласованно обновляет exe/class/name seed; dynamic→permanent получает чистые identity data.
+Если G02 прошёл review, интегрировать его уже **после** A01 отдельной controlled task; не подмешивать в текущую candidate-base перед ручной приёмкой.
 
 ## TASK G03 — live hideOnBlur/blurMs + save lock
 **Status:** BLOCKED_ON_A01
@@ -276,11 +318,11 @@ Fresh build, rebuild preserving config, compiled Settings, clean package/version
 
 # Ближайший порядок
 
-1. `RUN-20260906-ANTIGRAVITY-I03-01` — Sonnet 4.6 Thinking интегрирует G04 в I02 и делает candidate-base.
-2. Архитектор проверяет remote I03.
-3. P01 — агентом промотировать candidate-base в `wip/slots-parity` + локальный рабочий checkout.
-4. A01 — короткая ручная приёмка пользователем.
-5. После A01: C03 + G02/G03 по доступным пулам.
+1. Параллельно сейчас: I03 в Antigravity/Sonnet и G02 в OpenCode/Qwen, каждый в своём sibling-worktree.
+2. Архитектор проверяет I03 remote; затем P01.
+3. A01 — короткая ручная приёмка candidate-base **без G02**.
+4. Архитектор отдельно проверяет G02; после A01 — controlled integration G02, если результат принят.
+5. Затем C03 + G03 по доступным пулам.
 6. UX cleanup.
 7. Modular architecture.
 8. Test/release debt.
