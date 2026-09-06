@@ -5,19 +5,21 @@ defineProps({
 defineEmits(['update:active'])
 
 const tabs = [
-  { key: 'general', label: 'General' },
-  { key: 'slots', label: 'Slots' },
-  { key: 'about', label: 'About' },
+  { key: 'general', label: 'Общие' },
+  { key: 'slots', label: 'Слоты' },
+  { key: 'about', label: 'О программе' },
 ]
 </script>
 
 <template>
-  <div class="sidebar">
+  <nav class="sidebar" aria-label="Разделы настроек">
     <button
       v-for="tab in tabs"
       :key="tab.key"
       class="navitem"
       :class="{ active: active === tab.key }"
+      :aria-current="active === tab.key ? 'page' : undefined"
+      type="button"
       @click="$emit('update:active', tab.key)"
     >
       <svg
@@ -68,5 +70,5 @@ const tabs = [
       </svg>
       <span>{{ tab.label }}</span>
     </button>
-  </div>
+  </nav>
 </template>

@@ -10,6 +10,7 @@ import AboutView from './views/AboutView.vue'
 import { ref } from 'vue'
 
 const activeTab = ref('general')
+const selectedSlotNumber = ref(1)
 
 const currentView = computed(() => {
   if (activeTab.value === 'slots') return SlotsView
@@ -23,13 +24,18 @@ onMounted(loadSettings)
 
 // Ответ с адресом поля переводит на ту вкладку, где это поле живёт.
 // Иначе сообщение внизу говорит про слот, которого на экране нет, и
-// подсвечивать оказывается нечего. Слот внутри вкладки выбирает уже
-// SlotsView: номер он знает из того же адреса.
+// подсвечивать оказывается нечего. Сохраняем выбранный слот в родителе,
+// чтобы переход между вкладками не сбрасывал выбор.
 watch(
   () => settings.field,
   (field) => {
     const target = fieldTarget(field)
-    if (target) activeTab.value = target.tab
+    if (target) {
+      activeTab.value = target.tab
+      if (target.tab === 'slots' && target.slot) {
+        selectedSlotNumber.value = target.slot
+      }
+    }
   },
 )
 
@@ -43,7 +49,11 @@ const accent = computed(() => '#' + (settings.draft?.accent ?? '2A2E35'))
   <div class="app" :style="{ '--accent': accent }">
     <div class="body-row">
       <Sidebar v-model:active="activeTab" />
-      <component :is="currentView" />
+      <component
+        :is="currentView"
+        :selected-slot="selectedSlotNumber"
+        @update:selected-slot="selectedSlotNumber = $event"
+      />
     </div>
     <FooterBar :status="settings.message" :bad="settings.bad" />
   </div>

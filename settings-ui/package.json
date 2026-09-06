@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "esbuild test/canonical.test.ts test/fieldError.test.ts test/animationPreset.test.ts test/slotsUx.test.ts --bundle --platform=node --format=esm --outdir=.cache --out-extension:.js=.mjs && node --test .cache/canonical.test.mjs .cache/fieldError.test.mjs .cache/animationPreset.test.mjs .cache/slotsUx.test.mjs"
+    "test": "esbuild test/canonical.test.ts test/fieldError.test.ts test/animationPreset.test.ts test/slotsUx.test.ts test/navigationAccessibility.test.ts --bundle --platform=node --format=esm --outdir=.cache --out-extension:.js=.mjs && node --test .cache/canonical.test.mjs .cache/fieldError.test.mjs .cache/animationPreset.test.mjs .cache/slotsUx.test.mjs .cache/navigationAccessibility.test.mjs"
   },
   "dependencies": {
     "vue": "^3.5.42"
