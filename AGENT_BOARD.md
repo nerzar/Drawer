@@ -57,44 +57,44 @@ Autonomous workers must never self-promote code into `wip/slots-parity`, self-de
 
 ## Текущий статус
 
-- Shared production identity после P06: `9162d157a3f6b3155519ed6248605b0f432ff832`; текущий `wip/slots-parity` может быть выше только docs/task/claim-коммитами.
+- Shared production identity после P06: `9162d157a3f6b3155519ed6248605b0f432ff832`; текущий `wip/slots-parity` выше docs/task/claim-коммитами.
 - G03 accepted + runtime verified + promoted.
 - G05/G05FIX accepted + runtime verified + promoted.
-- G06 implementation Code SHA: `5e9c717f23ee4503c0850a9be5d406892d49bed9`; awaiting independent review + runtime acceptance.
-- A02 analysis: `READY_TO_IMPLEMENT`; first implementation slice is watcher policy/state extraction.
-- Branch cleanup P06 reduced remote refs substantially; archive refs are intentionally retained.
+- G06 implementation Code SHA: `5e9c717f23ee4503c0850a9be5d406892d49bed9`; DEV1 review = `ACCEPT_WITH_RUNTIME_CHECK`; Antigravity runtime acceptance still running.
+- A02S1 implementation Code SHA: `ac71581b98a58e51128a987d20d8b5b1952c1756`; awaiting independent review before A02S2.
 
 ## AUTONOMOUS READY QUEUE
 
-### 1. A02S1 — watcher policy/state seam
-- Status: `READY`
-- Eligible: `CODEX`
-- Run ID: `RUN-20260906-AUTO-CODEX-A02S1-01`
-- Base: shared production identity `9162d157a3f6b3155519ed6248605b0f432ff832` (latest shared tip allowed if newer commits are docs/claims only)
-- Branch: `refactor/window-focus-watch-seam`
-- Task file: `docs/agent-tasks/RUN-20260906-AUTO-CODEX-A02S1-01.md`
-
-### 2. G06ACCEPT — live WebView/Windows acceptance
-- Status: `READY`
+### 1. G06ACCEPT — live WebView/Windows acceptance
+- Status: `CLAIMED/RUNNING`
 - Eligible: `ANTIGRAVITY`
 - Run ID: `RUN-20260906-AUTO-ANTIGRAVITY-G06ACCEPT-01`
 - Base: G06 Code SHA `5e9c717f23ee4503c0850a9be5d406892d49bed9`
 - Branch: `verify/g06-runtime-acceptance`
 - Task file: `docs/agent-tasks/RUN-20260906-AUTO-ANTIGRAVITY-G06ACCEPT-01.md`
 
-### 3. G06R — independent code review
+### 2. A02S1R — independent watcher-seam review
 - Status: `READY`
 - Eligible: `DEV1`
-- Run ID: `RUN-20260906-AUTO-DEV1-G06REVIEW-01`
-- Base: G06 Code SHA `5e9c717f23ee4503c0850a9be5d406892d49bed9`
-- Branch: `review/g06-navigation-accessibility`
-- Task file: `docs/agent-tasks/RUN-20260906-AUTO-DEV1-G06REVIEW-01.md`
+- Run ID: `RUN-20260906-AUTO-DEV1-A02S1-REVIEW-01`
+- Base: A02S1 Code SHA `ac71581b98a58e51128a987d20d8b5b1952c1756`
+- Branch: `review/a02s1-window-focus-watch-seam`
+- Task file: `docs/agent-tasks/RUN-20260906-AUTO-DEV1-A02S1-REVIEW-01.md`
+
+### 3. A03A — parking / geometry seam analysis
+- Status: `READY`
+- Eligible: `CODEX`
+- Run ID: `RUN-20260906-AUTO-CODEX-A03-ANALYSIS-01`
+- Base: accepted shared production identity `9162d157a3f6b3155519ed6248605b0f432ff832`; do not depend on unaccepted A02S1
+- Branch: `analysis/a03-parking-geometry-seam`
+- Task file: `docs/agent-tasks/RUN-20260906-AUTO-CODEX-A03-ANALYSIS-01.md`
 
 ## NEXT AFTER ARCHITECT REVIEW
 
-- If G06 review + runtime acceptance both pass: architect promotes G06 and cleans its temporary refs.
-- Review A02S1; if accepted, publish A02S2 focus-history/foreground-state extraction.
-- Then A03 parking/geometries seam, A04 handles seam, A05 Settings service/tray seams.
+- If G06 runtime acceptance passes: architect promotes G06 and cleans temporary refs.
+- If A02S1 review passes: architect publishes A02S2 focus-history/foreground-state extraction.
+- Use A03 analysis to publish implementation slices after A02 lineage is accepted where dependencies require it.
+- Then A04 handles seam, A05 Settings service/tray seams.
 - T01/T02 test debt after architecture stabilizes.
 - R01 diagnostics production policy; R02 production build acceptance; R03 final human acceptance.
 - F01/F02/F03/F04/F08/F11/F12 remain deferred/future product decisions.
