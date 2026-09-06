@@ -1805,16 +1805,20 @@ if FileExist(drawerPath) {
 ; приоритет per-slot override над общими умолчаниями, независимость
 ; постоянных слотов и очистку таймера при опустении watched.
 ; ---------------------------------------------------------------
-WatchSyncModel(slotBounds, stateMap, watchedMap, blurMs, &timerPeriod) {
+WatchSyncModel(slotBounds, stateMap, watchedMap, blurMs, &timerPeriod, authorityMap := 0) {
     boundMap := Map()
     for item in slotBounds {
         hwnd := item.hwnd
+        if boundMap.Has(hwnd)
+            continue
         st := stateMap.Has(hwnd) ? stateMap[hwnd] : 0
         if (!st || !st.exists || !st.deployed)
             continue
-        hideOnBlur := item.cfg.HasOwnProp("hideOnBlur") ? item.cfg.hideOnBlur : true
-        if hideOnBlur {
-            watchedMap[hwnd] := item.cfg
+        cfg := (authorityMap && authorityMap.Has(hwnd)) ? authorityMap[hwnd] : item.cfg
+        hideOnBlur := cfg.HasOwnProp("hideOnBlur") ? cfg.hideOnBlur : true
+        activateOnShow := cfg.HasOwnProp("activateOnShow") ? cfg.activateOnShow : true
+        if (hideOnBlur && (watchedMap.Has(hwnd) || activateOnShow)) {
+            watchedMap[hwnd] := cfg
             boundMap[hwnd] := true
         }
     }
@@ -1887,6 +1891,59 @@ WatchSyncModel(boundsG, stMapNotDep, wMapNotDep, 250, &tPeriod)
 Assert("21g: окно, переставшее быть выдвинутым, удаляется из watched и гасит таймер",
     !wMapNotDep.Has(101) && wMapNotDep.Count = 0 && tPeriod = 0)
 
+; 21k: unrelated Apply не записывает deployed окно, которое Show не активировал
+stMap := Map(101, { exists: true, deployed: true })
+wMap := Map()
+tPeriod := 0
+boundsK := [{ n: 1, hwnd: 101, cfg: { hideOnBlur: true, activateOnShow: false } }]
+WatchSyncModel(boundsK, stMap, wMap, 250, &tPeriod)
+Assert("21k: deployed activateOnShow=false окно не получает watcher после Apply",
+    !wMap.Has(101) && tPeriod = 0)
+
+; 21l: watcher, созданный FocusWindow, остаётся легитимным при activateOnShow=false
+stMap := Map(101, { exists: true, deployed: true })
+wMap := Map(101, { hideOnBlur: true, activateOnShow: false })
+tPeriod := 250
+focusedCfg := { hideOnBlur: true, activateOnShow: false, marker: "updated" }
+boundsL := [{ n: 1, hwnd: 101, cfg: focusedCfg }]
+WatchSyncModel(boundsL, stMap, wMap, 400, &tPeriod)
+Assert("21l: FocusWindow-created watcher сохраняется и получает актуальный cfg",
+    wMap.Has(101) && wMap[101].marker = "updated" && tPeriod = 400)
+
+; 21m: для повторяющегося HWND authoritative SlotOf cfg постоянного слота побеждает
+stMap := Map(101, { exists: true, deployed: true })
+wMap := Map(101, { hideOnBlur: true })
+tPeriod := 250
+boundsM := [
+    { n: 1, hwnd: 101, cfg: { hideOnBlur: true, activateOnShow: true } },
+    { n: 2, hwnd: 101, cfg: { hideOnBlur: false, activateOnShow: true } }
+]
+authorityM := Map(101, { hideOnBlur: false, activateOnShow: true })
+WatchSyncModel(boundsM, stMap, wMap, 250, &tPeriod, authorityM)
+Assert("21m: duplicate HWND использует permanent-first authoritative cfg",
+    !wMap.Has(101) && tPeriod = 0)
+
+; 21n: потеря права одним watcher не затрагивает другой валидный watcher
+stMap := Map(101, { exists: true, deployed: true }, 102, { exists: true, deployed: true })
+wMap := Map(101, { hideOnBlur: true }, 102, { hideOnBlur: true })
+tPeriod := 250
+boundsN := [
+    { n: 1, hwnd: 101, cfg: { hideOnBlur: false } },
+    { n: 2, hwnd: 102, cfg: { hideOnBlur: true } }
+]
+WatchSyncModel(boundsN, stMap, wMap, 300, &tPeriod)
+Assert("21n: ineligible watcher удаляется без нарушения другого watcher",
+    !wMap.Has(101) && wMap.Has(102) && wMap.Count = 1 && tPeriod = 300)
+
+; 21o: stale watcher очищается рядом с валидным watcher
+stMap := Map(102, { exists: true, deployed: true })
+wMap := Map(101, { hideOnBlur: true }, 102, { hideOnBlur: true })
+tPeriod := 250
+boundsO := [{ n: 2, hwnd: 102, cfg: { hideOnBlur: true } }]
+WatchSyncModel(boundsO, stMap, wMap, 350, &tPeriod)
+Assert("21o: stale watcher очищается, валидный watcher и таймер сохраняются",
+    !wMap.Has(101) && wMap.Has(102) && wMap.Count = 1 && tPeriod = 350)
+
 if FileExist(drawerPath) {
     src21 := FileRead(drawerPath, "UTF-8")
     Assert("21h: WatchSync() реализована в src/drawer.ahk и обращается к SlotBound()",
@@ -1896,6 +1953,9 @@ if FileExist(drawerPath) {
     Assert("21j: SettingsReconcileRuntime вызывает WatchSync() после Slots.Apply()",
         InStr(src21, "Slots.Apply(cfg, slotPlan.prevPerm)") > 0
      && InStr(src21, "WatchSync()") > InStr(src21, "Slots.Apply(cfg, slotPlan.prevPerm)"))
+    Assert("21p: production WatchSync использует SlotOf authority и сохраняет существующую eligibility",
+        InStr(src21, "cfg := SlotOf(hwnd)") > 0
+     && InStr(src21, "watched.Has(hwnd) || Opt(cfg, `"activateOnShow`", true)") > 0)
 }
 
 out := ""
