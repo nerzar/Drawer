@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { settings, pickSlot, releaseSlot } from '../bridge/settings'
 import { fieldTarget } from '../bridge/fieldError'
 import { EDGE_OPTIONS, draftToWire } from '../bridge/general'
@@ -22,13 +22,52 @@ import {
   statusFor,
 } from '../bridge/slots'
 
-const selectedNumber = ref(1)
+const props = defineProps({
+  selectedSlot: {
+    type: Number,
+    default: 1,
+  },
+})
+const emit = defineEmits(['update:selectedSlot'])
+
+const selectedNumber = computed({
+  get: () => props.selectedSlot ?? 1,
+  set: (v) => emit('update:selectedSlot', v),
+})
+
+const slotRowRefs = new Map()
+function setSlotRowRef(num, el) {
+  if (el) slotRowRefs.set(num, el)
+  else slotRowRefs.delete(num)
+}
+
+function scrollSelectedRowIntoView() {
+  const el = slotRowRefs.get(selectedNumber.value)
+  el?.scrollIntoView({ block: 'nearest' })
+}
+
+watch(
+  selectedNumber,
+  async () => {
+    await nextTick()
+    scrollSelectedRowIntoView()
+  },
+  { immediate: true },
+)
 const slots = computed(() => settings.canonical?.slots ?? [])
 const selectedSlot = computed(() => slots.value.find((s) => s.number === selectedNumber.value))
 
 // Что действует у выбранного слота: у постоянного — его собственные
 // значения, у динамического — унаследованные с учётом его секции.
 const behavior = computed(() => selectedSlot.value && slotBehavior(selectedSlot.value))
+
+watch(
+  slots,
+  async () => {
+    await nextTick()
+    scrollSelectedRowIntoView()
+  },
+)
 
 // Правится черновик, а не canonical: вернуться в canonical значения
 // могут единственным путём — Применить/ОК.
@@ -192,6 +231,7 @@ function resetDynamic() {
         <button
           v-for="slot in slots"
           :key="slot.number"
+          :ref="(el) => setSlotRowRef(slot.number, el)"
           class="slotrow"
           type="button"
           :data-testid="`slot-${slot.number}`"
@@ -303,7 +343,7 @@ function resetDynamic() {
                   type="text"
                   data-testid="edit-name"
                   :class="{ 'field-bad': bad('name') }"
-                  :aria-invalid="bad('name')"
+                  :aria-invalid="bad('name') ? 'true' : undefined"
                   v-model="draft.name"
                 />
               </div>
@@ -317,22 +357,43 @@ function resetDynamic() {
                   type="text"
                   data-testid="edit-executable"
                   :class="{ 'field-bad': bad('executable') }"
-                  :aria-invalid="bad('executable')"
+                  :aria-invalid="bad('executable') ? 'true' : undefined"
+                  aria-describedby="slot-class-tip"
                   :value="draft.executable"
                   @input="onExecutableInput($event.target.value)"
                 />
-                <button class="btn-icon" type="button" title="Выбрать приложение…" data-testid="pick-exe" @click="pickSlot(selectedNumber, 'exe')">
+                <button
+                  class="btn-icon"
+                  type="button"
+                  title="Выбрать приложение…"
+                  aria-label="Выбрать приложение для слота"
+                  data-testid="pick-exe"
+                  @click="pickSlot(selectedNumber, 'exe')"
+                >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
                     <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
                   </svg>
                 </button>
-                <button class="btn-icon" type="button" title="Взять данные из открытого окна…" data-testid="pick-window" @click="pickSlot(selectedNumber, 'window')">
+                <button
+                  class="btn-icon"
+                  type="button"
+                  title="Взять данные из открытого окна…"
+                  aria-label="Взять данные из открытого окна для слота"
+                  data-testid="pick-window"
+                  @click="pickSlot(selectedNumber, 'window')"
+                >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
                     <rect x="3" y="4" width="18" height="14" rx="1.5" />
                     <line x1="3" y1="8" x2="21" y2="8" />
                   </svg>
                 </button>
-                <div class="info-ico" tabindex="0">
+                <div
+                  id="slot-class-tip"
+                  class="info-ico"
+                  tabindex="0"
+                  role="note"
+                  aria-label="Справка о признаке окна"
+                >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="transform: translate(3%, 2%)">
                     <circle cx="12" cy="12" r="9" />
                     <line x1="12" y1="11" x2="12" y2="16" />
@@ -354,6 +415,7 @@ function resetDynamic() {
                   class="dd"
                   data-testid="edit-monitorKind"
                   :class="{ narrow: draft.monitorKind === 'number', 'field-bad': bad('monitor') }"
+                  :aria-invalid="bad('monitor') ? 'true' : undefined"
                   v-model="draft.monitorKind"
                 >
                   <option value="cursor">Под курсором</option>
@@ -369,8 +431,10 @@ function resetDynamic() {
                   v-if="draft.monitorKind === 'number'"
                   class="num-sm"
                   type="text"
+                  aria-label="Номер монитора"
                   data-testid="edit-monitorNumber"
                   :class="{ 'field-bad': bad('monitor.number') }"
+                  :aria-invalid="bad('monitor.number') ? 'true' : undefined"
                   v-model="draft.monitorNumber"
                 />
               </div>
@@ -392,7 +456,7 @@ function resetDynamic() {
                   type="text"
                   data-testid="edit-widthPercent"
                   :class="{ 'field-bad': bad('widthPercent') }"
-                  :aria-invalid="bad('widthPercent')"
+                  :aria-invalid="bad('widthPercent') ? 'true' : undefined"
                   v-model="draft.widthPercent"
                 />
               </div>
@@ -415,6 +479,7 @@ function resetDynamic() {
                   placeholder="Ctrl + Alt + F2"
                   data-testid="edit-hotkey"
                   :class="{ 'field-bad': bad('hotkey') }"
+                  :aria-invalid="bad('hotkey') ? 'true' : undefined"
                   :value="draft.hotkey"
                   @keydown="captureHotkey"
                 />
@@ -469,6 +534,7 @@ function resetDynamic() {
                   class="dd"
                   data-testid="edit-monitorKind"
                   :class="{ narrow: draft.monitorKind === 'number', 'field-bad': bad('monitor') }"
+                  :aria-invalid="bad('monitor') ? 'true' : undefined"
                   v-model="draft.monitorKind"
                 >
                   <option value="cursor">Под курсором</option>
@@ -481,8 +547,10 @@ function resetDynamic() {
                   v-if="draft.monitorKind === 'number'"
                   class="num-sm"
                   type="text"
+                  aria-label="Номер монитора"
                   data-testid="edit-monitorNumber"
                   :class="{ 'field-bad': bad('monitor.number') }"
+                  :aria-invalid="bad('monitor.number') ? 'true' : undefined"
                   v-model="draft.monitorNumber"
                 />
               </div>
@@ -504,7 +572,7 @@ function resetDynamic() {
                   type="text"
                   data-testid="edit-widthPercent"
                   :class="{ 'field-bad': bad('widthPercent') }"
-                  :aria-invalid="bad('widthPercent')"
+                  :aria-invalid="bad('widthPercent') ? 'true' : undefined"
                   v-model="draft.widthPercent"
                 />
               </div>
@@ -520,8 +588,18 @@ function resetDynamic() {
             <div class="row">
               <label for="dyn-hotkey">Горячая клавиша</label>
               <div class="field">
-                <input id="dyn-hotkey" type="text" style="width: 160px" placeholder="Ctrl + Alt + F2"
-                  data-testid="edit-hotkey" :class="{ 'field-bad': bad('hotkey') }" readonly :value="draft.hotkey" @keydown="captureHotkey" />
+                <input
+                  id="dyn-hotkey"
+                  type="text"
+                  style="width: 160px"
+                  placeholder="Ctrl + Alt + F2"
+                  data-testid="edit-hotkey"
+                  :class="{ 'field-bad': bad('hotkey') }"
+                  :aria-invalid="bad('hotkey') ? 'true' : undefined"
+                  readonly
+                  :value="draft.hotkey"
+                  @keydown="captureHotkey"
+                />
               </div>
             </div>
             <div class="override-box">
@@ -602,6 +680,7 @@ function resetDynamic() {
   background: var(--bg-card);
   overflow: hidden;
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 .slotrow {
   width: 100%;
@@ -691,6 +770,7 @@ function resetDynamic() {
   overflow: hidden;
   overflow-y: auto;
   min-width: 0;
+  scrollbar-gutter: stable;
 }
 .detail-head {
   display: flex;
@@ -826,7 +906,8 @@ select.dd.narrow {
   z-index: 5;
 }
 .info-ico:hover .tip,
-.info-ico:focus .tip {
+.info-ico:focus .tip,
+.info-ico:focus-within .tip {
   opacity: 1;
   visibility: visible;
   transform: translateY(0);
@@ -945,7 +1026,8 @@ select.dd.narrow {
   border-color: #a04a45;
 }
 button[disabled],
-fieldset[disabled] {
+input[disabled],
+select[disabled] {
   opacity: 0.5;
 }
 .btn-danger-hd[disabled]:hover {

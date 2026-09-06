@@ -64,11 +64,13 @@ function triggerCustomColor() {
           поменять.
         </p>
         <div class="row">
-          <label>Размер окна</label>
+          <label for="general-width">Размер окна</label>
           <div class="field">
             <input
+              id="general-width"
               class="num-sm"
               :class="{ 'field-bad': bad('general.dynamicDefaults.widthPercent') }"
+              :aria-invalid="bad('general.dynamicDefaults.widthPercent') ? 'true' : undefined"
               type="text"
               data-testid="widthPercent"
               :disabled="saving"
@@ -78,15 +80,16 @@ function triggerCustomColor() {
           </div>
         </div>
         <div class="row">
-          <label>Сторона выезда</label>
-          <select class="dd" data-testid="edge" :disabled="saving" v-model="d.edge">
+          <label for="general-edge">Сторона выезда</label>
+          <select id="general-edge" class="dd" data-testid="edge" :disabled="saving" v-model="d.edge">
             <option v-for="o in EDGE_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
           </select>
         </div>
         <div class="row">
-          <label>Монитор</label>
+          <label for="general-monitor-kind">Монитор</label>
           <div class="field">
             <select
+              id="general-monitor-kind"
               class="dd"
               :class="{ narrow: d.monitorKind === 'number' }"
               data-testid="monitorKind"
@@ -104,9 +107,12 @@ function triggerCustomColor() {
             </select>
             <input
               v-if="d.monitorKind === 'number'"
+              id="general-monitor-number"
               class="num-sm"
               :class="{ 'field-bad': bad('general.dynamicDefaults.monitor.number') }"
+              :aria-invalid="bad('general.dynamicDefaults.monitor.number') ? 'true' : undefined"
               type="text"
+              aria-label="Номер монитора"
               data-testid="monitorNumber"
               :disabled="saving"
               v-model="d.monitorNumber"
@@ -133,10 +139,11 @@ function triggerCustomColor() {
         <div class="divider"></div>
 
         <div class="row" style="margin-bottom: 10px">
-          <label>Цвет акцента</label>
+          <label for="general-accent">Цвет акцента</label>
           <div class="field">
             <span class="unit">HEX</span>
             <input
+              id="general-accent"
               class="num-hex"
               type="text"
               data-testid="accent"
@@ -215,17 +222,18 @@ function triggerCustomColor() {
           Плавность — способ показа тех же двух чисел. «Своя» открывает их для правки.
         </p>
         <div class="row">
-          <label>Плавность</label>
-          <select class="dd" data-testid="animPreset" :disabled="saving" v-model="preset">
+          <label for="general-anim-preset">Плавность</label>
+          <select id="general-anim-preset" class="dd" data-testid="animPreset" :disabled="saving" v-model="preset">
             <option value="none">Без анимации</option>
             <option v-for="o in ANIM_PRESETS" :key="o.id" :value="o.id">{{ o.label }}</option>
             <option value="custom">Своя</option>
           </select>
         </div>
         <div class="row">
-          <label>Длительность (мс)</label>
+          <label for="general-anim-ms">Длительность (мс)</label>
           <div class="field">
             <input
+              id="general-anim-ms"
               class="num-sm"
               :class="{ 'disabled-field': !customAnim || saving }"
               type="text"
@@ -237,9 +245,10 @@ function triggerCustomColor() {
           </div>
         </div>
         <div class="row">
-          <label>Шагов</label>
+          <label for="general-anim-steps">Шагов</label>
           <div class="field">
             <input
+              id="general-anim-steps"
               class="num-sm"
               :class="{ 'disabled-field': !customAnim || saving }"
               type="text"
@@ -255,11 +264,13 @@ function triggerCustomColor() {
       <div class="card">
         <h3>Дополнительно</h3>
         <div class="row">
-          <label>Проверка потери фокуса (мс)</label>
+          <label for="general-blur-ms">Проверка потери фокуса (мс)</label>
           <div class="field">
             <input
+              id="general-blur-ms"
               class="num-sm"
               :class="{ 'field-bad': bad('general.blurCheckMs') }"
+              :aria-invalid="bad('general.blurCheckMs') ? 'true' : undefined"
               type="text"
               data-testid="blurCheckMs"
               :disabled="saving"

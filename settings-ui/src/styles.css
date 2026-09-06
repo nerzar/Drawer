@@ -24,7 +24,7 @@ body {
   --bg-card: #1e2025;
   --text: #ededef;
   --text-2: #9a9ca3;
-  --text-3: #6c6e76;
+  --text-3: #8c8e96;
   --border: rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.18);
   --field-bg: rgba(255, 255, 255, 0.04);
@@ -43,6 +43,15 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-fg);
+  outline-offset: 2px;
+}
+input[type='text']:focus-visible,
+select:focus-visible {
+  outline-offset: 0;
 }
 
 .app a {

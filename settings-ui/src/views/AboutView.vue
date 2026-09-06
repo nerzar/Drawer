@@ -2,7 +2,10 @@
 import AppLogo from '../components/AppLogo.vue'
 
 const hotkeys = [
-  { combo: ['Ctrl', 'Alt', '1–9'], desc: 'Выдвинуть / убрать окно слота' },
+  {
+    combo: ['Ctrl', 'Alt', '1–9'],
+    desc: 'Показать / убрать окно — клавиша настраивается для каждого слота; по умолчанию Ctrl + Alt + N',
+  },
   { combo: ['Ctrl', 'Alt', 'Shift', '1–9'], desc: 'Назначить активное окно слоту' },
   { combo: ['Ctrl', 'Alt', '0'], desc: 'Очистить динамические слоты' },
   { combo: ['Ctrl', 'Alt', 'Shift', '0'], desc: 'Выход, окна возвращаются на места' },

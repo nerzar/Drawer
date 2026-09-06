@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import {
   settings,
   applySettings,
@@ -21,6 +21,17 @@ const busy = computed(() => settings.status === 'loading' || settings.status ===
 const ready = computed(() => settings.draft !== null)
 const restart = computed(() => restartHint())
 const diagnostics = computed(() => diagnosticsHint())
+
+const keepButtonRef = ref(null)
+watch(
+  () => settings.confirmDiscard,
+  async (active) => {
+    if (active) {
+      await nextTick()
+      keepButtonRef.value?.focus()
+    }
+  },
+)
 </script>
 
 <template>
@@ -28,16 +39,31 @@ const diagnostics = computed(() => diagnosticsHint())
        окно на стороне моста остановило бы очередь сообщений WebView на всё
        время раздумий. Что считать несохранённым, решает порт — он один
        знает применённое состояние. -->
-  <div v-if="settings.confirmDiscard" class="footer confirm" data-testid="confirm">
+  <div
+    v-if="settings.confirmDiscard"
+    class="footer confirm"
+    data-testid="confirm"
+    role="alert"
+    aria-live="assertive"
+  >
     <div class="footer-status">Изменения не сохранены. Закрыть и отменить их?</div>
-    <button class="btn-outline" data-testid="keep" @click="keepEditing()">Продолжить правку</button>
+    <button ref="keepButtonRef" class="btn-outline" data-testid="keep" @click="keepEditing()">
+      Продолжить правку
+    </button>
     <button class="btn-primary" data-testid="discard" @click="cancelSettings(true)">
       Отменить изменения
     </button>
   </div>
 
   <div v-else class="footer">
-    <div class="footer-status" :class="{ bad: props.bad }" data-testid="status">
+    <div
+      class="footer-status"
+      :class="{ bad: props.bad }"
+      data-testid="status"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
       {{ props.status }}
       <span v-if="restart" class="restart" data-testid="restart">{{ restart }}</span>
       <span v-if="diagnostics" class="warning" data-testid="diagnostics">{{ diagnostics }}</span>
