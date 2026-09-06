@@ -1703,6 +1703,7 @@ if FileExist(drawerPath) {
         srcPort19 := FileRead(portPath19, "UTF-8")
         Assert("19e: WebView Save и dirty используют финальный General для slot plan",
             StrSplit(srcPort19, "SettingsSlotsPlan(edits, &err, SettingsDynamicFinal(").Length = 3)
+    }
 }
 
 ; ---------------------------------------------------------------
