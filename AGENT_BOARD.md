@@ -25,7 +25,7 @@ Blackboard между архитектором ChatGPT и coding agents.
 
 Агент повторяет Run ID в factual report и финальном ответе. Chat/session ID не придумывать: если клиент не показывает — `NOT_EXPOSED`. Search anchor обязателен.
 
-Если после зависания/перезапуска создаётся новый чат для продолжения той же задачи, это **новый Run ID**, а в отчёте нового запуска указывается предыдущий Run ID. Код не начинать заново: сначала проверить существующий worktree/branch и продолжить безопасное состояние.
+Если после зависания/перезапуска продолжается **тот же** реально сохранённый chat/session, Run ID можно сохранить. Если создаётся новый чат — новый Run ID, а previous Run ID указывается в отчёте. Код не начинать заново: сначала проверить existing worktree/branch.
 
 ## Изоляция рабочих каталогов
 
@@ -42,7 +42,7 @@ Blackboard между архитектором ChatGPT и coding agents.
 - Codex GPT quota исчерпана после C02. **Новые задачи Codex не назначать до сообщения оператора о восстановлении лимита.**
 - Claude держим в резерве.
 - Gemini/Antigravity — основной доступный worker сейчас.
-- Старые/отдельно лимитируемые модели в Codex не использовать автоматически: только по отдельному решению архитектора/оператора.
+- Старые/отдельно лимитируемые модели в Codex не использовать автоматически.
 - Astra не использовать без отдельного решения.
 
 ## Общие правила
@@ -60,105 +60,112 @@ Blackboard между архитектором ChatGPT и coding agents.
 - orchestration branch: `dev/wip/slots-parity`.
 - diagnostics base `b2ec249` вручную принята пользователем.
 - Wave 1 integration: `dev/integration/slots-settings-wave1@ac63ead`.
-- C01 + G01 объединены; permanent `Имя` редактируется; `Tab` не захватывается hotkey field; narrow/frontend checks зелёные.
-- T00: `dev/chore/frontend-local-typecheck@9c856ea`; repo typecheck уже корректен, code change не понадобился.
-- Wave 1 ещё не принята как новая основная база из-за production-build blocker B01.
-- На integration branch действительно есть два определения `ApplyDwmTitlebarTheme`: в `src/drawer.ahk` и `src/webview/SettingsWebView.ahk`. C02 подтвердил, что WebView smoke упирается в duplicate compile error; B01 должен устранить это по смыслу и затем проверить production build.
-- `wip/slots-parity` пока не передвигаем на code integration до B01 + I02.
+- T00: `dev/chore/frontend-local-typecheck@9c856ea`; repo typecheck уже корректен.
+- C02 опубликована: `dev/fix/settings-general-override-atomic@f75dcc6`.
+- B01 опубликована: `dev/fix/integration-production-build@1bd8f6e`.
+- C02 и B01 обе основаны непосредственно на `ac63ead`, поэтому следующая задача — одна контролируемая интеграция I02.
+- B01 доказала причину `Ahk2Exe exit 17`: duplicate `ApplyDwmTitlebarTheme`; production build теперь проходит, config preservation и embedded assets проверены.
+- `wip/slots-parity` пока не передвигаем на code integration до проверки I02 архитектором.
 
 ---
 
-# DONE / WAITING FOR INTEGRATION
+# DONE / WAITING FOR I02
 
 ## TASK C02 — General + dynamic override в одном Save
 
-**Status:** DONE_WAITING_FOR_B01_I02  
+**Status:** DONE_WAITING_FOR_I02  
 **Executor:** Codex  
 **Run ID:** `RUN-20260906-CODEX-C02-01`  
 **Branch:** `dev/fix/settings-general-override-atomic`  
 **Reviewed remote HEAD:** `f75dcc6`  
 **Base:** `ac63ead`
 
-### Результат
-
-- `SettingsDynamicFinal()` накладывает planned `[dynamic]` writes на текущие defaults до планирования slots.
-- Dynamic overrides теперь сравниваются с **финальным General state этого же Save**.
-- Regression покрывает swap `General 70→50` + slot `50→70`, а также delete/no-op cases.
-- Persistence pipeline не переписывался.
-
-### Проверки
-
-- AHK `/validate` — green.
-- settings-seam — green.
-- frontend test 25/25, typecheck, build — green.
-- webview-slice не дошёл до bridge checks из-за уже существующего duplicate `ApplyDwmTitlebarTheme`; это B01, не дефект C02.
+Результат: dynamic overrides планируются относительно финального General state того же Save; regression покрывает swap/delete/no-op. `/validate`, settings-seam, frontend test/typecheck/build зелёные. WebView smoke на этой branch блокировался старым duplicate DWM из base, который закрыт B01.
 
 Factual report: `docs/agent-reports/2026-09-06-codex-c02.md` в ветке C02.
+
+## TASK B01 — production build + config preservation
+
+**Status:** DONE_WAITING_FOR_I02  
+**Executor:** Gemini / Antigravity  
+**Run ID:** `RUN-20260906-GEMINI-B01-01`  
+**Chat/session ID:** `58a95442-23fa-4251-a1f2-9276631611c8`  
+**Branch:** `dev/fix/integration-production-build`  
+**Reviewed remote HEAD:** `1bd8f6e`  
+**Base:** `ac63ead`
+
+Результат:
+- duplicate `ApplyDwmTitlebarTheme` действительно был причиной Ahk2Exe exit 17;
+- оставлена одна полная DWM implementation в `src/drawer.ahk`, duplicate из `SettingsWebView.ahk` удалён;
+- build запускает Ahk2Exe с `/silent`;
+- Windows PowerShell 5.1 compatibility build check исправлена (`ISO-8859-1`, UTF-8 BOM);
+- fresh build получает default config, rebuild сохраняет изменённый config;
+- `.log` исключён из zip;
+- `index.html` + `WebView2Loader.dll` доказанно embedded;
+- `/validate`, settings-seam 226/226, frontend 25/25, typecheck/build, `pwsh build` и `powershell.exe -SkipFrontend` зелёные.
+
+Known environment note: `webview-slice.ps1` в B01 упёрся в interactive CDP/headless inject timeout; это не тот duplicate compile blocker, который уже устранён. I02 обязана повторить WebView slice в объединённом состоянии и зафиксировать результат.
+
+Factual report: `docs/agent-reports/2026-09-06-gemini-b01.md` в ветке B01.
 
 ---
 
 # ACTIVE
 
-## TASK B01 — восстановить production build и проверить config-preservation
+## TASK I02 — интегрировать C02 + B01 + orchestration docs
 
-**Status:** RESUME_AFTER_CLIENT_RESTART  
-**Executor:** Gemini / Antigravity, strongest available Gemini mode; NOT Astra  
-**Previous Run ID:** `RUN-20260906-GEMINI-B01-01`  
-**Current Run ID:** `RUN-20260906-GEMINI-B01-02`  
+**Status:** READY  
+**Executor:** Gemini / Antigravity, `Gemini 3.8 Flash High` либо strongest available Gemini mode; NOT Astra  
+**Run ID:** `RUN-20260906-GEMINI-I02-01`  
 **Base:** `dev/integration/slots-settings-wave1@ac63ead`  
-**Branch:** `fix/integration-production-build`  
-**Worktree:** `C:\Users\nerza\Projects\drawer-agent-worktrees\B01`
+**Inputs:**
+- `dev/fix/settings-general-override-atomic@f75dcc6`
+- `dev/fix/integration-production-build@1bd8f6e`
+- актуальные `AGENT_BOARD.md` + `docs/agent-reports/REPORT_FORMAT.md` из `dev/wip/slots-parity`
 
-Antigravity был перезапущен после зависания. **Не начинать B01 заново и не удалять существующий worktree.**
+**Branch:** `integration/slots-settings-wave2`  
+**Worktree:** `C:\Users\nerza\Projects\drawer-agent-worktrees\I02`
 
-### Сначала
+### Цель
 
-1. `git fetch dev`.
-2. Проверить `git worktree list`, `git status`, текущую branch и содержимое `C:\Users\nerza\Projects\drawer-agent-worktrees\B01`.
-3. Если предыдущий запуск оставил незакоммиченные изменения — сохранить их и продолжить, не reset/clean/discard.
-4. Если branch ещё не опубликована — это не повод пересоздавать worktree.
-5. В новом factual report указать previous Run ID `RUN-20260906-GEMINI-B01-01`.
+Получить одну чистую integration branch с Wave 1 + C02 + B01 + актуальными orchestration docs. Не начинать новые product/correctness задачи.
 
-### Задача
+### Обязательно
 
-1. Устранить duplicate `ApplyDwmTitlebarTheme` по смыслу. Оставить **одно** определение, пригодное и для Settings WebView, и для нужных native dialogs, сохранив dark mode + caption/text/border colors + безопасный fallback; custom chrome не делать.
-2. Проверить, был ли duplicate реальной причиной `Ahk2Exe exit 17`; зафиксировать факт.
-3. Production `build/build.ps1` должен завершаться успешно.
-4. Проверить build/config safety:
-   - fresh output получает default `config.ini`;
-   - изменить output `config.ini`, повторить build → файл сохраняется;
-   - release zip не содержит `.log`;
-   - WebView assets embedded и build-проверка проходит.
-5. Не брать C02/C03 и не менять slot semantics.
+1. Создать **новый отдельный sibling worktree I02**, не работать в B01/C02 worktrees и не использовать общий checkout.
+2. Интегрировать C02 и B01 по смыслу. Обе ветки меняют `src/drawer.ahk` и `test/narrow/settings-seam.ahk`; не разрешать конфликт простым выбором одной стороны.
+3. Сохранить одновременно:
+   - `SettingsDynamicFinal` / final-General override semantics из C02;
+   - единственную полную DWM implementation из B01;
+   - B01 build fixes (`/silent`, PS5.1-compatible encoding, config safety);
+   - C01/G01 slot/hotkey/settings behavior из Wave 1.
+4. Подтянуть `AGENT_BOARD.md` и `docs/agent-reports/REPORT_FORMAT.md` из актуального `dev/wip/slots-parity` **без движения самого `wip/slots-parity` ref**.
+5. Не менять slot product contract, persistence beyond C02 fix, или следующие backlog-задачи.
 
 ### Проверки
 
-Production build обязателен; AHK `/validate`; узкие checks, затронутые исправлением. VM/full suite не нужен.
+- AHK `/validate src/drawer.ahk`;
+- settings-seam;
+- webview-slice — повторить на объединённой ветке; если interactive environment снова не даёт пройти, зафиксировать точный runtime blocker, но duplicate compile error недопустим;
+- `npm --prefix settings-ui test`;
+- `npm --prefix settings-ui run typecheck`;
+- `npm --prefix settings-ui run build`;
+- production `build/build.ps1`;
+- повторно быстро проверить fresh-config + rebuild-preserves-config + embedded assets;
+- VM/full suite не запускать.
 
-Перед завершением: factual report по REPORT_FORMAT с Run ID `RUN-20260906-GEMINI-B01-02`, commit, push `dev/fix/integration-production-build`, clean tree. Не merge.
+Перед завершением: factual report по REPORT_FORMAT, commit, push `dev/integration/slots-settings-wave2`, verify remote HEAD = local HEAD, clean tree. **Не двигать `wip/slots-parity` самостоятельно.**
 
 ---
 
 # NEXT
 
-## TASK I02 — интегрировать C02 + B01 + orchestration docs
-
-**Status:** BLOCKED_ON_B01  
-**Preferred executor сейчас:** Gemini, потому что Codex quota exhausted.
-
-После B01 создать отдельный integration worktree/branch от `ac63ead`, интегрировать:
-- `dev/fix/settings-general-override-atomic@f75dcc6`;
-- финальный B01 branch;
-- актуальные `AGENT_BOARD.md` + `docs/agent-reports/REPORT_FORMAT.md` из `dev/wip/slots-parity`.
-
-Затем полный narrow/frontend gate + production build. После проверки архитектор передвигает рабочую base branch; агент сам `wip/slots-parity` не двигает.
-
 ## TASK A01 — короткая ручная приёмка
 
-**Status:** BLOCKED_ON_I02  
+**Status:** BLOCKED_ON_I02_ARCH_REVIEW  
 **Executor:** пользователь
 
-Проверить обычными действиями: custom show/hide hotkey, смена hotkey без restart, Tab из hotkey field, editable permanent name, dynamic bind/release/reset, permanent↔dynamic с живым окном, handle после bind, late permanent launch, native dark titlebar/About. При баге: `Нашёл баг…` → номер BUG + действие/результат.
+После проверки I02 архитектором рабочая base branch будет передвинута на принятую integration и пользователь получит короткий человеческий checklist: hotkeys, Tab, editable name, dynamic bind/release/reset, permanent↔dynamic, handle lifecycle, late permanent app, dark titlebar/About. При баге: `Нашёл баг…` → номер BUG + действие/результат.
 
 ---
 
@@ -174,7 +181,7 @@ Structured partial-save/reload/reconcile должен доходить до UI; 
 **Status:** BLOCKED_ON_I02
 **Preferred executor:** Gemini
 
-Смена exe не оставляет class старого app; picker согласованно обновляет exe/class/name seed; dynamic→permanent получает чистые identity data. Не менять FindWindow больше необходимого.
+Смена exe не оставляет class старого app; picker согласованно обновляет exe/class/name seed; dynamic→permanent получает чистые identity data.
 
 ## TASK G03 — live hideOnBlur/blurMs + save lock
 **Status:** BLOCKED_ON_I02
@@ -195,16 +202,12 @@ Custom animation duration/steps сохраняются, корректно от�
 ## TASK G05 — Slots terminology/onboarding
 **Status:** BLOCKED_ON_SETTINGS_CORRECTNESS
 
-Убрать INI/internal jargon; ясно объяснить Permanent/Dynamic; хороший empty dynamic onboarding; release/reset очевидны; без redesign.
-
 ## TASK G06 — navigation/accessibility/polish
 **Status:** BLOCKED_ON_SETTINGS_CORRECTNESS
 
-Selected slot сохраняется между tabs; scrollbar/list behavior; remaining labels/select/contrast/keyboard issues; About follow-up.
-
 ---
 
-# BACKLOG — modular architecture после стабилизации
+# BACKLOG — modular architecture
 
 ## TASK A02 — windows/focus seam
 **Status:** BLOCKED_ON_STABILIZATION_AND_STRONG_MODEL
@@ -266,8 +269,8 @@ Selected slot сохраняется между tabs; scrollbar/list behavior; r
 
 # Ближайший порядок
 
-1. Сейчас: продолжить B01 после restart как `RUN-20260906-GEMINI-B01-02` в существующем отдельном worktree.
-2. После B01 — I02 (Gemini, если Codex лимит ещё не восстановился).
+1. Сейчас: `RUN-20260906-GEMINI-I02-01` — I02 integration в отдельном sibling worktree.
+2. Архитектор проверяет remote `integration/slots-settings-wave2` и только затем двигает рабочую base branch.
 3. A01 короткая ручная приёмка.
 4. Затем G02/G03/G04 и C03 по доступности сильной модели.
 5. UX cleanup.
