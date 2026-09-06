@@ -25,6 +25,8 @@ Promote accepted G03 production code into the shared branch and remove obsolete 
 - Cherry-picked the original G03 implementation and accepted watcher-authority correction onto the current shared tip, preserving newer shared documentation and task assignments.
 - Preserved the G03 analysis, implementation, review, fix, and runtime-acceptance reports in the shared tree.
 - Added a history-only merge after promotion so the original accepted Code SHA `5a779c736fb562d11e1d617ce32adb1210743c1d` and report tips remain reachable after branch cleanup.
+- Deleted remote refs `analysis/g03-live-settings`, `review/g03-live-settings`, `verify/g03-runtime-acceptance`, `fix/settings-live-blur-save-lock`, `fix/settings-live-blur-watch-authority`, `orchestration/post-g03-g05`, `tmp-unused-post-g03-g05`, and `tmp-unused-post-g03-g05-2`.
+- Removed the corresponding local branches and clean registered worktrees for G03 implementation, correction, and acceptance.
 - Confirmed `src/config.ini` is unchanged from the pre-promotion shared tip.
 
 ## 3. Commits
@@ -57,7 +59,7 @@ Promote accepted G03 production code into the shared branch and remove obsolete 
 
 ## 7. Known issues / unfinished
 
-- None.
+- Windows kept the now-unregistered, empty `C:\Users\nerza\Projects\drawer-agent-worktrees\G03ACCEPT` directory locked by another process. Its Git worktree registration and branch were removed; only the empty filesystem directory remains for later deletion after the lock is released.
 
 ## 8. Suggested next step
 
