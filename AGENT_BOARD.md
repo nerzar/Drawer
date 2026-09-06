@@ -56,7 +56,8 @@ On blocker/conflict/product ambiguity/data-loss risk: preserve safe state, push 
 - G03, G05/G05FIX, G06 accepted + runtime verified + promoted.
 - A02S1 accepted, runtime verified and promoted by P08. P08 validate + window-focus seam 9/9 passed; `config.ini` untouched.
 - A02S2 focus-history/foreground extraction is currently claimed by Antigravity from accepted P08 lineage.
-- A03 analysis verdict `READY_TO_IMPLEMENT`; A03S1 is independent of unaccepted A02S2 and remains the single queued READY task for Antigravity.
+- A03 analysis verdict `READY_TO_IMPLEMENT`; A03S1 is independent of unaccepted A02S2 and remains queued for Antigravity.
+- DeepSeek A03S2 is WAITING on A03S1 by dependency and must not be claimed early.
 - **CODEX quota exhausted. No new `Eligible: CODEX` work until operator reports reset.**
 - Antigravity has only a small remaining model budget. Do not invent additional work beyond the deliberate final wave without architect review.
 
@@ -93,6 +94,28 @@ On blocker/conflict/product ambiguity/data-loss risk: preserve safe state, push 
 
 After A03S1, Antigravity must idle unless architect publishes more work.
 
+## AUTONOMOUS QUEUE — OPENCODE / DEEPSEEK
+
+### 1. T01 — settings-seam determinism / timeout
+- Status: `READY`
+- Eligible: `OPENCODE-DEEPSEEK`
+- Required model: `deepseek-v4-flash`
+- Session: `NEW`
+- Run ID: `RUN-20260907-OPENCODE-DEEPSEEK-T01-SETTINGS-SEAM-01`
+- Base/source rule: accepted shared production identity `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`; latest shared tip allowed only if newer commits are docs/tasks/claims/reports
+- Branch: `test/settings-seam-determinism`
+- Task file: `docs/agent-tasks/RUN-20260907-OPENCODE-DEEPSEEK-T01-SETTINGS-SEAM-01.md`
+
+### 2. A03S2 — monitor / origin selection seam
+- Status: `WAITING_DEPENDENCY`
+- Eligible: `OPENCODE-DEEPSEEK`
+- Required model: `deepseek-v4-flash`
+- Session: `NEW`
+- Run ID: `RUN-20260907-OPENCODE-DEEPSEEK-A03S2-IMPLEMENT-01`
+- Dependency: A03S1 DONE with pushed Code SHA
+- Branch: `refactor/window-geometry-monitor-origin-seam`
+- Task file: `docs/agent-tasks/RUN-20260907-OPENCODE-DEEPSEEK-A03S2-IMPLEMENT-01.md`
+
 ## COMPLETED AUTONOMOUS RUNS — recent
 
 - `RUN-20260906-AUTO-ANTIGRAVITY-P08-A02S1-PROMOTE-01` — DONE, shared production Code SHA `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`.
@@ -106,5 +129,5 @@ After A03S1, Antigravity must idle unless architect publishes more work.
 ## NEXT AFTER THIS WAVE
 
 - Review/accept A02S2 and A03S1 before promotion.
-- A03S2 monitor/origin selection can follow A03S1; A03S3 waits until accepted A02S2 removes focus `prev` from shared geometry state.
+- A03S2 monitor/origin selection follows A03S1; A03S3 waits until accepted A02S2 removes focus `prev` from shared geometry state.
 - Then A04 handles seam, A05 Settings/tray seams, test debt and release gates.
