@@ -2,8 +2,13 @@
 import { computed, ref, watch } from 'vue'
 import { settings, pickSlot, releaseSlot } from '../bridge/settings'
 import { fieldTarget } from '../bridge/fieldError'
-import { EDGE_OPTIONS } from '../bridge/general'
-import { resetToShared } from '../bridge/slotDraft'
+import { EDGE_OPTIONS, draftToWire } from '../bridge/general'
+import {
+  draftBehavior,
+  resetPermanentIdentityFromSlot,
+  resetToShared,
+  setDraftExecutable,
+} from '../bridge/slotDraft'
 import {
   useSlotStatus,
   edgeLabels,
@@ -57,8 +62,36 @@ const OVERRIDE_NAMES = {
   hideOnBlur: 'автоскрытие',
 }
 
+const currentShared = computed(() => {
+  if (settings.draft) {
+    return draftToWire(settings.draft).dynamicDefaults
+  }
+  return settings.canonical?.general.dynamicDefaults
+})
+
+const hasDraftOverrides = computed(() => {
+  const shared = currentShared.value
+  const d = draft.value
+  if (!shared || !d || d.kind !== 'dynamic') return false
+  const b = draftBehavior(d)
+  return Object.keys(OVERRIDE_NAMES).some(
+    (k) => JSON.stringify(b[k]) !== JSON.stringify(shared[k]),
+  )
+})
+
+const hasOverrides = computed(() => {
+  if (kind.value !== 'dynamic') return false
+  const shared = currentShared.value
+  const applied = behavior.value
+  if (!shared) return false
+  const canonicalHas = applied
+    ? Object.keys(OVERRIDE_NAMES).some((k) => JSON.stringify(applied[k]) !== JSON.stringify(shared[k]))
+    : false
+  return canonicalHas || hasDraftOverrides.value
+})
+
 const overrideNote = computed(() => {
-  const shared = settings.canonical?.general.dynamicDefaults
+  const shared = currentShared.value
   const applied = behavior.value
   if (!shared || !applied) return ''
   const own = Object.keys(OVERRIDE_NAMES).filter(
@@ -79,18 +112,26 @@ const locked = computed(() => settings.status === 'saving' || settings.pickerAct
 // уходит до «Применить»/«ОК».
 function makeDynamic() {
   const d = draft.value
-  const shared = settings.canonical?.general.dynamicDefaults
-  if (!d || !shared || locked.value) return
+  const shared = currentShared.value
+  const slot = selectedSlot.value
+  if (!d || !shared || !slot || locked.value) return
   d.kind = 'dynamic'
   // Поведение возвращается к общим: секция [slotN] уходит, собственной
   // надстройки у слота не появляется — ровно то, что делает native.
   resetToShared(d, shared)
+  resetPermanentIdentityFromSlot(d, slot)
 }
 
 function makePermanent() {
   const d = draft.value
-  if (!d || locked.value) return
+  const slot = selectedSlot.value
+  if (!d || !slot || locked.value) return
   d.kind = 'permanent'
+  resetPermanentIdentityFromSlot(d, slot)
+}
+
+function onExecutableInput(val) {
+  if (draft.value) setDraftExecutable(draft.value, val)
 }
 
 function captureHotkey(event) {
@@ -98,6 +139,10 @@ function captureHotkey(event) {
   if (event.key === 'Tab') return
   if (event.key === 'Control' || event.key === 'Alt' || event.key === 'Shift' || event.key === 'Meta') return
   event.preventDefault()
+  if (!event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey && (event.key === 'Backspace' || event.key === 'Delete')) {
+    if (draft.value) draft.value.hotkey = ''
+    return
+  }
   const key = event.key === ' ' ? 'Space' : event.key.length === 1 ? event.key.toUpperCase() : event.key
   const parts = []
   if (event.ctrlKey) parts.push('Ctrl')
@@ -110,7 +155,7 @@ function captureHotkey(event) {
 
 function resetDynamic() {
   const d = draft.value
-  const shared = settings.canonical?.general.dynamicDefaults
+  const shared = currentShared.value
   if (!d || !shared || locked.value) return
   resetToShared(d, shared)
 }
@@ -184,49 +229,41 @@ function resetDynamic() {
       <div v-if="selectedSlot" class="detail" data-testid="slot-detail">
         <div class="detail-head">
           <h2>Слот {{ selectedSlot.number }}</h2>
-          <!-- Смена рода — правка черновика: панель меняется сразу,
-               config.ini — только по «Применить»/«ОК». -->
-          <button
-            v-if="kind === 'permanent'"
-            class="btn-danger-hd"
-            type="button"
-            data-testid="make-dynamic"
-            :disabled="locked"
-            title="Секция [slot N] будет удалена по «Применить»"
-            @click="makeDynamic()"
-          >
-            Сделать динамическим…
-          </button>
-          <button
-            v-if="kind === 'dynamic' && selectedSlot.status.state !== 'empty'"
-            class="btn-danger-hd"
-            type="button"
-            data-testid="release-slot"
-            :disabled="locked"
-            @click="releaseSlot(selectedNumber)"
-          >
-            Освободить слот
-          </button>
-          <button
-            v-if="kind === 'dynamic'"
-            class="btn-primary-sm"
-            type="button"
-            data-testid="reset-dynamic-settings"
-            :disabled="locked"
-            @click="resetDynamic()"
-          >
-            Сбросить к General
-          </button>
-          <button
-            v-if="kind === 'dynamic'"
-            class="btn-primary-sm"
-            type="button"
-            data-testid="make-permanent"
-            :disabled="locked"
-            @click="makePermanent()"
-          >
-            Сделать постоянным…
-          </button>
+          <div class="detail-actions">
+            <!-- Смена рода — правка черновика: панель меняется сразу,
+                 config.ini — только по «Применить»/«ОК». -->
+            <button
+              v-if="kind === 'permanent'"
+              class="btn-danger-hd"
+              type="button"
+              data-testid="make-dynamic"
+              :disabled="locked"
+              title="Секция [slot N] будет удалена по «Применить»"
+              @click="makeDynamic()"
+            >
+              Сделать динамическим…
+            </button>
+            <button
+              v-if="kind === 'dynamic' && selectedSlot.status.state !== 'empty'"
+              class="btn-danger-hd"
+              type="button"
+              data-testid="release-slot"
+              :disabled="locked"
+              @click="releaseSlot(selectedNumber)"
+            >
+              Освободить слот
+            </button>
+            <button
+              v-if="kind === 'dynamic'"
+              class="btn-primary-sm"
+              type="button"
+              data-testid="make-permanent"
+              :disabled="locked"
+              @click="makePermanent()"
+            >
+              Сделать постоянным…
+            </button>
+          </div>
         </div>
         <div class="detail-divider"></div>
 
@@ -267,7 +304,8 @@ function resetDynamic() {
                   data-testid="edit-executable"
                   :class="{ 'field-bad': bad('executable') }"
                   :aria-invalid="bad('executable')"
-                  v-model="draft.executable"
+                  :value="draft.executable"
+                  @input="onExecutableInput($event.target.value)"
                 />
                 <button class="btn-icon" type="button" title="Обзор…" data-testid="pick-exe" @click="pickSlot(selectedNumber, 'exe')">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
@@ -451,7 +489,19 @@ function resetDynamic() {
                   data-testid="edit-hotkey" :class="{ 'field-bad': bad('hotkey') }" readonly :value="draft.hotkey" @keydown="captureHotkey" />
               </div>
             </div>
-            <div class="hotkey-cap" data-testid="dyn-source">{{ overrideNote }}</div>
+            <div class="override-box">
+              <div class="hotkey-cap" data-testid="dyn-source">{{ overrideNote }}</div>
+              <button
+                v-if="hasOverrides"
+                class="btn-reset-override"
+                type="button"
+                data-testid="reset-dynamic-settings"
+                :disabled="locked || !hasDraftOverrides"
+                @click="resetDynamic()"
+              >
+                Использовать общие настройки
+              </button>
+            </div>
           </fieldset>
 
 
@@ -832,5 +882,43 @@ fieldset[disabled] {
 }
 .btn-danger-hd[disabled]:hover {
   background: transparent;
+}
+.detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.override-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.btn-reset-override {
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+}
+.btn-reset-override:hover:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.btn-reset-override:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

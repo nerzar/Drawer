@@ -9,8 +9,20 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { CanonicalGate, reconcileSlotDrafts } from '../src/bridge/canonical'
-import { resetToShared, slotDraftsFromState, slotEditsToWire, type SlotDrafts } from '../src/bridge/slotDraft'
+import {
+  draftPermanentValue,
+  normalizeExe,
+  resetPermanentIdentityFromSlot,
+  resetToShared,
+  setDraftExecutable,
+  setDraftExecutableFromPicker,
+  setDraftWindow,
+  slotDraftsFromState,
+  slotEditsToWire,
+  type SlotDrafts,
+} from '../src/bridge/slotDraft'
 import type { PermanentSlotValue, SettingsState, SlotBehavior, SlotState } from '../src/bridge/protocol'
+import { draftFromState } from '../src/bridge/general'
 
 // ---------------------------- фикстуры ----------------------------
 
@@ -235,3 +247,580 @@ test('AHK key order does not make unchanged permanent or dynamic slots dirty', (
   drafts[2]!.widthPercent = '35'
   assert.deepEqual(slotEditsToWire(drafts, canonical).map((edit) => edit.number), [2])
 })
+
+test('hotkey A -> B -> A lifecycle: draft emits edits upon change and after canonical adoption', () => {
+  const initial = state(perm(1))
+  const drafts = slotDraftsFromState(initial)
+  assert.equal(drafts[1]!.hotkey, 'Ctrl + Alt + F2')
+
+  // A -> B
+  drafts[1]!.hotkey = 'Ctrl + Alt + Z'
+  const editsB = slotEditsToWire(drafts, initial)
+  assert.equal(editsB.length, 1)
+  assert.equal(editsB[0].kind === 'permanent' && editsB[0].value.hotkey, 'Ctrl + Alt + Z')
+
+  // Canonical adopts B (simulating successful Save and bridge adopt)
+  const stateB = state({
+    ...perm(1),
+    value: { ...permValue('Steam', 'steam.exe'), hotkey: 'Ctrl + Alt + Z' },
+  })
+  const reconciled = reconcileSlotDrafts(drafts, stateB)
+  assert.deepEqual(slotEditsToWire(reconciled, stateB), [])
+
+  // B -> A
+  reconciled[1]!.hotkey = 'Ctrl + Alt + F2'
+  const editsA = slotEditsToWire(reconciled, stateB)
+  assert.equal(editsA.length, 1)
+  assert.equal(editsA[0].kind === 'permanent' && editsA[0].value.hotkey, 'Ctrl + Alt + F2')
+})
+
+test('resetToShared resets dynamic slot overrides to General defaults', () => {
+  const customGeneralBehavior: SlotBehavior = {
+    monitor: { kind: 'number', number: 2 },
+    edge: 'bottom',
+    widthPercent: 75,
+    activateOnShow: false,
+    hideOnBlur: false,
+  }
+  const canonical = state(dyn(1))
+  const drafts = slotDraftsFromState(canonical)
+
+  // Give slot 1 custom overrides different from General defaults
+  drafts[1]!.edge = 'top'
+  drafts[1]!.widthPercent = '40'
+  drafts[1]!.activateOnShow = true
+  drafts[1]!.hideOnBlur = true
+
+  // Reset to General defaults
+  resetToShared(drafts[1]!, customGeneralBehavior)
+
+  assert.equal(drafts[1]!.monitorKind, 'number')
+  assert.equal(drafts[1]!.monitorNumber, '2')
+  assert.equal(drafts[1]!.edge, 'bottom')
+  assert.equal(drafts[1]!.widthPercent, '75')
+  assert.equal(drafts[1]!.activateOnShow, false)
+  assert.equal(drafts[1]!.hideOnBlur, false)
+})
+
+// -------------------- G02: picker identity & stale windowClass --------------------
+
+test('ручная смена exe гасит старый windowClass, а возврат восстанавливает', () => {
+  const s = state(perm(1, 'Notepad', 'notepad.exe'))
+  s.slots[0]!.value.windowClass = 'Notepad'
+  const drafts = slotDraftsFromState(s)
+  const d = drafts[1]!
+  assert.equal(d.windowClass, 'Notepad')
+
+  // Пользователь реально сменил exe вручную
+  setDraftExecutable(d, 'calc.exe')
+  assert.equal(d.executable, 'calc.exe')
+  assert.equal(d.windowClass, '', 'stale windowClass должен быть очищен при смене exe')
+  assert.equal(draftPermanentValue(d).windowClass, '')
+
+  // Временный ввод / возврат к исходному exe восстанавливает валидный класс
+  setDraftExecutable(d, 'notepad.exe')
+  assert.equal(d.windowClass, 'Notepad', 'класс восстанавливается при возврате к исходному exe')
+  assert.equal(draftPermanentValue(d).windowClass, 'Notepad')
+
+  // Проверка нечувствительности к регистру и пробелам
+  setDraftExecutable(d, '  NOTEPAD.EXE  ')
+  assert.equal(d.windowClass, 'Notepad')
+})
+
+test('picker.exe при выборе нового exe сбрасывает старый windowClass и якорь', () => {
+  const s = state(perm(1, 'Notepad', 'notepad.exe'))
+  s.slots[0]!.value.windowClass = 'Notepad'
+  const drafts = slotDraftsFromState(s)
+  const d = drafts[1]!
+
+  // Выбор нового exe через picker.exe
+  setDraftExecutableFromPicker(d, 'calc.exe')
+  assert.equal(d.executable, 'calc.exe')
+  assert.equal(d.windowClass, '', 'stale class не должен остаться после picker.exe')
+  assert.equal(d.classAnchorExe, '')
+  assert.equal(d.anchorClass, '')
+
+  // Последующий ввод notepad.exe уже не вернёт старый Notepad, так как якорь очищен
+  setDraftExecutable(d, 'notepad.exe')
+  assert.equal(d.windowClass, '')
+})
+
+test('picker.exe при повторном выборе того же exe сохраняет windowClass', () => {
+  const s = state(perm(1, 'Notepad', 'notepad.exe'))
+  s.slots[0]!.value.windowClass = 'Notepad'
+  const drafts = slotDraftsFromState(s)
+  const d = drafts[1]!
+
+  setDraftExecutableFromPicker(d, 'NOTEPAD.EXE')
+  assert.equal(d.windowClass, 'Notepad')
+})
+
+test('picker.window согласованно устанавливает exe, windowClass и засеивает имя', () => {
+  const s = state(perm(1, 'Слот 1', 'notepad.exe'))
+  const drafts = slotDraftsFromState(s)
+  const d = drafts[1]!
+
+  setDraftWindow(d, {
+    title: 'Калькулятор',
+    executable: 'calc.exe',
+    windowClass: 'CalcFrame',
+  }, 'Слот 1')
+
+  assert.equal(d.executable, 'calc.exe')
+  assert.equal(d.windowClass, 'CalcFrame')
+  assert.equal(d.name, 'Калькулятор')
+
+  const val = draftPermanentValue(d)
+  assert.equal(val.executable, 'calc.exe')
+  assert.equal(val.windowClass, 'CalcFrame')
+})
+
+test('dynamic->permanent использует чистый identity seed и не превращается в persistent до Apply', () => {
+  const s = state(dyn(1))
+  const drafts = slotDraftsFromState(s)
+  const d = drafts[1]!
+
+  // Черновик в dynamic
+  assert.equal(d.kind, 'dynamic')
+  assert.equal(d.name, 'Слот 1')
+  assert.equal(d.executable, '')
+  assert.equal(d.windowClass, '')
+
+  // Переключение в permanent
+  d.kind = 'permanent'
+  resetPermanentIdentityFromSlot(d, s.slots[0]!)
+
+  // На frontend exe/class не выдумываются
+  assert.equal(d.name, 'Слот 1')
+  assert.equal(d.executable, '')
+  assert.equal(d.windowClass, '')
+
+  // При отправке уезжает пустое значение, чтобы валидация backend осталась источником истины
+  const edits = slotEditsToWire(drafts, s)
+  assert.equal(edits.length, 1)
+  assert.equal(edits[0]!.kind, 'permanent')
+  assert.equal(edits[0]!.value.executable, '')
+  assert.equal(edits[0]!.value.windowClass, '')
+})
+
+test('dynamic->permanent->dirty->dynamic->permanent возвращает чистый seed', () => {
+  const s = state(dyn(1))
+  const drafts = slotDraftsFromState(s)
+  const d = drafts[1]!
+
+  // Сделали permanent и набрали грязные правки
+  d.kind = 'permanent'
+  resetPermanentIdentityFromSlot(d, s.slots[0]!)
+  setDraftWindow(d, { title: 'Tmp', executable: 'temp.exe', windowClass: 'TmpClass' }, 'Слот 1')
+  assert.equal(d.executable, 'temp.exe')
+  assert.equal(d.windowClass, 'TmpClass')
+
+  // Передумали, вернули dynamic
+  d.kind = 'dynamic'
+  resetToShared(d, s.general.dynamicDefaults)
+  resetPermanentIdentityFromSlot(d, s.slots[0]!)
+
+  // Снова нажали «Сделать постоянным…» — данные должны быть чистым seed из permanentDefaults
+  d.kind = 'permanent'
+  resetPermanentIdentityFromSlot(d, s.slots[0]!)
+
+  assert.equal(d.name, 'Слот 1')
+  assert.equal(d.executable, '')
+  assert.equal(d.windowClass, '')
+})
+
+test('pickSlot интеграция через bridge: очистка stale class и согласование окна', async () => {
+  const s = state(perm(1, 'Notepad', 'notepad.exe'))
+  s.slots[0]!.value.windowClass = 'Notepad'
+
+  let requestHandler: (action: string, payload: any) => any = () => {}
+  const listeners: ((ev: { data: any }) => void)[] = []
+
+  ;(globalThis as any).chrome = {
+    webview: {
+      postMessage(msg: any) {
+        if (msg.type === 'request') {
+          Promise.resolve().then(() => {
+            try {
+              const res = requestHandler(msg.action, msg.payload)
+              listeners.forEach((l) => l({ data: { type: 'response', id: msg.id, ok: true, result: res } }))
+            } catch (err: any) {
+              listeners.forEach((l) => l({ data: { type: 'response', id: msg.id, ok: false, error: { code: 'internal_error', message: err.message } } }))
+            }
+          })
+        }
+      },
+      addEventListener(_type: string, handler: any) {
+        listeners.push(handler)
+      },
+      removeEventListener(_type: string, handler: any) {
+        const idx = listeners.indexOf(handler)
+        if (idx >= 0) listeners.splice(idx, 1)
+      },
+    },
+  }
+
+  const { settings, pickSlot } = await import('../src/bridge/settings')
+  settings.canonical = s
+  settings.slotDrafts = slotDraftsFromState(s)
+  const d = settings.slotDrafts[1]!
+  assert.equal(d.windowClass, 'Notepad')
+
+  // 1. pickSlot 'exe' выбирает новый executable -> stale windowClass гасится
+  requestHandler = (action) => {
+    if (action === 'picker.exe') return { selected: true, executable: 'calc.exe' }
+    throw new Error('unexpected action ' + action)
+  }
+  await pickSlot(1, 'exe')
+  assert.equal(d.executable, 'calc.exe')
+  assert.equal(d.windowClass, '', 'picker.exe должен сбросить stale windowClass')
+
+  // 2. pickSlot 'window' согласованно ставит exe и class
+  requestHandler = (action) => {
+    if (action === 'picker.window') {
+      return {
+        selected: true,
+        window: { title: 'Calculator', executable: 'calc.exe', windowClass: 'CalcClass' },
+      }
+    }
+    throw new Error('unexpected action ' + action)
+  }
+  await pickSlot(1, 'window')
+  assert.equal(d.executable, 'calc.exe')
+  assert.equal(d.windowClass, 'CalcClass')
+
+  // 3. pickSlot 'exe' повторно выбирает тот же exe -> class сохраняется
+  requestHandler = (action) => {
+    if (action === 'picker.exe') return { selected: true, executable: 'CALC.EXE' }
+    throw new Error('unexpected action ' + action)
+  }
+  await pickSlot(1, 'exe')
+  assert.equal(d.windowClass, 'CalcClass')
+
+  delete (globalThis as any).chrome
+})
+
+// ----------------- C03: partial/retryable/diagnostics lifecycle -----------------
+
+test('C03-1: full success shows Сохранено, clears diagnostics and converges draft', async () => {
+  const s1 = state(perm(1), dyn(2))
+  const s2 = state(perm(1, 'Steam', 'steam.exe'), dyn(2))
+  const reqHandler = (action: string, _payload: any): any => {
+    if (action === 'settings.apply') {
+      return {
+        ok: true,
+        result: {
+          saved: true,
+          changedFields: 2,
+          changedSlots: [1],
+          restartRequiredFields: [],
+          diagnostics: [],
+          state: s2,
+        },
+      }
+    }
+    throw new Error('unexpected action ' + action)
+  }
+
+  const listeners: any[] = []
+  ;(globalThis as any).chrome = {
+    webview: {
+      postMessage(msg: any) {
+        if (msg.type === 'request') {
+          Promise.resolve().then(() => {
+            const resp = reqHandler(msg.action, msg.payload)
+            listeners.forEach((l) => l({ data: { type: 'response', id: msg.id, ...resp } }))
+          })
+        }
+      },
+      addEventListener(_t: string, h: any) { listeners.push(h) },
+      removeEventListener(_t: string, h: any) {
+        const idx = listeners.indexOf(h)
+        if (idx >= 0) listeners.splice(idx, 1)
+      },
+    },
+  }
+
+  const { settings, applySettings, _resetClientForTesting } = await import('../src/bridge/settings')
+  _resetClientForTesting()
+
+  settings.canonical = s1
+  settings.draft = draftFromState(s1.general)
+  settings.slotDrafts = slotDraftsFromState(s1)
+  settings.diagnostics = ['stale warning']
+  settings.field = 'slots.1.name'
+
+  // User edits Slot 1
+  settings.slotDrafts[1]!.name = 'NewSteam'
+
+  await applySettings()
+
+  assert.equal(settings.status, 'ready')
+  assert.equal(settings.bad, false)
+  assert.match(settings.message, /Сохранено/)
+  assert.equal(settings.diagnostics.length, 0, 'full success must clear resolved diagnostics')
+  assert.equal(settings.field, '', 'full success must clear field diagnostic')
+  assert.deepEqual(settings.canonical, s2)
+  // Draft converged to canonical:
+  assert.deepEqual(slotEditsToWire(settings.slotDrafts, settings.canonical), [])
+
+  _resetClientForTesting()
+  delete (globalThis as any).chrome
+})
+
+test('C03-2: partial/retryable result does not become false success and exposes diagnostics', async () => {
+  const s1 = state(perm(1), dyn(2))
+  const partialState = state(perm(1, 'SavedSlot', 'saved.exe'), dyn(2))
+
+  const reqHandler = (action: string, _payload: any): any => {
+    if (action === 'settings.apply') {
+      return {
+        ok: false,
+        error: {
+          code: 'write_failed',
+          message: 'Не записалось: [slot2] exe',
+          field: 'slots.2.executable',
+          retryable: true,
+          partial: { mayHavePersisted: true, runtimeReloaded: true },
+          state: partialState,
+          diagnostics: ['config.ini: [general] accent — неверный формат'],
+        },
+      }
+    }
+    throw new Error('unexpected action ' + action)
+  }
+
+  const listeners: any[] = []
+  ;(globalThis as any).chrome = {
+    webview: {
+      postMessage(msg: any) {
+        if (msg.type === 'request') {
+          Promise.resolve().then(() => {
+            const resp = reqHandler(msg.action, msg.payload)
+            listeners.forEach((l) => l({ data: { type: 'response', id: msg.id, ...resp } }))
+          })
+        }
+      },
+      addEventListener(_t: string, h: any) { listeners.push(h) },
+      removeEventListener(_t: string, h: any) {
+        const idx = listeners.indexOf(h)
+        if (idx >= 0) listeners.splice(idx, 1)
+      },
+    },
+  }
+
+  const { settings, applySettings, diagnosticsHint, _resetClientForTesting } = await import('../src/bridge/settings')
+  _resetClientForTesting()
+
+  settings.canonical = s1
+  settings.draft = draftFromState(s1.general)
+  settings.slotDrafts = slotDraftsFromState(s1)
+  settings.slotDrafts[2]!.widthPercent = '80' // unpersisted retryable edit
+
+  await applySettings()
+
+  assert.equal(settings.status, 'error')
+  assert.equal(settings.bad, true, 'partial save must remain visibly non-successful')
+  assert.doesNotMatch(settings.message, /Сохранено/, 'partial failure must NEVER show Сохранено')
+  assert.match(settings.message, /Не записалось: \[slot2\] exe/)
+  assert.equal(settings.field, 'slots.2.executable', 'field diagnostic must be exposed')
+  assert.deepEqual(settings.diagnostics, ['config.ini: [general] accent — неверный формат'])
+  assert.match(diagnosticsHint(), /accent/)
+  // Canonical was updated to partial reloaded state:
+  assert.deepEqual(settings.canonical, partialState)
+  // Retryable draft edit on slot 2 was NOT discarded:
+  assert.equal(settings.slotDrafts[2]!.widthPercent, '80')
+
+  _resetClientForTesting()
+  delete (globalThis as any).chrome
+})
+
+test('C03-3: retryable draft and field diagnostic survive reload/reconcile', async () => {
+  const s1 = state(perm(1), dyn(2))
+  const reconciledState = state(perm(1), dyn(2))
+  reconciledState.slots[0].status = { state: 'shown', windowTitle: 'Win', application: 'app' }
+
+  const reqHandler = (action: string, _payload: any): any => {
+    if (action === 'slot.bind') {
+      return {
+        ok: true,
+        result: {
+          slot: 1,
+          status: { state: 'shown', windowTitle: 'Win', application: 'app' },
+          state: reconciledState,
+        },
+      }
+    }
+    throw new Error('unexpected action ' + action)
+  }
+
+  const listeners: any[] = []
+  ;(globalThis as any).chrome = {
+    webview: {
+      postMessage(msg: any) {
+        if (msg.type === 'request') {
+          Promise.resolve().then(() => {
+            const resp = reqHandler(msg.action, msg.payload)
+            listeners.forEach((l) => l({ data: { type: 'response', id: msg.id, ...resp } }))
+          })
+        }
+      },
+      addEventListener(_t: string, h: any) { listeners.push(h) },
+      removeEventListener(_t: string, h: any) {
+        const idx = listeners.indexOf(h)
+        if (idx >= 0) listeners.splice(idx, 1)
+      },
+    },
+  }
+
+  const { settings, bindSlot, _resetClientForTesting } = await import('../src/bridge/settings')
+  _resetClientForTesting()
+
+  settings.canonical = s1
+  settings.draft = draftFromState(s1.general)
+  settings.slotDrafts = slotDraftsFromState(s1)
+  settings.slotDrafts[2]!.widthPercent = '85' // retryable draft edit
+  settings.field = 'slots.2.widthPercent'
+  settings.diagnostics = ['warning from earlier']
+
+  await bindSlot(1)
+
+  assert.deepEqual(settings.canonical, reconciledState)
+  assert.equal(settings.slotDrafts[2]!.widthPercent, '85', 'retryable draft must not be discarded by side reconcile')
+  assert.equal(settings.field, 'slots.2.widthPercent', 'field diagnostic must survive side reconcile')
+  assert.deepEqual(settings.diagnostics, ['warning from earlier'], 'warning must survive side reconcile')
+
+  _resetClientForTesting()
+  delete (globalThis as any).chrome
+})
+
+test('C03-4: unresolved warning and field diagnostic survive no-op/reconcile', async () => {
+  const currentCanonical = state(perm(1), dyn(2))
+
+  const reqHandler = (action: string, _payload: any): any => {
+    if (action === 'settings.apply') {
+      return {
+        ok: true,
+        result: {
+          saved: false,
+          changedFields: 0,
+          changedSlots: [],
+          restartRequiredFields: [],
+          diagnostics: [], // AHK returns empty diagnostics on no-op
+          state: currentCanonical,
+        },
+      }
+    }
+    throw new Error('unexpected action ' + action)
+  }
+
+  const listeners: any[] = []
+  ;(globalThis as any).chrome = {
+    webview: {
+      postMessage(msg: any) {
+        if (msg.type === 'request') {
+          Promise.resolve().then(() => {
+            const resp = reqHandler(msg.action, msg.payload)
+            listeners.forEach((l) => l({ data: { type: 'response', id: msg.id, ...resp } }))
+          })
+        }
+      },
+      addEventListener(_t: string, h: any) { listeners.push(h) },
+      removeEventListener(_t: string, h: any) {
+        const idx = listeners.indexOf(h)
+        if (idx >= 0) listeners.splice(idx, 1)
+      },
+    },
+  }
+
+  const { settings, applySettings, diagnosticsHint, _resetClientForTesting } = await import('../src/bridge/settings')
+  _resetClientForTesting()
+
+  settings.canonical = currentCanonical
+  settings.draft = draftFromState(currentCanonical.general)
+  settings.slotDrafts = slotDraftsFromState(currentCanonical)
+  settings.slotDrafts[2]!.widthPercent = '90' // retryable draft edit
+  settings.field = 'slots.2.widthPercent'
+  settings.diagnostics = ['unresolved warning in config.ini']
+
+  await applySettings()
+
+  assert.equal(settings.status, 'ready')
+  assert.match(settings.message, /Менять нечего/)
+  assert.doesNotMatch(settings.message, /Сохранено/)
+  assert.deepEqual(settings.diagnostics, ['unresolved warning in config.ini'], 'unresolved warning must survive no-op')
+  assert.match(diagnosticsHint(), /unresolved warning/)
+  assert.equal(settings.field, 'slots.2.widthPercent', 'unresolved field diagnostic must survive no-op')
+  assert.equal(settings.slotDrafts[2]!.widthPercent, '90', 'retryable draft must survive no-op')
+
+  _resetClientForTesting()
+  delete (globalThis as any).chrome
+})
+
+test('C03-5: successful retry clears resolved diagnostic, field, and converges state', async () => {
+  const currentCanonical = state(perm(1), dyn(2))
+  const fixedCanonical = state(perm(1), dyn(2))
+  fixedCanonical.slots[1].effective.widthPercent = 90
+
+  const reqHandler = (action: string, _payload: any): any => {
+    if (action === 'settings.apply') {
+      return {
+        ok: true,
+        result: {
+          saved: true,
+          changedFields: 1,
+          changedSlots: [2],
+          restartRequiredFields: [],
+          diagnostics: [], // resolved!
+          state: fixedCanonical,
+        },
+      }
+    }
+    throw new Error('unexpected action ' + action)
+  }
+
+  const listeners: any[] = []
+  ;(globalThis as any).chrome = {
+    webview: {
+      postMessage(msg: any) {
+        if (msg.type === 'request') {
+          Promise.resolve().then(() => {
+            const resp = reqHandler(msg.action, msg.payload)
+            listeners.forEach((l) => l({ data: { type: 'response', id: msg.id, ...resp } }))
+          })
+        }
+      },
+      addEventListener(_t: string, h: any) { listeners.push(h) },
+      removeEventListener(_t: string, h: any) {
+        const idx = listeners.indexOf(h)
+        if (idx >= 0) listeners.splice(idx, 1)
+      },
+    },
+  }
+
+  const { settings, applySettings, diagnosticsHint, _resetClientForTesting } = await import('../src/bridge/settings')
+  _resetClientForTesting()
+
+  settings.canonical = currentCanonical
+  settings.draft = draftFromState(currentCanonical.general)
+  settings.slotDrafts = slotDraftsFromState(currentCanonical)
+  settings.slotDrafts[2]!.widthPercent = '90'
+  settings.field = 'slots.2.widthPercent'
+  settings.diagnostics = ['unresolved warning in config.ini']
+
+  await applySettings()
+
+  assert.equal(settings.status, 'ready')
+  assert.equal(settings.bad, false)
+  assert.match(settings.message, /Сохранено/)
+  assert.deepEqual(settings.diagnostics, [], 'successful retry clears resolved diagnostic')
+  assert.equal(diagnosticsHint(), '')
+  assert.equal(settings.field, '', 'successful retry clears field diagnostic')
+  assert.deepEqual(settings.canonical, fixedCanonical)
+  // State converged:
+  assert.deepEqual(slotEditsToWire(settings.slotDrafts, settings.canonical), [])
+
+  _resetClientForTesting()
+  delete (globalThis as any).chrome
+})
+

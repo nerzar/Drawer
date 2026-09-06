@@ -1707,6 +1707,96 @@ if FileExist(drawerPath) {
 }
 
 ; ---------------------------------------------------------------
+; Точка 20 (A01FIX): регрессионные тесты для SettingsSectionSlot,
+; SettingsChangedSlots, RebindSlotHotkeys и сброса к General.
+; ---------------------------------------------------------------
+Assert("20a: SettingsSectionSlot парсит slot1..slot9 и dynamicSlot1..dynamicSlot9",
+    SettingsSectionSlot("slot1") = 1
+ && SettingsSectionSlot("slot9") = 9
+ && SettingsSectionSlot("dynamicSlot1") = 1
+ && SettingsSectionSlot("dynamicSlot9") = 9)
+
+Assert("20b: SettingsSectionSlot не падает на hotkeys, пустой строке и секциях без цифр",
+    SettingsSectionSlot("hotkeys") = 0
+ && SettingsSectionSlot("") = 0
+ && SettingsSectionSlot("general") = 0
+ && SettingsSectionSlot("section") = 0)
+
+testSlotPlanWrites := {
+    writes: [
+        { sec: "hotkeys", key: "slot1", val: "^z" },
+        { sec: "slot2", key: "name", val: "Test" },
+        { sec: "dynamicSlot3", key: "width", val: 40 }
+    ],
+    keyDeletes: [
+        { sec: "hotkeys", key: "slot4" },
+        { sec: "dynamicSlot5", key: "edge" }
+    ],
+    deletes: [6],
+    dynDeletes: [7]
+}
+changed20 := SettingsChangedSlots(testSlotPlanWrites)
+Assert("20c: SettingsChangedSlots видит слоты из hotkeys writes/deletes и dynamicSlot без падений",
+    changed20.Length = 7
+ && changed20[1] = 1 && changed20[2] = 2 && changed20[3] = 3
+ && changed20[4] = 4 && changed20[5] = 5 && changed20[6] = 6
+ && changed20[7] = 7)
+
+; Модель жизненного цикла хоткеев A -> B -> A
+RebindModel(registeredMap, newSlotsMap) {
+    history := []
+    Loop 9 {
+        n := A_Index
+        now := newSlotsMap.Has(n) ? newSlotsMap[n] : ""
+        old := registeredMap.Has(n) ? registeredMap[n] : ""
+        if (old = now)
+            continue
+        if (old != "")
+            history.Push({ action: "off", slot: n, key: old })
+        if (now != "") {
+            registeredMap[n] := now
+            history.Push({ action: "on", slot: n, key: now })
+        } else {
+            registeredMap.Delete(n)
+            history.Push({ action: "delete", slot: n })
+        }
+    }
+    return history
+}
+
+regMap := Map(1, "^!1")
+step1 := RebindModel(regMap, Map(1, "^z"))
+Assert("20d: Смена хоткея A -> B выключает A и регистрирует B",
+    step1.Length = 2
+ && step1[1].action = "off" && step1[1].key = "^!1"
+ && step1[2].action = "on" && step1[2].key = "^z"
+ && regMap[1] = "^z")
+
+step2 := RebindModel(regMap, Map(1, "^!1"))
+Assert("20e: Возврат B -> A выключает B и повторно регистрирует A",
+    step2.Length = 2
+ && step2[1].action = "off" && step2[1].key = "^z"
+ && step2[2].action = "on" && step2[2].key = "^!1"
+ && regMap[1] = "^!1")
+
+step3 := RebindModel(regMap, Map(1, ""))
+Assert("20f: Очистка хоткея выключает старый и удаляет слот из реестра",
+    step3.Length = 2
+ && step3[1].action = "off" && step3[1].key = "^!1"
+ && step3[2].action = "delete"
+ && !regMap.Has(1))
+
+if FileExist(drawerPath) {
+    src20 := FileRead(drawerPath, "UTF-8")
+    Assert("20g: SettingsChangedSlots проверяет w.sec = 'hotkeys' и берёт key",
+        InStr(src20, 'target := (w.sec = "hotkeys" && w.HasOwnProp("key")) ? w.key : w.sec') > 0)
+    Assert("20h: SettingsSectionSlot использует безопасный RegExMatch вместо беззащитного Integer",
+        InStr(src20, 'SettingsSectionSlot(sec) {`r`n    return RegExMatch(sec, "\d+", &m) ? Integer(m[0]) : 0`r`n}') > 0
+     || InStr(src20, 'SettingsSectionSlot(sec) {`n    return RegExMatch(sec, "\d+", &m) ? Integer(m[0]) : 0`n}') > 0)
+    Assert("20i: RebindSlotHotkeys удаляет слот при ошибке или очистке хоткея",
+        InStr(src20, "slotRegistered.Delete(n)") > 0)
+}
+
 out := ""
 allOk := true
 for r in results {

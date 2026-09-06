@@ -22,7 +22,13 @@ import {
 import { CanonicalGate, reconcileSlotDrafts } from './canonical'
 import { draftFromState, draftToWire, type GeneralDraft } from './general'
 import type { SettingsState, SlotNumber } from './protocol'
-import { slotDraftsFromState, slotEditsToWire, type SlotDrafts } from './slotDraft'
+import {
+  setDraftExecutableFromPicker,
+  setDraftWindow,
+  slotDraftsFromState,
+  slotEditsToWire,
+  type SlotDrafts,
+} from './slotDraft'
 
 type Status = 'idle' | 'loading' | 'ready' | 'saving' | 'error'
 
@@ -57,6 +63,13 @@ export function settingsClient(): SettingsClient | null {
   if (!hasWebViewTransport()) return null
   client = new SettingsClient(webViewTransport())
   return client
+}
+
+export function _resetClientForTesting(): void {
+  if (client) {
+    client.dispose()
+    client = null
+  }
 }
 
 export async function loadSettings(): Promise<void> {
@@ -124,7 +137,6 @@ async function save(action: 'settings.apply' | 'settings.ok'): Promise<void> {
   settings.status = 'saving'
   settings.message = 'Сохраняем…'
   settings.bad = false
-  settings.field = ''
   settings.confirmDiscard = false
   const ticket = gate.issue()
   try {
@@ -134,13 +146,27 @@ async function save(action: 'settings.apply' | 'settings.ok'): Promise<void> {
     // черновик перестаёт быть грязным, потому что заводится заново из
     // того, что теперь действует. Снимок сделан после записи, поэтому
     // он авторитетен и отменяет все ответы, выданные до Save.
-    if (gate.acceptSave(ticket)) adopt(result.state)
-    settings.diagnostics = result.diagnostics ?? []
-    settings.restartRequired = result.restartRequiredFields ?? []
-    settings.status = 'ready'
-    settings.message = result.saved
-      ? `Сохранено. Изменённых строк: ${result.changedFields}`
-      : 'Менять нечего: всё уже так'
+    if (result.saved) {
+      if (gate.acceptSave(ticket)) adopt(result.state)
+      settings.diagnostics = result.diagnostics ?? []
+      settings.restartRequired = result.restartRequiredFields ?? []
+      settings.field = ''
+      settings.status = 'ready'
+      settings.message = `Сохранено. Изменённых строк: ${result.changedFields}`
+    } else {
+      // При no-op запись не происходила и реконсиляция не запускалась.
+      // Нельзя сбрасывать черновик через adopt: применяем absorb при наличии state.
+      if (result.state && gate.acceptSave(ticket)) {
+        absorb(result.state)
+      }
+      // Незакрытые замечания не должны стираться только потому, что не было новых записей:
+      if (result.diagnostics && result.diagnostics.length > 0) {
+        settings.diagnostics = result.diagnostics
+      }
+      settings.restartRequired = result.restartRequiredFields ?? settings.restartRequired
+      settings.status = 'ready'
+      settings.message = 'Менять нечего: всё уже так'
+    }
   } catch (e) {
     fail(e, ticket)
   }
@@ -162,14 +188,11 @@ export async function pickSlot(number: SlotNumber, kind: 'exe' | 'window'): Prom
     if (kind === 'exe') {
       const result = await api.request('picker.exe', {}, 0)
       if (result.selected && !settings.closed && settings.slotDrafts[number] === draft)
-        draft.executable = result.executable
+        setDraftExecutableFromPicker(draft, result.executable)
     } else {
       const result = await api.request('picker.window', {}, 0)
       if (result.selected && !settings.closed && settings.slotDrafts[number] === draft) {
-        draft.executable = result.window.executable
-        draft.windowClass = result.window.windowClass
-        if (!draft.name.trim() || draft.name.trim() === `Слот ${number}`)
-          draft.name = result.window.title
+        setDraftWindow(draft, result.window, `Слот ${number}`)
       }
     }
   } catch (e) {
@@ -200,7 +223,6 @@ async function slotRuntime(
   const api = settingsClient()
   if (!api || settings.status === 'saving' || settings.pickerActive || settings.closed) return
   settings.bad = false
-  settings.field = ''
   const ticket = gate.issue()
   try {
     const result = await api.request(action, { slot: number })
@@ -234,7 +256,12 @@ function fail(e: unknown, ticket: number): void {
   settings.bad = true
   if (e instanceof ProtocolError) {
     settings.message = e.message
-    settings.field = e.field ?? ''
+    if (e.field !== undefined) {
+      settings.field = e.field ?? ''
+    }
+    if (e.diagnostics && e.diagnostics.length > 0) {
+      settings.diagnostics = e.diagnostics
+    }
     // Частичная запись с успешным reload приносит актуальный canonical:
     // baseline надо заменить, а draft — сохранить. Поэтому здесь absorb,
     // а не adopt: человек не должен второй раз набирать то, что не
@@ -259,4 +286,9 @@ export function restartHint(): string {
   return slots.length
     ? `Хоткей фокуса (слот${slots.length > 1 ? 'ы' : ''} ${slots.join(', ')}) заработает после перезапуска Ящика.`
     : 'Часть изменений заработает после перезапуска Ящика.'
+}
+
+export function diagnosticsHint(): string {
+  if (!settings.diagnostics.length) return ''
+  return settings.diagnostics.join('; ')
 }

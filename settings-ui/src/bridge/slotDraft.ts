@@ -27,6 +27,8 @@ export type SlotDraft = {
   name: string
   executable: string
   windowClass: string
+  classAnchorExe?: string
+  anchorClass?: string
   hotkey: string
   widthPercent: string
   monitorKind: MonitorKind
@@ -65,6 +67,8 @@ function draftFromSlot(slot: SlotState): SlotDraft {
     name: named.name,
     executable: named.executable,
     windowClass: named.windowClass,
+    classAnchorExe: named.windowClass ? named.executable : '',
+    anchorClass: named.windowClass || '',
     hotkey: slot.kind === 'permanent' ? named.hotkey : slot.hotkey,
     ...behaviorFields(behavior),
   }
@@ -74,6 +78,62 @@ export function slotDraftsFromState(state: SettingsState): SlotDrafts {
   const drafts: SlotDrafts = {}
   for (const slot of state.slots) drafts[slot.number] = draftFromSlot(slot)
   return drafts
+}
+
+export function normalizeExe(exe: string): string {
+  return exe.trim().toLowerCase()
+}
+
+// Ручной ввод exe: при смене исполняемого файла старый класс окна гасится;
+// при возврате к файлу, которому этот класс принадлежал, класс восстанавливается.
+export function setDraftExecutable(draft: SlotDraft, nextExe: string): void {
+  draft.executable = nextExe
+  const normalizedNext = normalizeExe(nextExe)
+  const normalizedAnchor = normalizeExe(draft.classAnchorExe || '')
+  if (draft.anchorClass && normalizedNext && normalizedNext === normalizedAnchor) {
+    draft.windowClass = draft.anchorClass
+  } else {
+    draft.windowClass = ''
+  }
+}
+
+// Выбор exe через picker.exe: если выбран новый exe, старый класс окна
+// и якорь очищаются целиком; если выбран тот же exe, класс не теряется.
+export function setDraftExecutableFromPicker(draft: SlotDraft, nextExe: string): void {
+  const prevNormalized = normalizeExe(draft.executable)
+  const nextNormalized = normalizeExe(nextExe)
+  if (prevNormalized !== nextNormalized) {
+    draft.classAnchorExe = ''
+    draft.anchorClass = ''
+    draft.windowClass = ''
+  }
+  draft.executable = nextExe
+}
+
+// Выбор окна через picker.window: согласует exe и класс из одного окна,
+// обновляет якорь и при необходимости засеивает имя.
+export function setDraftWindow(
+  draft: SlotDraft,
+  window: { title: string; executable: string; windowClass: string },
+  defaultName?: string,
+): void {
+  draft.executable = window.executable
+  draft.windowClass = window.windowClass
+  draft.classAnchorExe = window.executable
+  draft.anchorClass = window.windowClass
+  if (!draft.name.trim() || (defaultName && draft.name.trim() === defaultName)) {
+    draft.name = window.title
+  }
+}
+
+// Чистый засев постоянной идентичности из canonical (permanentDefaults для dynamic)
+export function resetPermanentIdentityFromSlot(draft: SlotDraft, slot: SlotState): void {
+  const named = slot.kind === 'permanent' ? slot.value : slot.permanentDefaults
+  draft.name = named.name
+  draft.executable = named.executable
+  draft.windowClass = named.windowClass
+  draft.classAnchorExe = named.windowClass ? named.executable : ''
+  draft.anchorClass = named.windowClass || ''
 }
 
 // Поведение слота из черновика: пять ключей, которые понимает и
@@ -89,11 +149,17 @@ export function draftBehavior(d: SlotDraft): SlotBehavior {
 }
 
 export function draftPermanentValue(d: SlotDraft): PermanentSlotValue {
+  const normalizedExe = normalizeExe(d.executable)
+  const normalizedAnchor = normalizeExe(d.classAnchorExe || '')
+  let windowClass = d.windowClass
+  if (d.classAnchorExe && normalizedExe !== normalizedAnchor) {
+    windowClass = ''
+  }
   return {
     ...draftBehavior(d),
     name: d.name,
     executable: d.executable,
-    windowClass: d.windowClass,
+    windowClass,
     hotkey: d.hotkey,
   }
 }

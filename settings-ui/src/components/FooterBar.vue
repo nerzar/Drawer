@@ -7,6 +7,7 @@ import {
   keepEditing,
   okSettings,
   restartHint,
+  diagnosticsHint,
 } from '../bridge/settings'
 
 const props = defineProps({
@@ -19,6 +20,7 @@ const props = defineProps({
 const busy = computed(() => settings.status === 'loading' || settings.status === 'saving')
 const ready = computed(() => settings.draft !== null)
 const restart = computed(() => restartHint())
+const diagnostics = computed(() => diagnosticsHint())
 </script>
 
 <template>
@@ -38,6 +40,7 @@ const restart = computed(() => restartHint())
     <div class="footer-status" :class="{ bad: props.bad }" data-testid="status">
       {{ props.status }}
       <span v-if="restart" class="restart" data-testid="restart">{{ restart }}</span>
+      <span v-if="diagnostics" class="warning" data-testid="diagnostics">{{ diagnostics }}</span>
     </div>
     <button class="btn-outline" data-testid="cancel" :disabled="busy" @click="cancelSettings()">Отмена</button>
     <button class="btn-outline" data-testid="apply" :disabled="busy || !ready || settings.pickerActive" @click="applySettings()">
@@ -53,6 +56,10 @@ const restart = computed(() => restartHint())
 }
 .restart {
   color: var(--text-2);
+}
+.warning {
+  color: #e5a95a;
+  margin-left: 8px;
 }
 button[disabled] {
   opacity: 0.5;

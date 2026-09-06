@@ -286,12 +286,18 @@ RebindSlotHotkeys() {
             continue
         if (old != "")
             try Hotkey(Hooked(old), "Off")
-        try {
-            Hotkey(Hooked(now), OnSlot.Bind(n))
-            slotRegistered[n] := now
-            DebugLog("[HOTKEY] Re-registered " Hooked(now) " for Slot " n " (Show/Hide)")
-        } catch as e {
-            DebugLog("[HOTKEY] Failed to re-register '" now "' for Slot " n ": " e.Message)
+        if (now != "") {
+            try {
+                Hotkey(Hooked(now), OnSlot.Bind(n))
+                slotRegistered[n] := now
+                DebugLog("[HOTKEY] Re-registered " Hooked(now) " for Slot " n " (Show/Hide)")
+            } catch as e {
+                slotRegistered.Delete(n)
+                DebugLog("[HOTKEY] Failed to re-register '" now "' for Slot " n ": " e.Message)
+            }
+        } else {
+            slotRegistered.Delete(n)
+            DebugLog("[HOTKEY] Unregistered hotkey for Slot " n)
         }
     }
 }
@@ -4283,10 +4289,16 @@ SettingsStateSnapshot() {
 ; у одного слота обычно несколько изменённых ключей.
 SettingsChangedSlots(slotPlan) {
     seen := Map()
-    for w in slotPlan.writes
-        seen[SettingsSectionSlot(w.sec)] := true
-    for d in slotPlan.keyDeletes
-        seen[SettingsSectionSlot(d.sec)] := true
+    for w in slotPlan.writes {
+        target := (w.sec = "hotkeys" && w.HasOwnProp("key")) ? w.key : w.sec
+        if (s := SettingsSectionSlot(target))
+            seen[s] := true
+    }
+    for d in slotPlan.keyDeletes {
+        target := (d.sec = "hotkeys" && d.HasOwnProp("key")) ? d.key : d.sec
+        if (s := SettingsSectionSlot(target))
+            seen[s] := true
+    }
     for n in slotPlan.deletes
         seen[n] := true
     for n in slotPlan.dynDeletes
@@ -4299,10 +4311,9 @@ SettingsChangedSlots(slotPlan) {
 }
 
 ; Номер слота по имени секции: [slot3] и [dynamicSlot3] — один и тот же
-; слот 3. Раньше номер вырезался из строки по фиксированной позиции, и
-; надстройка динамического слота ломала бы разбор.
+; слот 3. Для [hotkeys] слот берётся из ключа (slot3).
 SettingsSectionSlot(sec) {
-    return Integer(RegExReplace(sec, "^\D+"))
+    return RegExMatch(sec, "\d+", &m) ? Integer(m[0]) : 0
 }
 
 ; Show/hide hotkey применяется Runtime без restart; поле сохранено в

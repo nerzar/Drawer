@@ -125,6 +125,7 @@ export type ProtocolErrorBody = {
   partial?: { mayHavePersisted: true; runtimeReloaded: boolean }
   // Приходит только когда рантайм действительно перечитан.
   state?: SettingsState
+  diagnostics?: string[]
 }
 
 // Карта action -> payload/result. Она и делает клиента типизированным:
