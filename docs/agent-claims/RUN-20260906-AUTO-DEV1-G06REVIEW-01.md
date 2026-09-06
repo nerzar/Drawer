@@ -4,7 +4,19 @@
 - Agent/client: `ChatGPT DEV1`
 - Model: `GPT-5.6 Sol`
 - Claimed timestamp: `2026-09-06T22:27:00+03:00`
-- Observed shared SHA: `ad78ea888af9d4fdd0d8f56613c37dab7af07226`
+- Observed shared SHA at claim: `ad78ea888af9d4fdd0d8f56613c37dab7af07226`
+- Observed shared SHA at completion update: `6d903f5a699499d2993510d219d1e256c95d69ba`
 - Base SHA: `5e9c717f23ee4503c0850a9be5d406892d49bed9`
 - Branch: `review/g06-navigation-accessibility`
-- Status: `CLAIMED`
+- Status: `DONE`
+- Code SHA: `NONE` (review-only run)
+- Reviewed Code SHA: `5e9c717f23ee4503c0850a9be5d406892d49bed9`
+- Report tip SHA: `ea243c2ebd9b75ec65a9c4db50905447c1969e8f`
+- Verdict: `ACCEPT_WITH_RUNTIME_CHECK`
+- Checks:
+  - reviewed canonical G06 commit and all 9 changed frontend/test files;
+  - verified no AHK/backend/config scope changes in G06 Code SHA;
+  - verified selected-slot parent state, field-error routing, no KeepAlive, Sidebar semantics, General G03 save-lock preservation, Footer semantics/focus code, G05 narrow/state-truth preservation, focus-visible and scroll wiring;
+  - independently calculated `--text-3` contrast ~4.99:1 on card and ~5.43:1 on app background;
+  - reviewed new G06 tests; they are source-shape/regex guards, so live G06ACCEPT remains required;
+  - no local npm/WebView/AHK execution claimed in this GitHub-native review.
