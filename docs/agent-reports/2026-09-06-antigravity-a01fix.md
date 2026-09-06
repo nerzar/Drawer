@@ -12,7 +12,7 @@
 - Worktree: `C:\Users\nerza\Projects\drawer-agent-worktrees\A01FIX`
 - Branch: `fix/a01-hotkey-reset-general`
 - Base SHA: `faa6d7d9786bfda98849c5925bc9641ce0fd0dc0`
-- Final SHA: `3610f12a050c8efb34f382a0d563d41732e13021`
+- Final SHA: `e10509d`
 - Remote: `dev`
 
 ## 1. Goal
@@ -38,7 +38,7 @@ Eliminate regressions found during manual acceptance of task A01:
 
 ## 3. Commits
 
-- `3610f12` fix(slots): resolve hotkey cycle crash and dynamic override reset layout
+- `1d09152` and `e10509d` fix(slots): resolve hotkey cycle crash and dynamic override reset layout
 
 ## 4. Important decisions
 
