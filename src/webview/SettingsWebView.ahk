@@ -15,6 +15,33 @@
 ; WebView вправе только Destroy(), после того как решение о закрытии
 ; принято, — иначе несохранённый черновик исчезал бы молча.
 
+; ==================== SettingsDwmTheme ====================
+; Приведение системного Windows titlebar к визуальному стилю Drawer
+; через DwmSetWindowAttribute (без создания custom window chrome).
+; Нативные кнопки сворачивания/закрытия, системный drag, resize,
+; snap layouts и accessibility остаются штатными средствами ОС.
+; Если атрибуты не поддерживаются (Windows 10 или старые сборки),
+; они молча игнорируются и остаётся системный fallback.
+ApplyDwmTitlebarTheme(hwnd) {
+    if !hwnd
+        return
+    ; DWMWA_USE_IMMERSIVE_DARK_MODE: 20 (Win11 / Win10 20H1+), 19 (Win10 1809)
+    hr := -1
+    try hr := DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", hwnd, "Int", 20, "Int*", 1, "Int", 4, "Int")
+    if (hr != 0) {
+        try DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", hwnd, "Int", 19, "Int*", 1, "Int", 4, "Int")
+    }
+
+    ; DWMWA_CAPTION_COLOR (35): #17181C (COLORREF 0x001C1817, matching --bg-app)
+    try DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", hwnd, "Int", 35, "UInt*", 0x001C1817, "Int", 4)
+
+    ; DWMWA_TEXT_COLOR (36): #EDEDEF (COLORREF 0x00EFEDED, matching --text)
+    try DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", hwnd, "Int", 36, "UInt*", 0x00EFEDED, "Int", 4)
+
+    ; DWMWA_BORDER_COLOR (34): #2A2E35 (COLORREF 0x00352E2A, matching Drawer accent/border)
+    try DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", hwnd, "Int", 34, "UInt*", 0x00352E2A, "Int", 4)
+}
+
 class SettingsWebViewAdapter {
     ; WebDir и LoaderPath приходят снаружи готовыми: где лежат файлы —
     ; вопрос упаковки (SettingsWebAssets.ahk), а не транспорта. В
@@ -36,6 +63,7 @@ class SettingsWebViewAdapter {
                       DefaultWidth: 1060,
                       DefaultHeight: 700 }
         this.Window := WebViewGui("+Resize", Title, , settings)
+        ApplyDwmTitlebarTheme(this.Window.Hwnd)
         this._messageHandler := ObjBindMethod(this, "_HandleWebMessage")
         this._messageToken := this.Window.WebMessageReceived(this._messageHandler)
         this._newWindowHandler := ObjBindMethod(this, "_HandleNewWindow")
@@ -47,6 +75,7 @@ class SettingsWebViewAdapter {
     }
 
     Show(Options := "w1060 h700 Center") {
+        ApplyDwmTitlebarTheme(this.Window.Hwnd)
         this.Window.Show(Options)
     }
 

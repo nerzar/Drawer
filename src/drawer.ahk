@@ -1796,6 +1796,7 @@ BugReportShow(*) {
     capturedActiveForBug := activeHwnd
 
     g := Gui("+AlwaysOnTop", "Нашёл баг — Ящик")
+    ApplyDwmTitlebarTheme(g.Hwnd)
     g.MarginX := 12, g.MarginY := 12
     g.SetFont("s9", "Segoe UI")
 
@@ -2062,7 +2063,7 @@ SettingsPickWindow(owner) {
 
     g := Gui("+Owner" owner.Hwnd " -MinimizeBox", "Ящик — выбор окна")
     g.BackColor := "17181C"
-    try DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", g.Hwnd, "Int", 20, "Int*", 1, "Int", 4)
+    ApplyDwmTitlebarTheme(g.Hwnd)
     g.SetFont("s9 cEDEDEF", "Segoe UI")
     g.Add("Text", "x12 y10 w460 h20 cEDEDEF",
           cands.Length ? "Окно, которое сейчас открыто:" : "Подходящих окон не найдено.")
@@ -2894,7 +2895,7 @@ SettingsOpen() {
     ; WebView2.
     g := Gui("-MaximizeBox", "Drawer — Settings")
     g.BackColor := "17181C"
-    try DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", g.Hwnd, "Int", 20, "Int*", 1, "Int", 4)
+    ApplyDwmTitlebarTheme(g.Hwnd)
     g.SetFont("s9 cEDEDEF", "Segoe UI")
 
     ui := {}
