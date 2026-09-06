@@ -235,3 +235,58 @@ test('AHK key order does not make unchanged permanent or dynamic slots dirty', (
   drafts[2]!.widthPercent = '35'
   assert.deepEqual(slotEditsToWire(drafts, canonical).map((edit) => edit.number), [2])
 })
+
+test('hotkey A -> B -> A lifecycle: draft emits edits upon change and after canonical adoption', () => {
+  const initial = state(perm(1))
+  const drafts = slotDraftsFromState(initial)
+  assert.equal(drafts[1]!.hotkey, 'Ctrl + Alt + F2')
+
+  // A -> B
+  drafts[1]!.hotkey = 'Ctrl + Alt + Z'
+  const editsB = slotEditsToWire(drafts, initial)
+  assert.equal(editsB.length, 1)
+  assert.equal(editsB[0].kind === 'permanent' && editsB[0].value.hotkey, 'Ctrl + Alt + Z')
+
+  // Canonical adopts B (simulating successful Save and bridge adopt)
+  const stateB = state({
+    ...perm(1),
+    value: { ...permValue('Steam', 'steam.exe'), hotkey: 'Ctrl + Alt + Z' },
+  })
+  const reconciled = reconcileSlotDrafts(drafts, stateB)
+  assert.deepEqual(slotEditsToWire(reconciled, stateB), [])
+
+  // B -> A
+  reconciled[1]!.hotkey = 'Ctrl + Alt + F2'
+  const editsA = slotEditsToWire(reconciled, stateB)
+  assert.equal(editsA.length, 1)
+  assert.equal(editsA[0].kind === 'permanent' && editsA[0].value.hotkey, 'Ctrl + Alt + F2')
+})
+
+test('resetToShared resets dynamic slot overrides to General defaults', () => {
+  const customGeneralBehavior: SlotBehavior = {
+    monitor: { kind: 'number', number: 2 },
+    edge: 'bottom',
+    widthPercent: 75,
+    activateOnShow: false,
+    hideOnBlur: false,
+  }
+  const canonical = state(dyn(1))
+  const drafts = slotDraftsFromState(canonical)
+
+  // Give slot 1 custom overrides different from General defaults
+  drafts[1]!.edge = 'top'
+  drafts[1]!.widthPercent = '40'
+  drafts[1]!.activateOnShow = true
+  drafts[1]!.hideOnBlur = true
+
+  // Reset to General defaults
+  resetToShared(drafts[1]!, customGeneralBehavior)
+
+  assert.equal(drafts[1]!.monitorKind, 'number')
+  assert.equal(drafts[1]!.monitorNumber, '2')
+  assert.equal(drafts[1]!.edge, 'bottom')
+  assert.equal(drafts[1]!.widthPercent, '75')
+  assert.equal(drafts[1]!.activateOnShow, false)
+  assert.equal(drafts[1]!.hideOnBlur, false)
+})
+
