@@ -12,7 +12,7 @@
 - Worktree: `C:\Users\nerza\Projects\drawer-agent-worktrees\G02`
 - Branch: `fix/settings-picker-identity`
 - Base SHA: `4cc0d77dac6beab25a37698172895a3df2267a64`
-- Final SHA: `PENDING_FINAL_COMMIT`
+- Final SHA: `c6c4dde`
 - Remote: `dev`
 
 ## 1. Goal
@@ -37,7 +37,7 @@
 
 ## 3. Commits
 
-- `PENDING_FINAL_COMMIT`: `fix(settings-ui): synchronize slot windowClass with executable and picker identity`
+- `c6c4dde`: `fix(settings-ui): synchronize slot windowClass with executable and picker identity`
 
 ## 4. Important decisions
 
