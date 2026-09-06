@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { settings, pickSlot } from '../bridge/settings'
+import { settings, pickSlot, releaseSlot } from '../bridge/settings'
 import { fieldTarget } from '../bridge/fieldError'
 import { EDGE_OPTIONS } from '../bridge/general'
 import { resetToShared } from '../bridge/slotDraft'
@@ -92,6 +92,26 @@ function makePermanent() {
   if (!d || locked.value) return
   d.kind = 'permanent'
 }
+
+function captureHotkey(event) {
+  if (event.key === 'Control' || event.key === 'Alt' || event.key === 'Shift' || event.key === 'Meta') return
+  event.preventDefault()
+  const key = event.key === ' ' ? 'Space' : event.key.length === 1 ? event.key.toUpperCase() : event.key
+  const parts = []
+  if (event.ctrlKey) parts.push('Ctrl')
+  if (event.altKey) parts.push('Alt')
+  if (event.shiftKey) parts.push('Shift')
+  if (event.metaKey) parts.push('Win')
+  parts.push(key)
+  if (draft.value) draft.value.hotkey = parts.join(' + ')
+}
+
+function resetDynamic() {
+  const d = draft.value
+  const shared = settings.canonical?.general.dynamicDefaults
+  if (!d || !shared || locked.value) return
+  resetToShared(d, shared)
+}
 </script>
 
 <template>
@@ -176,7 +196,27 @@ function makePermanent() {
             Сделать динамическим…
           </button>
           <button
-            v-else
+            v-if="kind === 'dynamic' && selectedSlot.status.state !== 'empty'"
+            class="btn-danger-hd"
+            type="button"
+            data-testid="release-slot"
+            :disabled="locked"
+            @click="releaseSlot(selectedNumber)"
+          >
+            Освободить слот
+          </button>
+          <button
+            v-if="kind === 'dynamic'"
+            class="btn-primary-sm"
+            type="button"
+            data-testid="reset-dynamic-settings"
+            :disabled="locked"
+            @click="resetDynamic()"
+          >
+            Сбросить к General
+          </button>
+          <button
+            v-if="kind === 'dynamic'"
             class="btn-primary-sm"
             type="button"
             data-testid="make-permanent"
@@ -200,15 +240,6 @@ function makePermanent() {
         </div>
 
         <template v-if="kind === 'permanent'">
-          <!-- Основной хоткей слота ящик назначает сам номером и не даёт
-               настраивать — то же самое Ctrl+Alt+N, что и у динамического
-               слота ниже. Хоткей фокуса в форме — ДОПОЛНИТЕЛЬНЫЙ, и без
-               этой строки рядом легко принять его за единственный. -->
-          <div class="detail-row" style="margin-bottom: 14px">
-            <div class="l">Основной хоткей</div>
-            <div class="v">Ctrl + Alt + {{ selectedSlot.number }}</div>
-            <div class="s">не настраивается</div>
-          </div>
           <fieldset v-if="draft" class="editor" :disabled="locked">
             <div class="row">
               <label for="slot-name">Имя</label>
@@ -217,6 +248,7 @@ function makePermanent() {
                   id="slot-name"
                   class="in-name"
                   type="text"
+                  readonly
                   data-testid="edit-name"
                   :class="{ 'field-bad': bad('name') }"
                   :aria-invalid="bad('name')"
@@ -330,7 +362,8 @@ function makePermanent() {
                   placeholder="Ctrl + Alt + F2"
                   data-testid="edit-hotkey"
                   :class="{ 'field-bad': bad('hotkey') }"
-                  v-model="draft.hotkey"
+                  :value="draft.hotkey"
+                  @keydown="captureHotkey"
                 />
               </div>
             </div>
@@ -414,7 +447,7 @@ function makePermanent() {
               <label for="dyn-hotkey">Горячая клавиша</label>
               <div class="field">
                 <input id="dyn-hotkey" type="text" style="width: 160px" placeholder="Ctrl + Alt + F2"
-                  data-testid="edit-hotkey" :class="{ 'field-bad': bad('hotkey') }" v-model="draft.hotkey" />
+                  data-testid="edit-hotkey" :class="{ 'field-bad': bad('hotkey') }" readonly :value="draft.hotkey" @keydown="captureHotkey" />
               </div>
             </div>
             <div class="hotkey-cap" data-testid="dyn-source">{{ overrideNote }}</div>

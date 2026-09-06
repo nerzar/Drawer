@@ -250,7 +250,7 @@ function fail(e: unknown, ticket: number): void {
 // Поля, которые начнут действовать только после перезапуска Ящика.
 // General таких не содержит: реконсиляция перечитывает config.ini и
 // применяет все его ключи сразу. Список приходит от AHK, а не
-// вычисляется здесь, и пока его наполняет только focusHotkey слотов.
+// вычисляется здесь; show/hide hotkey не требует restart.
 export function restartHint(): string {
   if (!settings.restartRequired.length) return ''
   const slots = settings.restartRequired

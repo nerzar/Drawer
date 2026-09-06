@@ -132,7 +132,7 @@ LoadConfig(path, &diags) {
     hotkeys := Map()
     Loop 9 {
         n := A_Index
-        ; Старый focusHotkey не мигрируем: это была другая команда.
+        ; Старый дополнительный hotkey намеренно не мигрируем: это была другая команда.
         hotkeys[n] := IniRead(path, "hotkeys", "slot" n, "^!" n)
     }
 
@@ -1969,7 +1969,7 @@ SettingsSrc(sections, key, live, isBool) {
 }
 
 ; Значение поля для показа. Поля может не быть вовсе: у динамического
-; слота нет ни exe, ни cls, ни focusHotkey. Подставить туда пустую
+; слота нет ни exe, ни cls, ни отдельного hotkey. Подставить туда пустую
 ; строку значило бы выдумать отсутствующую настройку.
 SettingsVal(cfg, key) {
     if !cfg.HasOwnProp(key)
@@ -2452,8 +2452,8 @@ SettingsFillEditable(ui, ef) {
     ui.eWidth.Value := String(Opt(cfg, "width", 60))
     ui.eAct.Value   := Opt(cfg, "activateOnShow", true) ? 1 : 0
     ui.eBlur.Value  := Opt(cfg, "hideOnBlur", true) ? 1 : 0
-    ui.eFocus.Value := HotkeyAhkToHuman(Opt(cfg, "hotkey", SlotHotkey(ef.n)))
-    ui.primaryHotkey.Text := "Show/hide hotkey"
+    ; Native Hotkey control сам захватывает сочетание, не принимает AHK-текст.
+    ui.eFocus.Value := Opt(cfg, "hotkey", SlotHotkey(ef.n))
     ui.editingSlot  := ef.n
     ui.box.Text := "Слот " ef.n . (ef.HasOwnProp("pending") ? "  ·  не сохранено" : "")
     ui.populating := false
@@ -2489,9 +2489,36 @@ SettingsFillRow(ui, idx) {
 
     if r.n {
         ui.convert.Visible := true
-        ui.convert.Text := editable ? "Сделать динамическим…" : "Сделать постоянным…"
+        ui.convert.Text := ef.kind = "perm" ? "Сделать динамическим…" : "Сделать постоянным…"
+        ui.release.Visible := ef.kind = "dyn" && SlotWindow(r.n)
+        ui.resetDyn.Visible := ef.kind = "dyn"
     } else
-        ui.convert.Visible := false
+        ui.convert.Visible := ui.release.Visible := ui.resetDyn.Visible := false
+}
+
+SettingsDynamicReleaseClick(ui) {
+    n := ui.editingSlot
+    if (!n || SlotIsPermanent(n))
+        return
+    res := SlotRelease(n)
+    if res.ok
+        Notify(res.message, "Ящик")
+    else
+        Notify(res.message, "Ящик", 2)
+    SettingsSlotsRefreshAll(ui)
+    SettingsFillRow(ui, ui.selectedSlot)
+}
+
+SettingsDynamicResetClick(ui) {
+    n := ui.editingSlot
+    if (!n || SlotIsPermanent(n))
+        return
+    d := SlotDefaults()
+    ui.edits[n] := { kind: "dyn", width: d.width, edge: d.edge, monitor: d.monitor,
+                     activateOnShow: d.activateOnShow, hideOnBlur: d.hideOnBlur,
+                     hotkey: SlotHotkey(n) }
+    SettingsFillRow(ui, ui.selectedSlot)
+    SettingsSlotRowPaint(ui, ui.selectedSlot)
 }
 
 ; Кнопка смены типа слота. Само переключение только готовит буфер правок
@@ -3077,6 +3104,12 @@ SettingsOpen() {
     ui.convert := SettingsMk(panelSlots,
         g.Add("Button", "+0x8000 x" (detailX + detailW - 190 - 14) " y" (detailY + 8) " w190 h26", "Сделать постоянным…"))
     ui.convert.OnEvent("Click", (*) => SettingsConvertClick(ui))
+    ui.release := SettingsMk(panelSlots,
+        g.Add("Button", "+0x8000 x" (detailX + detailW - 190 - 14) " y" (detailY + 42) " w190 h26", "Освободить слот"))
+    ui.release.OnEvent("Click", (*) => SettingsDynamicReleaseClick(ui))
+    ui.resetDyn := SettingsMk(panelSlots,
+        g.Add("Button", "+0x8000 x" (detailX + detailW - 190 - 14) " y" (detailY + 76) " w190 h26", "Сбросить к General"))
+    ui.resetDyn.OnEvent("Click", (*) => SettingsDynamicResetClick(ui))
     panelSlots.Push(g.Add("Text", "x" (detailX + pad) " y" (detailY + 38) " w" (detailW - 2 * pad) " h1 Background2A2C33", ""))
 
     fx := detailX + pad, fLabelW := 130, fValX := fx + fLabelW + 8
@@ -3099,7 +3132,7 @@ SettingsOpen() {
         y := detailY + 44 + (i - 1) * 30
         ; У динамического слота эта строка — не "хоткей фокуса" (такого
         ; поля у него нет вовсе), а основной Ctrl+Alt+N, который ящик
-        ; назначает по номеру. SettingsFieldLabel() называет focusHotkey
+        ; назначает по номеру. SettingsFieldLabel() называет hotkey
         ; для ПОСТОЯННОГО слота — здесь нужна отдельная, более общая подпись.
         label := (key = "hotkey") ? "Хоткей" : SettingsFieldLabel(key)
         roLabels.Push(SettingsMk(panelSlots, g.Add("Text", "x" fx " y" y " w" fLabelW " h18", label)))
@@ -3130,7 +3163,7 @@ SettingsOpen() {
 
     ; Те же девять полей, редактируемые — поверх valc/srcc, видны только
     ; когда выбранный слот постоянный (или готовится им стать). yExe,
-    ; yCls и yFocus — те же y, что и у полей exe/cls/focusHotkey в цикле
+    ; yCls и yFocus — те же y, что и у полей exe/cls/hotkey в цикле
     ; выше (i=2,3,9), чтобы кнопки и пояснение встали в свои строки.
     yExe := detailY + 44 + (2 - 1) * 30
     yCls := detailY + 44 + (3 - 1) * 30
@@ -3149,20 +3182,14 @@ SettingsOpen() {
     ui.eWidth := SettingsMk(panelSlots, g.Add("Edit", "-E0x200 Background252A31 x" fValX " y" (detailY + 44 + 5 * 30) " w60 h26 Number Limit3"))
     ui.eAct   := SettingsMk(panelSlots, g.Add("CheckBox", "x" fValX " y" (detailY + 44 + 6 * 30 + 3) " w226 h20", "Активировать окно при выезде"))
     ui.eBlur  := SettingsMk(panelSlots, g.Add("CheckBox", "x" fValX " y" (detailY + 44 + 7 * 30 + 3) " w226 h20", "Убирать окно, когда фокус ушёл"))
-    ui.eFocus := SettingsMk(panelSlots, g.Add("Edit", "-E0x200 Background252A31 x" fValX " y" yFocus " w160 h26"))
+    ui.eFocus := SettingsMk(panelSlots, g.Add("Hotkey", "x" fValX " y" yFocus " w160 h26"))
     g.SetFont("s8 c9A9CA3")
     focusCaption := SettingsMk(panelSlots, g.Add("Text", "x" fValX " y" (yFocus + 27) " w220 h16", "show/hide, применяется сразу"))
-    ; Основной хоткей слота — Ctrl+Alt+N — ящик назначает сам номером
-    ; слота и не даёт настраивать; без этой подписи рядом единственное
-    ; видимое поле "Хоткей фокуса" читалось бы как единственный хоткей
-    ; слота вообще. Текст выставляется в SettingsFillEditable() по номеру
-    ; текущего слота.
-    ui.primaryHotkey := SettingsMk(panelSlots, g.Add("Text", "x" (fValX + 172) " y" (yFocus + 5) " w260 h32", ""))
     g.SetFont("s9 cEDEDEF")
 
     ui.editCtl := [ui.eName, ui.eExe, ui.eExeBrowse, ui.eExeWindow, ui.eCls, clsInfo,
                    ui.eMon, ui.eEdge, ui.eWidth, ui.eAct, ui.eBlur, ui.eFocus, focusCaption,
-                   ui.primaryHotkey, editLabels*]
+                   editLabels*]
 
     ui.eName.OnEvent("Change",  (*) => SettingsSlotEdited(ui, "name", ui.eName.Value))
     ui.eExe.OnEvent("Change",   (*) => SettingsSlotEdited(ui, "exe", ui.eExe.Value))
@@ -4236,11 +4263,8 @@ SettingsSectionSlot(sec) {
     return Integer(RegExReplace(sec, "^\D+"))
 }
 
-; Слоты, у которых изменился focusHotkey. Хоткеи регистрируются один раз
-; при старте (см. цикл по SlotPermList() в начале файла), и Save их не
-; переставляет — это принятое поведение C1, а не недоделка. Контракт
-; называет этот список restartRequiredFields; текст native статус-строки
-; C4 не меняет, поле нужно клиенту порта.
+; Show/hide hotkey применяется Runtime без restart; поле сохранено в
+; outcome только для совместимости протокола Settings.
 SettingsRestartRequired(slotPlan) {
     return []
 }

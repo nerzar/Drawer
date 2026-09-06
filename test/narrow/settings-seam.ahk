@@ -236,8 +236,8 @@ if !FileExist(drawerPath) || !FileExist(slotsPath) {
     ; Смотреть надо на код, а не на слова о коде: шапка Slots.ahk
     ; называет прежние структуры, объясняя, почему их больше нет.
     both  := NoComments(src4) . NoComments(src4s)
-    Assert("4a: focus-хоткей регистрируется номером слота",
-        InStr(src4, "OnFocusHotkey.Bind(a.slot)") > 0)
+    Assert("4a: show/hide hotkey регистрируется номером слота",
+        InStr(src4, "Hotkey(Hooked(SlotHotkey(n)), OnSlot.Bind(n))") > 0)
     Assert("4b: прежней регистрации по позиции в списке нет",
         InStr(src4, "OnFocusHotkey.Bind(i)") = 0)
     Assert("4c: SlotPerm(n) — единственная точка разрешения номера в конфигурацию",
@@ -563,13 +563,7 @@ ChangedSlotsCopy(writes, deletes) {
             out.Push(A_Index)
     return out
 }
-RestartRequiredCopy(writes) {
-    out := []
-    for w in writes
-        if (w.key = "focusHotkey")
-            out.Push(Integer(SubStr(w.sec, 5)))
-    return out
-}
+RestartRequiredCopy(writes) => []
 Join(a) {
     s := ""
     for v in a
@@ -580,15 +574,15 @@ Join(a) {
 wr := [{ sec: "slot7", key: "exe", val: "a.exe" },
        { sec: "slot2", key: "name", val: "N" },
        { sec: "slot2", key: "width", val: "60" },
-       { sec: "slot2", key: "focusHotkey", val: "^!t" }]
+       { sec: "hotkeys", key: "slot2", val: "^!t" }]
 Assert("9i: changedSlots — номера по возрастанию, писать можно и не по порядку",
     Join(ChangedSlotsCopy(wr, [5])) = "2,5,7")
 Assert("9j: слот с двумя изменёнными ключами попадает в список один раз",
     Join(ChangedSlotsCopy([{ sec: "slot2", key: "name", val: "N" },
                            { sec: "slot2", key: "edge", val: "left" }], [])) = "2")
-Assert("9k: restartRequired — только focusHotkey, а не любая правка слота",
-    Join(RestartRequiredCopy(wr)) = "2")
-Assert("9l: правки без focusHotkey рестарта не требуют",
+Assert("9k: show/hide hotkey применяется без restart",
+    RestartRequiredCopy(wr).Length = 0)
+Assert("9l: правки слота рестарта не требуют",
     RestartRequiredCopy([{ sec: "slot3", key: "width", val: "70" }]).Length = 0)
 
 ; --- сверка значения на настоящем временном INI (окон не касается) ---
@@ -706,7 +700,7 @@ if !FileExist(drawerPath) {
     pCh := InStr(src10, "SettingsChangedSlots(slotPlan) {")
     bodySnap := (pSnap > 0 && pCh > pSnap) ? SubStr(src10, pSnap, pCh - pSnap) : ""
     Assert("10l: снимок копирует настройки, а не отдаёт живой глобал",
-        bodySnap != "" && InStr(bodySnap, "SettingsBehaviorCopy(SlotCfg(n))") > 0
+        bodySnap != "" && InStr(bodySnap, "SlotCfg(n).monitor") > 0
      && InStr(bodySnap, "SettingsBehaviorCopy(SlotDefaults())") > 0)
     Assert("10m: снимок включает живой статус слота, а не только конфиг",
         InStr(bodySnap, "SlotStatus(n)") > 0)
@@ -932,7 +926,7 @@ if !FileExist(drawerPath) {
     codeSW := (pSW > 0 && pSP > pSW) ? NoComments(SubStr(src12, pSW, pSP - pSW)) : ""
     Assert("12j: правка слота проходит те же проверки, что и General",
         codeSW != "" && InStr(codeSW, "SettingsTextIn(e.name") > 0
-     && InStr(codeSW, "SettingsHotkeyIn(e.focusHotkey") > 0
+     && InStr(codeSW, "SettingsHotkeyIn(e.hotkey") > 0
      && InStr(codeSW, "SettingsMonitorIn(String(e.monitor)") > 0
      && InStr(codeSW, "SettingsEdgeIn(e.edge") > 0
      && InStr(codeSW, "SettingsBoolIn(e.activateOnShow") > 0)
@@ -942,7 +936,7 @@ if !FileExist(drawerPath) {
     Assert("12l: сырое e.* в запись больше не попадает",
         InStr(codeSW, "val: e.cls") = 0 && InStr(codeSW, "val: e.edge") = 0
      && InStr(codeSW, "e.activateOnShow ?") = 0
-     && InStr(codeSW, "val: e.focusHotkey") = 0)
+     && InStr(codeSW, "val: e.hotkey") = 0)
 
     pSPe := InStr(src12, "; UI-adapter: тонкая обёртка")
     codeSP := (pSP > 0 && pSPe > pSP) ? NoComments(SubStr(src12, pSP, pSPe - pSP)) : ""
@@ -1573,10 +1567,10 @@ if !FileExist(drawerPath) || !FileExist(slotsPath) {
     pSP18 := InStr(src18, "SettingsSlotsPlan(edits, &err) {")
     codeSW18 := (pSW18 > 0 && pSP18 > pSW18) ? NoComments(SubStr(src18, pSW18, pSP18 - pSW18)) : ""
     Assert("18j: план проверяет хоткей синтаксисом и номером слота, а не как обычный текст",
-        codeSW18 != "" && InStr(codeSW18, "SettingsHotkeyIn(e.focusHotkey, SettingsLiveSlot(n, `"focusHotkey`")") > 0
-     && InStr(codeSW18, ", n, &err)") > 0 && InStr(codeSW18, "SettingsTextIn(e.focusHotkey") = 0)
+        codeSW18 != "" && InStr(codeSW18, "SettingsHotkeyIn(e.hotkey, SettingsLiveHotkey(n)") > 0
+     && InStr(codeSW18, ", n, &err)") > 0 && InStr(codeSW18, "SettingsTextIn(e.hotkey") = 0)
     Assert("18k: отказ несёт адрес контрола, а форме есть куда вести",
-        InStr(codeSW18, "field := `"slots.`" n `".focusHotkey`"") > 0)
+        InStr(codeSW18, "field := `"slots.`" n `".hotkey`"") > 0)
 
     pHK := InStr(src18, "SettingsHotkeyIn(v, live, label, n, &err) {")
     bodyHK := pHK ? NoComments(SubStr(src18, pHK, 1600)) : ""
@@ -1594,32 +1588,31 @@ if !FileExist(drawerPath) || !FileExist(slotsPath) {
 
     ; Регистрация при старте берёт значение из реестра — того же, который
     ; наполняет LoadConfig, — а не из формы и не из отдельного списка.
-    Assert("18o: хоткей при старте регистрируется значением из реестра",
-        InStr(src18, "for a in SlotPermList() {") > 0
-     && InStr(src18, "Hotkey(Hooked(a.focusHotkey), OnFocusHotkey.Bind(a.slot))") > 0)
-    Assert("18p: focusHotkey читается из [slotN] и живёт в записи слота",
-        InStr(src18, "focusHotkey: IniRead(path, section, `"focusHotkey`", `"`")") > 0
-     && InStr(src18, "focusHotkey: Opt(a, `"focusHotkey`", `"`")") > 0)
-    Assert("18q: засев формы берёт хоткей у самого слота, а не выдумывает его",
-        InStr(src18, "focusHotkey: a.focusHotkey") > 0
-     && InStr(src18s, "perm     := 0") > 0)
+    Assert("18o: show/hide hotkey при старте регистрируется по номеру из реестра",
+        InStr(src18, "Hotkey(Hooked(SlotHotkey(n)), OnSlot.Bind(n))") > 0)
+    Assert("18p: focusHotkey не читается и не регистрируется",
+        InStr(NoComments(src18), "focusHotkey:") = 0
+     && InStr(NoComments(src18), "OnFocusHotkey") = 0)
+    Assert("18q: засев формы берёт hotkey номера",
+        InStr(src18, "hotkey: SlotHotkey(n)") > 0
+     && InStr(src18s, "hotkey   :=") > 0)
 
     ; Форма показывает и принимает человеческую запись; синтаксис
     ; AutoHotkey нигде, кроме config.ini, наружу не течёт. Один конвертер
     ; на обе поверхности (native Edit и WebView DTO) — источник истины один.
     portPath18 := A_ScriptDir "\..\..\src\webview\SettingsPort.ahk"
-    Assert("18ab2: native показывает хоткей человеческой записью, не сырым config-значением",
-        InStr(src18, "ui.eFocus.Value := HotkeyAhkToHuman(Opt(cfg, `"focusHotkey`", `"`"))") > 0)
+    Assert("18ab2: native захватывает hotkey специальным control",
+        InStr(src18, "g.Add(`"Hotkey`") > 0)
     if FileExist(portPath18) {
         srcPort18 := FileRead(portPath18, "UTF-8")
         Assert("18ac2: WebView DTO тоже переводит хоткей в человеческую запись, вторым конвертером не заводится",
-            InStr(srcPort18, "HotkeyAhkToHuman(String(Opt(cfg, `"focusHotkey`", `"`")))") > 0)
+            InStr(srcPort18, "HotkeyAhkToHuman(String(Opt(cfg, `"hotkey`", `"`")))") > 0)
     }
 
     ; Основной хоткей слота (Ctrl+Alt+N) — не focusHotkey, и форма не
     ; должна выдавать дополнительный хоткей за единственный.
-    Assert("18ad: панель постоянного слота отдельно показывает основной Ctrl+Alt+N",
-        InStr(src18, "ui.primaryHotkey.Text := `"Основной: Ctrl + Alt + `" ef.n") > 0)
+    Assert("18ad: UI не показывает старый отдельный основной hotkey",
+        InStr(NoComments(src18), "primaryHotkey") = 0)
 
     ; --- SlotsSeedManaged: кромка постоянного слота без первого toggle ---
     pSeed := InStr(src18, "SlotsSeedManaged() {")
@@ -1657,7 +1650,7 @@ if !FileExist(drawerPath) || !FileExist(slotsPath) {
     Assert("18ag: вызывается при старте, до первой пересборки кромок",
         InStr(src18, "SlotsSeedManaged()`r`nSetTimer(HandlesSync, -1)") > 0)
     Assert("18ah: и в SettingsReconcileRuntime — после каждого Save, не только при старте",
-        InStr(src18, "Slots.Apply(cfg, slotPlan.prevPerm)`r`n    SlotsSeedManaged()") > 0)
+        InStr(src18, "Slots.Apply(cfg, slotPlan.prevPerm)`r`n    RebindSlotHotkeys()`r`n    SlotsSeedManaged()") > 0)
 
     ; --- Permanent -> Dynamic конверсией через native Settings ------------
     ; До фикса ui.edits[r.n] := { kind: "dyn" } не нёс width/edge/monitor/
