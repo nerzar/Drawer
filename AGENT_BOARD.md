@@ -18,89 +18,92 @@ If any field is missing, the task is NOT autonomous-ready.
 
 ### Critical Git ref hygiene
 
-`dev` is the private **remote name**, not a local branch namespace.
+`dev` is the private remote name, not a local branch namespace.
 
-- The shared remote branch is `refs/remotes/dev/wip/slots-parity` when reading/fetching and `refs/heads/wip/slots-parity` as the remote push destination.
-- **Never create a local branch named `dev/wip/slots-parity` or any local branch beginning with a remote-name prefix such as `dev/...`.**
-- If local `refs/heads/dev/wip/slots-parity` exists, treat it as a hygiene defect. First inspect `git worktree list --porcelain`, then verify whether the ref has unique commits relative to `refs/remotes/dev/wip/slots-parity`.
-- If that duplicate ref has no unique commits and is not checked out by any worktree, delete only that local ref and continue.
-- If that duplicate ref is checked out by a worktree or has unique commits, stop with `BLOCKED` rather than guessing. The BLOCKED report must state the exact holding worktree path from `git worktree list --porcelain`, the branch/ref involved, and whether unique commits exist, so the operator knows exactly which worktree must be switched or inspected.
-- Never use ambiguous shorthand `dev/wip/slots-parity` in commands that resolve revisions. Use `refs/remotes/dev/wip/slots-parity` (or an exact SHA) for reads/bases.
-- Never run `git push dev dev/wip/slots-parity`. Push explicit destinations, e.g. `git push dev HEAD:refs/heads/wip/slots-parity` for an authorized shared-branch claim/docs update, or `git push dev HEAD:refs/heads/<task-branch>` for task output.
-- Before any destructive branch or worktree cleanup, inspect `git worktree list --porcelain` first, then `git show-ref` with fully qualified refs. Do not infer worktree state merely from current local/remote branch lists.
-- Stale worktree registrations whose branches were already deleted remotely are cleanup debt, not evidence that the branch still exists. Cleanup tasks must reason from `git worktree list --porcelain`, registered worktree paths/HEADs and actual refs; use `git worktree prune` only after verifying the registration is stale and no live worktree data would be lost.
+- Shared remote branch for reads: `refs/remotes/dev/wip/slots-parity`; remote push destination: `refs/heads/wip/slots-parity`.
+- Never create a local branch beginning with a remote-name prefix such as `dev/...`.
+- If local `refs/heads/dev/wip/slots-parity` exists, inspect `git worktree list --porcelain` and unique commits. Delete only when unreferenced by worktrees and containing no unique commits; otherwise report `BLOCKED` with exact holding worktree path/ref/unique-commit status.
+- Never use ambiguous `dev/wip/slots-parity` revision shorthand and never run `git push dev dev/wip/slots-parity`.
+- Before destructive branch/worktree cleanup inspect `git worktree list --porcelain` first, then fully-qualified refs. Stale registrations are cleanup debt, not proof a branch exists.
 
-Before starting an autonomous task, an agent must claim it by creating `docs/agent-claims/<RUN-ID>.md` on the shared remote branch after a fresh `git fetch dev`. If that claim already exists for another agent, skip the task. One Run ID = one working branch. No extra analysis/review/verify/tmp branches unless the task explicitly requires them.
+Before starting an autonomous task, claim it via `docs/agent-claims/<RUN-ID>.md` on the shared branch after fresh fetch. Existing claim by another agent means skip it. One Run ID = one working branch; no extra analysis/review/verify/tmp branches unless the task requires them.
 
-Claim file must contain: Run ID, agent/client, actual model, claimed timestamp, observed shared SHA, task branch, status `CLAIMED`. On successful completion update the same claim to `DONE` with Code SHA, report tip SHA and checks. On blocker update to `BLOCKED` and stop autonomous pickup until architect action.
+Claim must record Run ID, agent/client, actual model, timestamp, observed shared SHA, branch and `CLAIMED`; completion updates it to `DONE` with Code SHA/report tip/checks. `BLOCKED` stops autonomous pickup until architect action.
 
-For claim/docs commits targeting the shared branch, base from `refs/remotes/dev/wip/slots-parity` (or its exact SHA), use a non-ambiguous temporary/local claim branch name that does **not** begin with `dev/`, and push explicitly to `HEAD:refs/heads/wip/slots-parity`. If the push is rejected because the shared branch advanced, fetch/rebase or recreate the claim commit on the new remote tip, then re-check whether another claim now exists before retrying.
+Claim/docs shared pushes must base from `refs/remotes/dev/wip/slots-parity`, use non-ambiguous local names, and push explicitly to `HEAD:refs/heads/wip/slots-parity`. On non-fast-forward fetch/recreate or rebase safely and re-check claims.
 
-Autonomous workers must never self-promote code into `wip/slots-parity`, self-delete other agents' branches, mark a feature accepted, or change architecture/priority. Promotion, acceptance, branch cleanup, and dependency unblocking remain architect-owned unless a task explicitly delegates them.
+Autonomous workers never self-accept arbitrary feature code, change architecture/priority, or delete other agents' branches unless a task explicitly delegates promotion/cleanup.
 
 ## Общий протокол
 
 1. `git fetch dev`.
-2. Прочитать актуальный `AGENT_BOARD.md` именно из `refs/remotes/dev/wip/slots-parity` (или exact shared SHA).
-3. Прочитать `docs/agent-reports/REPORT_FORMAT.md`.
-4. Взять только автономную `READY` задачу, где агент явно указан в `Eligible`, либо Run ID, данный оператором.
-5. Перед изменениями проверить worktree, branch, base и status; отдельно убедиться, что нет неоднозначного local ref `refs/heads/dev/wip/slots-parity`.
-6. Coding-задачи работают в отдельных sibling-worktree `C:\Users\nerza\Projects\drawer-agent-worktrees\<task-id>`.
-7. Не reset/clean/discard чужую работу; public `origin` не трогать.
-8. Выполнить задачу строго в scope.
-9. VM/full suite только если требует задача; иначе целевые gates.
-10. Перед завершением: factual report, commit, push private `dev` с явным `HEAD:refs/heads/<task-branch>`, verify remote, clean tree.
-11. `docs/ARCHITECT_STATE.md` не редактировать.
-12. Архитектурная идентичность результата — `Code SHA`; report-tip не использовать как coding base.
+2. Read current `AGENT_BOARD.md` from `refs/remotes/dev/wip/slots-parity` or exact SHA.
+3. Read `docs/agent-reports/REPORT_FORMAT.md`.
+4. Pick only a `READY` task explicitly eligible for your agent type.
+5. Verify worktree/branch/base/status and ref hygiene.
+6. Coding tasks use sibling worktrees under `C:\Users\nerza\Projects\drawer-agent-worktrees\<task-id>`.
+7. Do not reset/clean/discard foreign work; public `origin` stays untouched.
+8. Stay inside scope and run targeted gates.
+9. Report, commit, explicit push to private `dev`, verify remote, clean tree.
+10. `docs/ARCHITECT_STATE.md` is architect-owned.
+11. Architectural identity = `Code SHA`; report-tip SHA is metadata only.
 
-При blocker/conflict/product ambiguity/risk: сохранить безопасное состояние, push/report `BLOCKED` и прекратить автономный pickup до решения архитектора.
+On blocker/conflict/product ambiguity/data-loss risk: preserve safe state, push factual `BLOCKED`, stop.
 
 ## Текущий статус
 
-- Shared production identity after P07: `886e68663a0f487f3ad00c248a4aed87e02861c7`; current `wip/slots-parity` may be higher only by docs/task/claim/report commits.
-- G03 accepted + runtime verified + promoted.
-- G05/G05FIX accepted + runtime verified + promoted.
-- G06 accepted, runtime verified, and promoted by P07. Frontend 63/63 + typecheck/build + AHK validate passed; settings seam remained inconclusive on Codex host due 20s timeout without diagnostics.
-- A02S1 Code SHA `ac71581b98a58e51128a987d20d8b5b1952c1756`: DEV1 review `ACCEPT_WITH_RUNTIME_CHECK`; Antigravity live acceptance currently claimed.
-- A03 analysis DONE with verdict `READY_TO_IMPLEMENT`; implementation remains sequenced behind accepted A02 lineage where required.
-- **CODEX quota exhausted after successful P07. Do not publish new READY tasks with `Eligible: CODEX` until operator reports quota reset. Codex worker should idle.**
-- Antigravity model budget remains scarce; keep at most one READY task at a time and reserve Claude fallback for hard work.
+- Shared production identity after P07: `886e68663a0f487f3ad00c248a4aed87e02861c7`; higher shared commits may be docs/tasks/claims/reports.
+- G03, G05/G05FIX, G06 accepted + runtime verified + promoted.
+- A02S1 Code SHA `ac71581b98a58e51128a987d20d8b5b1952c1756`: DEV1 review `ACCEPT_WITH_RUNTIME_CHECK`; Antigravity live acceptance `ACCEPT` with validates + 9/9 seam + 7/7 acceptance. It is ready for promotion.
+- A03 analysis verdict `READY_TO_IMPLEMENT`; A03S1 is independent of unaccepted A02S2.
+- **CODEX quota exhausted. No new `Eligible: CODEX` work until operator reports reset.**
+- Antigravity has only a small remaining model budget. The following three tasks are deliberately the high-value final wave; do not invent additional work.
 
-## AUTONOMOUS READY QUEUE
+## AUTONOMOUS READY QUEUE — ANTIGRAVITY priority order
 
-### 1. A02S1ACCEPT — live watcher-seam acceptance
-- Status: `CLAIMED/RUNNING`
+### 1. P08 — promote accepted A02S1
+- Status: `READY`
 - Eligible: `ANTIGRAVITY`
 - Preferred model: `Gemini 3.8 Flash`
-- Session: `NEW`
-- Run ID: `RUN-20260906-AUTO-ANTIGRAVITY-A02S1-ACCEPT-01`
-- Base: A02S1 Code SHA `ac71581b98a58e51128a987d20d8b5b1952c1756`
-- Branch: `verify/a02s1-window-focus-watch-seam`
-- Task file: `docs/agent-tasks/RUN-20260906-AUTO-ANTIGRAVITY-A02S1-ACCEPT-01.md`
+- Session: `REUSE_OK`
+- Run ID: `RUN-20260906-AUTO-ANTIGRAVITY-P08-A02S1-PROMOTE-01`
+- Base/source: current shared lineage + accepted A02S1 `ac71581b98a58e51128a987d20d8b5b1952c1756`
+- Branch: authorized push to `refs/heads/wip/slots-parity`
+- Task file: `docs/agent-tasks/RUN-20260906-AUTO-ANTIGRAVITY-P08-A02S1-PROMOTE-01.md`
 
-### 2. A02S1R — independent watcher-seam review
-- Status: `DONE`
-- Eligible: `DEV1`
-- Run ID: `RUN-20260906-AUTO-DEV1-A02S1-REVIEW-01`
-- Base: A02S1 Code SHA `ac71581b98a58e51128a987d20d8b5b1952c1756`
-- Branch: `review/a02s1-window-focus-watch-seam`
-- Verdict: `ACCEPT_WITH_RUNTIME_CHECK`
-- Task file: `docs/agent-tasks/RUN-20260906-AUTO-DEV1-A02S1-REVIEW-01.md`
+### 2. A02S2 — focus history + foreground state extraction
+- Status: `READY`
+- Eligible: `ANTIGRAVITY`
+- Preferred model: `Claude` if Gemini budget is low; Gemini allowed
+- Session: `NEW`
+- Run ID: `RUN-20260906-AUTO-ANTIGRAVITY-A02S2-IMPLEMENT-01`
+- Base/source rule: claim only after shared branch contains both `886e68663a0f487f3ad00c248a4aed87e02861c7` and accepted A02S1 `ac71581b98a58e51128a987d20d8b5b1952c1756` as ancestors
+- Branch: `refactor/window-focus-history-foreground`
+- Task file: `docs/agent-tasks/RUN-20260906-AUTO-ANTIGRAVITY-A02S2-IMPLEMENT-01.md`
+
+### 3. A03S1 — pure geometry plan seam
+- Status: `READY`
+- Eligible: `ANTIGRAVITY`
+- Preferred model: `Claude` if available; Gemini allowed
+- Session: `NEW`
+- Run ID: `RUN-20260906-AUTO-ANTIGRAVITY-A03S1-IMPLEMENT-01`
+- Base/source rule: current accepted shared lineage after P08 containing both shared G06 lineage and accepted A02S1; must not depend on unaccepted A02S2
+- Branch: `refactor/window-geometry-plan-seam`
+- Task file: `docs/agent-tasks/RUN-20260906-AUTO-ANTIGRAVITY-A03S1-IMPLEMENT-01.md`
+
+Workers must take these in listed priority order. After these three, Antigravity should idle unless architect publishes more work.
 
 ## COMPLETED AUTONOMOUS RUNS — recent
 
 - `RUN-20260906-AUTO-CODEX-P07-G06-PROMOTE-CLEANUP-01` — DONE, shared production Code SHA `886e68663a0f487f3ad00c248a4aed87e02861c7`.
-- `RUN-20260906-AUTO-DEV1-G06REVIEW-01` — DONE, `ACCEPT_WITH_RUNTIME_CHECK`.
+- `RUN-20260906-AUTO-ANTIGRAVITY-A02S1-ACCEPT-01` — DONE, `ACCEPT`.
+- `RUN-20260906-AUTO-DEV1-A02S1-REVIEW-01` — DONE, `ACCEPT_WITH_RUNTIME_CHECK`.
 - `RUN-20260906-AUTO-ANTIGRAVITY-G06ACCEPT-01` — DONE, `ACCEPT`.
 - `RUN-20260906-AUTO-CODEX-A02S1-01` — DONE, Code SHA `ac71581b98a58e51128a987d20d8b5b1952c1756`.
 - `RUN-20260906-AUTO-CODEX-A03-ANALYSIS-01` — DONE, `READY_TO_IMPLEMENT`.
-- `RUN-20260906-AUTO-DEV1-A02S1-REVIEW-01` — DONE, `ACCEPT_WITH_RUNTIME_CHECK`.
 
-## NEXT AFTER ARCHITECT REVIEW
+## NEXT AFTER THIS WAVE
 
-- If Antigravity A02S1 live acceptance passes: promote A02S1, then publish A02S2 focus-history/foreground-state extraction to an available capable agent (not Codex until quota reset).
-- Use completed A03 analysis to shape A03 implementation after A02 lineage is accepted where dependency requires it.
-- Then A04 handles seam, A05 Settings service/tray seams.
-- T01/T02 test debt after architecture stabilizes.
-- R01 diagnostics production policy; R02 production build acceptance; R03 final human acceptance.
-- F01/F02/F03/F04/F08/F11/F12 remain deferred/future product decisions.
+- Review/accept A02S2 and A03S1 before promotion.
+- A03S2 monitor/origin selection can follow A03S1; A03S3 waits until accepted A02S2 removes focus `prev` from shared geometry state.
+- Then A04 handles seam, A05 Settings/tray seams, test debt and release gates.
