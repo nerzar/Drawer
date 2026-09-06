@@ -22,10 +22,13 @@ If any field is missing, the task is NOT autonomous-ready.
 
 - The shared remote branch is `refs/remotes/dev/wip/slots-parity` when reading/fetching and `refs/heads/wip/slots-parity` as the remote push destination.
 - **Never create a local branch named `dev/wip/slots-parity` or any local branch beginning with a remote-name prefix such as `dev/...`.**
-- If local `refs/heads/dev/wip/slots-parity` exists, treat it as a hygiene defect: before normal work, verify it contains no unique commits and is not checked out by any worktree; then delete it. If it is checked out or has unique commits, stop with `BLOCKED` rather than guessing.
+- If local `refs/heads/dev/wip/slots-parity` exists, treat it as a hygiene defect. First inspect `git worktree list --porcelain`, then verify whether the ref has unique commits relative to `refs/remotes/dev/wip/slots-parity`.
+- If that duplicate ref has no unique commits and is not checked out by any worktree, delete only that local ref and continue.
+- If that duplicate ref is checked out by a worktree or has unique commits, stop with `BLOCKED` rather than guessing. The BLOCKED report must state the exact holding worktree path from `git worktree list --porcelain`, the branch/ref involved, and whether unique commits exist, so the operator knows exactly which worktree must be switched or inspected.
 - Never use ambiguous shorthand `dev/wip/slots-parity` in commands that resolve revisions. Use `refs/remotes/dev/wip/slots-parity` (or an exact SHA) for reads/bases.
 - Never run `git push dev dev/wip/slots-parity`. Push explicit destinations, e.g. `git push dev HEAD:refs/heads/wip/slots-parity` for an authorized shared-branch claim/docs update, or `git push dev HEAD:refs/heads/<task-branch>` for task output.
-- Before any destructive branch cleanup, inspect `git worktree list --porcelain` and `git show-ref` using fully qualified refs.
+- Before any destructive branch or worktree cleanup, inspect `git worktree list --porcelain` first, then `git show-ref` with fully qualified refs. Do not infer worktree state merely from current local/remote branch lists.
+- Stale worktree registrations whose branches were already deleted remotely are cleanup debt, not evidence that the branch still exists. Cleanup tasks must reason from `git worktree list --porcelain`, registered worktree paths/HEADs and actual refs; use `git worktree prune` only after verifying the registration is stale and no live worktree data would be lost.
 
 Before starting an autonomous task, an agent must claim it by creating `docs/agent-claims/<RUN-ID>.md` on the shared remote branch after a fresh `git fetch dev`. If that claim already exists for another agent, skip the task. One Run ID = one working branch. No extra analysis/review/verify/tmp branches unless the task explicitly requires them.
 
