@@ -824,3 +824,199 @@ test('C03-5: successful retry clears resolved diagnostic, field, and converges s
   delete (globalThis as any).chrome
 })
 
+test('G03-1: in-flight save sets status=saving and adopt would discard mutations made during request', async () => {
+  const customCanonical: SettingsState = {
+    protocolVersion: 1,
+    general: {
+      dynamicDefaults: {
+        monitor: { kind: 'cursor' },
+        edge: 'right',
+        widthPercent: 55,
+        activateOnShow: true,
+        hideOnBlur: true,
+      },
+      handlesEnabled: true,
+      animation: { durationMs: 160, steps: 14 },
+      blurCheckMs: 250,
+      accent: '2A2E35',
+    },
+    slots: [],
+  }
+  let resolveSave: ((v: any) => void) | null = null
+
+  const listeners: any[] = []
+  ;(globalThis as any).chrome = {
+    webview: {
+      postMessage(msg: any) {
+        if (msg.type === 'request' && msg.action === 'settings.apply') {
+          new Promise((resolve) => {
+            resolveSave = resolve
+          }).then((resp) => {
+            listeners.forEach((l) => l({ data: { type: 'response', id: msg.id, ...resp } }))
+          })
+        }
+      },
+      addEventListener(_t: string, h: any) { listeners.push(h) },
+      removeEventListener(_t: string, h: any) {
+        const idx = listeners.indexOf(h)
+        if (idx >= 0) listeners.splice(idx, 1)
+      },
+    },
+  }
+
+  const { settings, applySettings, _resetClientForTesting } = await import('../src/bridge/settings')
+  _resetClientForTesting()
+
+  settings.canonical = customCanonical
+  settings.draft = draftFromState(customCanonical.general)
+  settings.slotDrafts = slotDraftsFromState(customCanonical)
+
+  const savePromise = applySettings()
+
+  // In flight:
+  assert.equal(settings.status, 'saving', 'status must be saving while request is in flight')
+
+  // If a user mutation happened during flight:
+  settings.draft!.widthPercent = '99'
+
+  // Server responds with success and canonical state reflecting the snapshot:
+  resolveSave!({
+    ok: true,
+    result: {
+      saved: true,
+      changedFields: 0,
+      changedSlots: [],
+      restartRequiredFields: [],
+      diagnostics: [],
+      state: customCanonical,
+    },
+  })
+
+  await savePromise
+
+  // Successful adopt resets draft from returned canonical state, proving mutation would be lost:
+  assert.equal(settings.status, 'ready')
+  assert.equal(settings.draft!.widthPercent, '55', 'unlocked in-flight mutation is lost by adopt, proving lock requirement')
+
+  _resetClientForTesting()
+  delete (globalThis as any).chrome
+})
+
+test('G03-2: GeneralView locks all save-participating inputs and actions during status=saving', async () => {
+  const fs = await import('node:fs')
+  const viewUrl = new URL('../src/views/GeneralView.vue', import.meta.url)
+  const code = fs.readFileSync(viewUrl, 'utf8')
+
+  // Saving computed definition
+  assert.match(code, /const\s+saving\s*=\s*computed\(\(\)\s*=>\s*settings\.status\s*===\s*'saving'\)/, 'saving computed must track settings.status === saving')
+
+  // Fieldset wrapper with :disabled="saving"
+  assert.match(code, /<fieldset[^>]+class="[^"]*editor[^"]*"[^>]+:disabled="saving"/, 'editor fieldset must be bound to :disabled="saving"')
+
+  // All participatory form controls bound to disabled
+  const requiredTestIds = [
+    'widthPercent',
+    'edge',
+    'monitorKind',
+    'monitorNumber',
+    'activateOnShow',
+    'hideOnBlur',
+    'handlesEnabled',
+    'accent',
+    'animPreset',
+    'animMs',
+    'animSteps',
+    'blurCheckMs',
+  ]
+
+  for (const tid of requiredTestIds) {
+    const elRegex = new RegExp(`<[^>]+data-testid="${tid}"[^>]*>`, 's')
+    const match = code.match(elRegex)
+    assert.ok(match, `Element data-testid="${tid}" must exist in GeneralView.vue`)
+    assert.ok(
+      match[0].includes(':disabled="saving"') || match[0].includes('saving'),
+      `Element data-testid="${tid}" must have disabled bound to saving`
+    )
+  }
+
+  // Swatch buttons and custom color
+  assert.match(code, /<button[^>]+class="swatch"[^>]+:disabled="saving"/, 'swatch buttons must be disabled when saving')
+  assert.match(code, /ref="customColorInput"[^>]+:disabled="saving"/, 'custom color input must be disabled when saving')
+
+  // Action handlers must guard against saving
+  assert.match(code, /function\s+pickAccent[^{]+\{\s*if\s*\(\s*saving\.value\s*\)\s*return/, 'pickAccent must guard against saving')
+  assert.match(code, /function\s+pickCustomAccent[^{]+\{\s*if\s*\(\s*saving\.value\s*\)\s*return/, 'pickCustomAccent must guard against saving')
+  assert.match(code, /function\s+triggerCustomColor[^{]+\{\s*if\s*\(\s*saving\.value\s*\)\s*return/, 'triggerCustomColor must guard against saving')
+  assert.match(code, /set:\s*\(v\)\s*=>\s*\{\s*if\s*\(\s*saving\.value\s*\)\s*return/, 'preset setter must guard against saving')
+})
+
+test('G03-3: General save lock lifecycle: locked during saving and unlocked after success or error', async () => {
+  const currentCanonical = state(perm(1), dyn(2))
+  let reqHandler: (action: string) => any = () => ({})
+
+  const listeners: any[] = []
+  ;(globalThis as any).chrome = {
+    webview: {
+      postMessage(msg: any) {
+        if (msg.type === 'request') {
+          Promise.resolve().then(() => {
+            const resp = reqHandler(msg.action)
+            listeners.forEach((l) => l({ data: { type: 'response', id: msg.id, ...resp } }))
+          })
+        }
+      },
+      addEventListener(_t: string, h: any) { listeners.push(h) },
+      removeEventListener(_t: string, h: any) {
+        const idx = listeners.indexOf(h)
+        if (idx >= 0) listeners.splice(idx, 1)
+      },
+    },
+  }
+
+  const { settings, applySettings, _resetClientForTesting } = await import('../src/bridge/settings')
+  _resetClientForTesting()
+
+  settings.canonical = currentCanonical
+  settings.draft = draftFromState(currentCanonical.general)
+  settings.slotDrafts = slotDraftsFromState(currentCanonical)
+
+  // 1. Success lifecycle
+  reqHandler = () => ({
+    ok: true,
+    result: {
+      saved: true,
+      changedFields: 0,
+      changedSlots: [],
+      restartRequiredFields: [],
+      diagnostics: [],
+      state: currentCanonical,
+    },
+  })
+
+  assert.notEqual(settings.status, 'saving')
+  let p = applySettings()
+  assert.equal(settings.status, 'saving', 'must be saving during apply')
+  await p
+  assert.notEqual(settings.status, 'saving', 'must unlock after successful apply')
+  assert.equal(settings.status, 'ready')
+
+  // 2. Error lifecycle
+  reqHandler = () => ({
+    ok: false,
+    error: {
+      code: 'ERR_WRITE_FAILED',
+      message: 'Failed to write config',
+      state: currentCanonical,
+    },
+  })
+
+  p = applySettings()
+  assert.equal(settings.status, 'saving', 'must be saving during second apply')
+  await p
+  assert.notEqual(settings.status, 'saving', 'must unlock after failed apply to allow retries')
+  assert.equal(settings.status, 'error')
+
+  _resetClientForTesting()
+  delete (globalThis as any).chrome
+})
+

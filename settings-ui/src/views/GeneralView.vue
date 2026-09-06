@@ -13,6 +13,7 @@ import {
 // AHK, и вернуться туда они могут единственным путём: Применить/ОК.
 const d = computed(() => settings.draft)
 const loaded = computed(() => settings.draft !== null)
+const saving = computed(() => settings.status === 'saving')
 
 // Что действует прямо сейчас. Меняется только из ответа AHK, поэтому
 // расходится с полем ровно тогда, когда правка ещё не сохранена.
@@ -22,7 +23,10 @@ const bad = (path) => settings.field === path
 
 const preset = computed({
   get: () => (settings.draft ? animPreset(settings.draft) : 'normal'),
-  set: (v) => settings.draft && applyAnimPreset(settings.draft, v),
+  set: (v) => {
+    if (saving.value) return
+    if (settings.draft) applyAnimPreset(settings.draft, v)
+  },
 })
 const customAnim = computed(() => preset.value === 'custom')
 
@@ -30,14 +34,17 @@ const accentCss = computed(() => '#' + (settings.draft?.accent ?? '2A2E35'))
 const customColorInput = ref(null)
 
 function pickAccent(hex) {
+  if (saving.value) return
   if (settings.draft) settings.draft.accent = hex
 }
 
 function pickCustomAccent(event) {
+  if (saving.value) return
   if (settings.draft) settings.draft.accent = event.target.value.slice(1).toUpperCase()
 }
 
 function triggerCustomColor() {
+  if (saving.value) return
   customColorInput.value?.click()
 }
 </script>
@@ -49,7 +56,7 @@ function triggerCustomColor() {
 
     <div v-if="!loaded" class="card empty">Настройки ещё не прочитаны.</div>
 
-    <div v-else class="grid2">
+    <fieldset v-else class="editor grid2" :disabled="saving">
       <div class="card">
         <h3>Поведение по умолчанию</h3>
         <p class="hint">
@@ -64,6 +71,7 @@ function triggerCustomColor() {
               :class="{ 'field-bad': bad('general.dynamicDefaults.widthPercent') }"
               type="text"
               data-testid="widthPercent"
+              :disabled="saving"
               v-model="d.widthPercent"
             />
             <span class="unit">% экрана</span>
@@ -71,7 +79,7 @@ function triggerCustomColor() {
         </div>
         <div class="row">
           <label>Сторона выезда</label>
-          <select class="dd" data-testid="edge" v-model="d.edge">
+          <select class="dd" data-testid="edge" :disabled="saving" v-model="d.edge">
             <option v-for="o in EDGE_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
           </select>
         </div>
@@ -82,6 +90,7 @@ function triggerCustomColor() {
               class="dd"
               :class="{ narrow: d.monitorKind === 'number' }"
               data-testid="monitorKind"
+              :disabled="saving"
               v-model="d.monitorKind"
             >
               <option value="cursor">Следовать за курсором</option>
@@ -99,16 +108,17 @@ function triggerCustomColor() {
               :class="{ 'field-bad': bad('general.dynamicDefaults.monitor.number') }"
               type="text"
               data-testid="monitorNumber"
+              :disabled="saving"
               v-model="d.monitorNumber"
             />
           </div>
         </div>
         <label class="check-row">
-          <input type="checkbox" data-testid="activateOnShow" v-model="d.activateOnShow" />
+          <input type="checkbox" data-testid="activateOnShow" :disabled="saving" v-model="d.activateOnShow" />
           <span>Активировать окно при открытии</span>
         </label>
         <label class="check-row">
-          <input type="checkbox" data-testid="hideOnBlur" v-model="d.hideOnBlur" />
+          <input type="checkbox" data-testid="hideOnBlur" :disabled="saving" v-model="d.hideOnBlur" />
           <span>Убирать окно, когда фокус ушёл в другое</span>
         </label>
       </div>
@@ -116,7 +126,7 @@ function triggerCustomColor() {
       <div class="card">
         <h3>Внешний вид</h3>
         <label class="check-row" style="margin-bottom: 14px">
-          <input type="checkbox" data-testid="handlesEnabled" v-model="d.handlesEnabled" />
+          <input type="checkbox" data-testid="handlesEnabled" :disabled="saving" v-model="d.handlesEnabled" />
           <span>Кромки у края экрана</span>
         </label>
 
@@ -131,6 +141,7 @@ function triggerCustomColor() {
               type="text"
               data-testid="accent"
               maxlength="6"
+              :disabled="saving"
               v-model="d.accent"
             />
           </div>
@@ -146,6 +157,7 @@ function triggerCustomColor() {
               :style="{ background: '#' + hex }"
               :aria-label="'Цвет #' + hex"
               :aria-pressed="hex.toLowerCase() === d.accent.toLowerCase()"
+              :disabled="saving"
               @click="pickAccent(hex)"
             >
               <svg
@@ -164,9 +176,11 @@ function triggerCustomColor() {
             </button>
             <label
               class="swatch-add"
+              :class="{ disabled: saving }"
               title="Свой цвет"
               aria-label="Свой цвет"
-              tabindex="0"
+              :tabindex="saving ? -1 : 0"
+              @click="saving && $event.preventDefault()"
               @keydown.enter.prevent="triggerCustomColor"
               @keydown.space.prevent="triggerCustomColor"
             >
@@ -178,6 +192,7 @@ function triggerCustomColor() {
                 ref="customColorInput"
                 type="color"
                 :value="accentCss"
+                :disabled="saving"
                 @input="pickCustomAccent"
                 class="visually-hidden-color"
                 aria-label="Выбрать свой цвет"
@@ -201,7 +216,7 @@ function triggerCustomColor() {
         </p>
         <div class="row">
           <label>Плавность</label>
-          <select class="dd" data-testid="animPreset" v-model="preset">
+          <select class="dd" data-testid="animPreset" :disabled="saving" v-model="preset">
             <option value="none">Без анимации</option>
             <option v-for="o in ANIM_PRESETS" :key="o.id" :value="o.id">{{ o.label }}</option>
             <option value="custom">Своя</option>
@@ -212,10 +227,10 @@ function triggerCustomColor() {
           <div class="field">
             <input
               class="num-sm"
-              :class="{ 'disabled-field': !customAnim }"
+              :class="{ 'disabled-field': !customAnim || saving }"
               type="text"
               data-testid="animMs"
-              :disabled="!customAnim"
+              :disabled="!customAnim || saving"
               v-model="d.animMs"
               @input="d.animCustom = true"
             />
@@ -226,10 +241,10 @@ function triggerCustomColor() {
           <div class="field">
             <input
               class="num-sm"
-              :class="{ 'disabled-field': !customAnim }"
+              :class="{ 'disabled-field': !customAnim || saving }"
               type="text"
               data-testid="animSteps"
-              :disabled="!customAnim"
+              :disabled="!customAnim || saving"
               v-model="d.animSteps"
               @input="d.animCustom = true"
             />
@@ -247,6 +262,7 @@ function triggerCustomColor() {
               :class="{ 'field-bad': bad('general.blurCheckMs') }"
               type="text"
               data-testid="blurCheckMs"
+              :disabled="saving"
               v-model="d.blurCheckMs"
             />
           </div>
@@ -258,7 +274,7 @@ function triggerCustomColor() {
           </span>
         </p>
       </div>
-    </div>
+    </fieldset>
   </div>
 </template>
 
@@ -482,7 +498,24 @@ select.dd.narrow {
 .field-bad {
   border-color: #a04a45;
 }
-input[disabled] {
+.editor {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+button[disabled],
+fieldset[disabled],
+input[disabled],
+select[disabled] {
   opacity: 0.5;
+}
+.swatch-add.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.swatch[disabled] {
+  cursor: not-allowed;
 }
 </style>
