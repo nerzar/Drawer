@@ -3671,6 +3671,19 @@ SettingsGeneralPlan(input, &err) {
     return out
 }
 
+; Итоговые общие значения для одного Save. План слотов строится до записи
+; на диск, поэтому SlotDefaults() здесь ещё содержит старый General.
+; Наложение уже вычисленных General writes даёт dynamic overrides ровно
+; относительно draft, который этот же Save сохранит.
+SettingsDynamicFinal(generalWrites) {
+    dynamic := SettingsBehaviorCopy(SlotDefaults())
+    for w in generalWrites {
+        if (w.sec = "dynamic")
+            dynamic.%w.key% := w.val
+    }
+    return dynamic
+}
+
 ; UI-adapter: только читает setUI и переводит DropDownList в смысловые
 ; значения. Валидацию и сравнение с runtime делает SettingsGeneralPlan —
 ; backend-seam controls/GUI не видит.
@@ -3827,7 +3840,7 @@ SettingsSlotWrites(n, e, &err, &field?) {
 ; отличается от общего. Совпал с общим — ключ уходит из секции, и слот
 ; снова следует за General; ушли все — секция удаляется целиком. Иначе
 ; правка одного поля молча пришпилила бы к слоту и остальные четыре.
-SettingsDynSlotWrites(n, e, &err, &field?) {
+SettingsDynSlotWrites(n, e, dynamic, &err, &field?) {
     if (err != "")
         return { writes: [], keyDeletes: [], empty: true }
     field := ""
@@ -3846,7 +3859,6 @@ SettingsDynSlotWrites(n, e, &err, &field?) {
         return { writes: [], keyDeletes: [], empty: true }
     sec := "dynamicSlot" n
     own := SlotOverride(n)
-    dynamic := SlotDefaults()
     cand := [{ key: "monitor", val: mon, shared: String(Opt(dynamic, "monitor", "cursor")) },
              { key: "edge", val: edge, shared: String(Opt(dynamic, "edge", "right")) },
              { key: "width", val: String(w), shared: String(Opt(dynamic, "width", 60)) },
@@ -3881,7 +3893,7 @@ SettingsDynSlotWrites(n, e, &err, &field?) {
 ; SettingsGeneralPlan(): первая ошибка отменяет весь план, наполовину не
 ; пишем. Плюс read-only снимок текущих identity/bindings — он нужен
 ; SettingsReconcileRuntime() уже ПОСЛЕ диска, а не для записи здесь.
-SettingsSlotsPlan(edits, &err) {
+SettingsSlotsPlan(edits, &err, dynamic := 0) {
     err := ""
     ; Адрес поля, на котором план остановился: форме по нему выбирать
     ; слот и подсвечивать контрол. Пустым остаётся только там, где
@@ -3892,6 +3904,7 @@ SettingsSlotsPlan(edits, &err) {
     ; или его надстройка опустела); keyDeletes — отдельные ключи
     ; надстройки, вернувшиеся к общему значению.
     writes := [], deletes := [], dynDeletes := [], keyDeletes := []
+    dynamic := dynamic ? dynamic : SlotDefaults()
     if edits {
         for n, e in edits {
             ; Номер и тип слота native задаёт сам строкой списка, поэтому
@@ -3913,7 +3926,7 @@ SettingsSlotsPlan(edits, &err) {
                 ; надстройки уже динамического слота секцию не трогает.
                 if SlotPerm(n)
                     deletes.Push(n)
-                got := SettingsDynSlotWrites(n, e, &err, &field)
+                got := SettingsDynSlotWrites(n, e, dynamic, &err, &field)
                 if (err != "") {
                     if (field = "")
                         field := "slots." n
@@ -3956,10 +3969,11 @@ SettingsSlotsPlanFail(field) {
 }
 
 ; UI-adapter: тонкая обёртка над буфером setUI.edits.
-SettingsSlotsCollect(&err) {
+SettingsSlotsCollect(generalWrites, &err) {
     global setUI
     err := ""
-    return SettingsSlotsPlan(setUI ? setUI.edits : 0, &err)
+    return SettingsSlotsPlan(setUI ? setUI.edits : 0, &err,
+                            SettingsDynamicFinal(generalWrites))
 }
 
 ; -------- ОБЩИЙ SEAM: persistence+verify -> runtime reconciliation --------
@@ -4425,7 +4439,7 @@ SettingsSave(closeAfter) {
     ; Slots собираются и проверяются тем же проходом, что и General:
     ; одна ошибка в любой вкладке отменяет запись обеих — наполовину не
     ; сохраняем.
-    slotPlan := SettingsSlotsCollect(&err)
+    slotPlan := SettingsSlotsCollect(vals, &err)
     if (err != "") {
         SettingsStatus(err, true)
         return

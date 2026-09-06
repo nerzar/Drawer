@@ -922,7 +922,7 @@ if !FileExist(drawerPath) {
      && InStr(codeGP, "val: input.monitor") = 0)
 
     pSW := InStr(src12, "SettingsSlotWrites(n, e, &err, &field?) {")
-    pSP := InStr(src12, "SettingsSlotsPlan(edits, &err) {")
+    pSP := InStr(src12, "SettingsSlotsPlan(edits, &err, dynamic := 0) {")
     codeSW := (pSW > 0 && pSP > pSW) ? NoComments(SubStr(src12, pSW, pSP - pSW)) : ""
     Assert("12j: правка слота проходит те же проверки, что и General",
         codeSW != "" && InStr(codeSW, "SettingsTextIn(e.name") > 0
@@ -1072,7 +1072,7 @@ if FileExist(drawerPath) {
     Assert("15a: имена полей слота живут в одном месте",
         InStr(src15, "SettingsSlotFieldLabel(n, key := `"`") {") > 0)
 
-    pPlan := InStr(src15, "SettingsSlotsPlan(edits, &err) {")
+    pPlan := InStr(src15, "SettingsSlotsPlan(edits, &err, dynamic := 0) {")
     pPlanEnd := InStr(src15, "; Отказ плана одним видом")
     codePlan := (pPlan > 0 && pPlanEnd > pPlan) ? NoComments(SubStr(src15, pPlan, pPlanEnd - pPlan)) : ""
     Assert("15b: каждый выход плана несёт адрес поля",
@@ -1107,8 +1107,8 @@ if FileExist(drawerPath) {
 if FileExist(drawerPath) {
     src16 := FileRead(drawerPath, "UTF-8")
 
-    pDyn := InStr(src16, "SettingsDynSlotWrites(n, e, &err, &field?) {")
-    pPlan16 := InStr(src16, "SettingsSlotsPlan(edits, &err) {")
+    pDyn := InStr(src16, "SettingsDynSlotWrites(n, e, dynamic, &err, &field?) {")
+    pPlan16 := InStr(src16, "SettingsSlotsPlan(edits, &err, dynamic := 0) {")
     codeDyn := (pDyn > 0 && pPlan16 > pDyn) ? NoComments(SubStr(src16, pDyn, pPlan16 - pDyn)) : ""
     Assert("16a: надстройка динамического слота пишет только отличия от общих",
         codeDyn != "" && InStr(codeDyn, "if (c.val = c.shared) {") > 0
@@ -1564,7 +1564,7 @@ if !FileExist(drawerPath) || !FileExist(slotsPath) {
     src18s := FileRead(slotsPath, "UTF-8")
 
     pSW18 := InStr(src18, "SettingsSlotWrites(n, e, &err, &field?) {")
-    pSP18 := InStr(src18, "SettingsSlotsPlan(edits, &err) {")
+    pSP18 := InStr(src18, "SettingsSlotsPlan(edits, &err, dynamic := 0) {")
     codeSW18 := (pSW18 > 0 && pSP18 > pSW18) ? NoComments(SubStr(src18, pSW18, pSP18 - pSW18)) : ""
     Assert("18j: план проверяет хоткей синтаксисом и номером слота, а не как обычный текст",
         codeSW18 != "" && InStr(codeSW18, "SettingsHotkeyIn(e.hotkey, SettingsLiveHotkey(n)") > 0
@@ -1667,6 +1667,43 @@ if !FileExist(drawerPath) || !FileExist(slotsPath) {
      && InStr(bodyConv, "width: d.width, edge: d.edge, monitor: d.monitor") > 0
      && InStr(bodyConv, "activateOnShow: d.activateOnShow, hideOnBlur: d.hideOnBlur") > 0)
 }
+; ---------------------------------------------------------------
+; Точка 19 (C02): dynamic override сравнивается с General из того же
+; Save. Эта маленькая чистая модель повторяет решение плана: ключ пишется
+; только если draft слота отличается от уже итогового General, а прежний
+; ключ удаляется при возврате к нему.
+C02OverridePlan(oldShared, finalShared, own, draft) {
+    if (draft = finalShared)
+        return { writes: [], deletes: own != "" ? ["width"] : [] }
+    return { writes: (own = draft) ? [] : ["width"], deletes: [] }
+}
+
+swap := C02OverridePlan("70", "50", "50", "70")
+Assert("19a: General→50 и slot→70 одним Save сохраняет override=70",
+    swap.writes.Length = 1 && swap.writes[1] = "width" && swap.deletes.Length = 0)
+
+delete := C02OverridePlan("70", "50", "50", "50")
+Assert("19b: совпадение с финальным General удаляет прежний override",
+    delete.writes.Length = 0 && delete.deletes.Length = 1 && delete.deletes[1] = "width")
+
+noop := C02OverridePlan("70", "50", "", "50")
+Assert("19c: слот без override, следующий финальному General, остаётся no-op",
+    noop.writes.Length = 0 && noop.deletes.Length = 0)
+
+if FileExist(drawerPath) {
+    src19 := FileRead(drawerPath, "UTF-8")
+    portPath19 := A_ScriptDir "\..\..\src\webview\SettingsPort.ahk"
+    Assert("19d: план накладывает General writes до сравнения dynamic override",
+        InStr(src19, "SettingsDynamicFinal(generalWrites) {") > 0
+     && InStr(src19, "SettingsDynSlotWrites(n, e, dynamic, &err, &field?)") > 0
+     && InStr(src19, "SettingsSlotsCollect(vals, &err)") > 0)
+    if FileExist(portPath19) {
+        srcPort19 := FileRead(portPath19, "UTF-8")
+        Assert("19e: WebView Save и dirty используют финальный General для slot plan",
+            StrSplit(srcPort19, "SettingsSlotsPlan(edits, &err, SettingsDynamicFinal(").Length = 3)
+    }
+}
+
 ; ---------------------------------------------------------------
 out := ""
 allOk := true

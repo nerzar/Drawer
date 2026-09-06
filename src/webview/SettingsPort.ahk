@@ -149,17 +149,15 @@ class DrawerSettingsPort {
         edits := this._SlotsInput(JsonGet(draft, "slotEdits", []), &err, &field)
         if (err != "")
             return true
-        slotPlan := SettingsSlotsPlan(edits, &err)
-        if (err != "" || slotPlan.writes.Length || slotPlan.deletes.Length
-                      || slotPlan.dynDeletes.Length || slotPlan.keyDeletes.Length)
-            return true
         input := this._GeneralInput(JsonGet(draft, "general", 0), &err, &field)
         if (err != "")
             return true
         writes := SettingsGeneralPlan(input, &err)
         if !writes
             return true
-        return writes.Length > 0
+        slotPlan := SettingsSlotsPlan(edits, &err, SettingsDynamicFinal(writes))
+        return err != "" || writes.Length || slotPlan.writes.Length || slotPlan.deletes.Length
+            || slotPlan.dynDeletes.Length || slotPlan.keyDeletes.Length
     }
 
     Unsupported(action) {
@@ -199,7 +197,7 @@ class DrawerSettingsPort {
         ; Границы значений проверяет он, и адрес поля называет тоже он:
         ; разбирать русский текст ответа, чтобы понять, к какому слоту
         ; вести человека, — ровно то, от чего уводил C3.
-        slotPlan := SettingsSlotsPlan(edits, &err)
+        slotPlan := SettingsSlotsPlan(edits, &err, SettingsDynamicFinal(generalWrites))
         if (err != "")
             return this._Invalid(err, slotPlan.field)
 
