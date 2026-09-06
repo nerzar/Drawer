@@ -9,7 +9,18 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { CanonicalGate, reconcileSlotDrafts } from '../src/bridge/canonical'
-import { resetToShared, slotDraftsFromState, slotEditsToWire, type SlotDrafts } from '../src/bridge/slotDraft'
+import {
+  draftPermanentValue,
+  normalizeExe,
+  resetPermanentIdentityFromSlot,
+  resetToShared,
+  setDraftExecutable,
+  setDraftExecutableFromPicker,
+  setDraftWindow,
+  slotDraftsFromState,
+  slotEditsToWire,
+  type SlotDrafts,
+} from '../src/bridge/slotDraft'
 import type { PermanentSlotValue, SettingsState, SlotBehavior, SlotState } from '../src/bridge/protocol'
 
 // ---------------------------- фикстуры ----------------------------
@@ -290,3 +301,200 @@ test('resetToShared resets dynamic slot overrides to General defaults', () => {
   assert.equal(drafts[1]!.hideOnBlur, false)
 })
 
+// -------------------- G02: picker identity & stale windowClass --------------------
+
+test('ручная смена exe гасит старый windowClass, а возврат восстанавливает', () => {
+  const s = state(perm(1, 'Notepad', 'notepad.exe'))
+  s.slots[0]!.value.windowClass = 'Notepad'
+  const drafts = slotDraftsFromState(s)
+  const d = drafts[1]!
+  assert.equal(d.windowClass, 'Notepad')
+
+  // Пользователь реально сменил exe вручную
+  setDraftExecutable(d, 'calc.exe')
+  assert.equal(d.executable, 'calc.exe')
+  assert.equal(d.windowClass, '', 'stale windowClass должен быть очищен при смене exe')
+  assert.equal(draftPermanentValue(d).windowClass, '')
+
+  // Временный ввод / возврат к исходному exe восстанавливает валидный класс
+  setDraftExecutable(d, 'notepad.exe')
+  assert.equal(d.windowClass, 'Notepad', 'класс восстанавливается при возврате к исходному exe')
+  assert.equal(draftPermanentValue(d).windowClass, 'Notepad')
+
+  // Проверка нечувствительности к регистру и пробелам
+  setDraftExecutable(d, '  NOTEPAD.EXE  ')
+  assert.equal(d.windowClass, 'Notepad')
+})
+
+test('picker.exe при выборе нового exe сбрасывает старый windowClass и якорь', () => {
+  const s = state(perm(1, 'Notepad', 'notepad.exe'))
+  s.slots[0]!.value.windowClass = 'Notepad'
+  const drafts = slotDraftsFromState(s)
+  const d = drafts[1]!
+
+  // Выбор нового exe через picker.exe
+  setDraftExecutableFromPicker(d, 'calc.exe')
+  assert.equal(d.executable, 'calc.exe')
+  assert.equal(d.windowClass, '', 'stale class не должен остаться после picker.exe')
+  assert.equal(d.classAnchorExe, '')
+  assert.equal(d.anchorClass, '')
+
+  // Последующий ввод notepad.exe уже не вернёт старый Notepad, так как якорь очищен
+  setDraftExecutable(d, 'notepad.exe')
+  assert.equal(d.windowClass, '')
+})
+
+test('picker.exe при повторном выборе того же exe сохраняет windowClass', () => {
+  const s = state(perm(1, 'Notepad', 'notepad.exe'))
+  s.slots[0]!.value.windowClass = 'Notepad'
+  const drafts = slotDraftsFromState(s)
+  const d = drafts[1]!
+
+  setDraftExecutableFromPicker(d, 'NOTEPAD.EXE')
+  assert.equal(d.windowClass, 'Notepad')
+})
+
+test('picker.window согласованно устанавливает exe, windowClass и засеивает имя', () => {
+  const s = state(perm(1, 'Слот 1', 'notepad.exe'))
+  const drafts = slotDraftsFromState(s)
+  const d = drafts[1]!
+
+  setDraftWindow(d, {
+    title: 'Калькулятор',
+    executable: 'calc.exe',
+    windowClass: 'CalcFrame',
+  }, 'Слот 1')
+
+  assert.equal(d.executable, 'calc.exe')
+  assert.equal(d.windowClass, 'CalcFrame')
+  assert.equal(d.name, 'Калькулятор')
+
+  const val = draftPermanentValue(d)
+  assert.equal(val.executable, 'calc.exe')
+  assert.equal(val.windowClass, 'CalcFrame')
+})
+
+test('dynamic->permanent использует чистый identity seed и не превращается в persistent до Apply', () => {
+  const s = state(dyn(1))
+  const drafts = slotDraftsFromState(s)
+  const d = drafts[1]!
+
+  // Черновик в dynamic
+  assert.equal(d.kind, 'dynamic')
+  assert.equal(d.name, 'Слот 1')
+  assert.equal(d.executable, '')
+  assert.equal(d.windowClass, '')
+
+  // Переключение в permanent
+  d.kind = 'permanent'
+  resetPermanentIdentityFromSlot(d, s.slots[0]!)
+
+  // На frontend exe/class не выдумываются
+  assert.equal(d.name, 'Слот 1')
+  assert.equal(d.executable, '')
+  assert.equal(d.windowClass, '')
+
+  // При отправке уезжает пустое значение, чтобы валидация backend осталась источником истины
+  const edits = slotEditsToWire(drafts, s)
+  assert.equal(edits.length, 1)
+  assert.equal(edits[0]!.kind, 'permanent')
+  assert.equal(edits[0]!.value.executable, '')
+  assert.equal(edits[0]!.value.windowClass, '')
+})
+
+test('dynamic->permanent->dirty->dynamic->permanent возвращает чистый seed', () => {
+  const s = state(dyn(1))
+  const drafts = slotDraftsFromState(s)
+  const d = drafts[1]!
+
+  // Сделали permanent и набрали грязные правки
+  d.kind = 'permanent'
+  resetPermanentIdentityFromSlot(d, s.slots[0]!)
+  setDraftWindow(d, { title: 'Tmp', executable: 'temp.exe', windowClass: 'TmpClass' }, 'Слот 1')
+  assert.equal(d.executable, 'temp.exe')
+  assert.equal(d.windowClass, 'TmpClass')
+
+  // Передумали, вернули dynamic
+  d.kind = 'dynamic'
+  resetToShared(d, s.general.dynamicDefaults)
+  resetPermanentIdentityFromSlot(d, s.slots[0]!)
+
+  // Снова нажали «Сделать постоянным…» — данные должны быть чистым seed из permanentDefaults
+  d.kind = 'permanent'
+  resetPermanentIdentityFromSlot(d, s.slots[0]!)
+
+  assert.equal(d.name, 'Слот 1')
+  assert.equal(d.executable, '')
+  assert.equal(d.windowClass, '')
+})
+
+test('pickSlot интеграция через bridge: очистка stale class и согласование окна', async () => {
+  const s = state(perm(1, 'Notepad', 'notepad.exe'))
+  s.slots[0]!.value.windowClass = 'Notepad'
+
+  let requestHandler: (action: string, payload: any) => any = () => {}
+  const listeners: ((ev: { data: any }) => void)[] = []
+
+  ;(globalThis as any).chrome = {
+    webview: {
+      postMessage(msg: any) {
+        if (msg.type === 'request') {
+          Promise.resolve().then(() => {
+            try {
+              const res = requestHandler(msg.action, msg.payload)
+              listeners.forEach((l) => l({ data: { type: 'response', id: msg.id, ok: true, result: res } }))
+            } catch (err: any) {
+              listeners.forEach((l) => l({ data: { type: 'response', id: msg.id, ok: false, error: { code: 'internal_error', message: err.message } } }))
+            }
+          })
+        }
+      },
+      addEventListener(_type: string, handler: any) {
+        listeners.push(handler)
+      },
+      removeEventListener(_type: string, handler: any) {
+        const idx = listeners.indexOf(handler)
+        if (idx >= 0) listeners.splice(idx, 1)
+      },
+    },
+  }
+
+  const { settings, pickSlot } = await import('../src/bridge/settings')
+  settings.canonical = s
+  settings.slotDrafts = slotDraftsFromState(s)
+  const d = settings.slotDrafts[1]!
+  assert.equal(d.windowClass, 'Notepad')
+
+  // 1. pickSlot 'exe' выбирает новый executable -> stale windowClass гасится
+  requestHandler = (action) => {
+    if (action === 'picker.exe') return { selected: true, executable: 'calc.exe' }
+    throw new Error('unexpected action ' + action)
+  }
+  await pickSlot(1, 'exe')
+  assert.equal(d.executable, 'calc.exe')
+  assert.equal(d.windowClass, '', 'picker.exe должен сбросить stale windowClass')
+
+  // 2. pickSlot 'window' согласованно ставит exe и class
+  requestHandler = (action) => {
+    if (action === 'picker.window') {
+      return {
+        selected: true,
+        window: { title: 'Calculator', executable: 'calc.exe', windowClass: 'CalcClass' },
+      }
+    }
+    throw new Error('unexpected action ' + action)
+  }
+  await pickSlot(1, 'window')
+  assert.equal(d.executable, 'calc.exe')
+  assert.equal(d.windowClass, 'CalcClass')
+
+  // 3. pickSlot 'exe' повторно выбирает тот же exe -> class сохраняется
+  requestHandler = (action) => {
+    if (action === 'picker.exe') return { selected: true, executable: 'CALC.EXE' }
+    throw new Error('unexpected action ' + action)
+  }
+  await pickSlot(1, 'exe')
+  assert.equal(d.windowClass, 'CalcClass')
+
+  delete (globalThis as any).chrome
+})

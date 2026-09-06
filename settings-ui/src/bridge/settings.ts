@@ -22,7 +22,13 @@ import {
 import { CanonicalGate, reconcileSlotDrafts } from './canonical'
 import { draftFromState, draftToWire, type GeneralDraft } from './general'
 import type { SettingsState, SlotNumber } from './protocol'
-import { slotDraftsFromState, slotEditsToWire, type SlotDrafts } from './slotDraft'
+import {
+  setDraftExecutableFromPicker,
+  setDraftWindow,
+  slotDraftsFromState,
+  slotEditsToWire,
+  type SlotDrafts,
+} from './slotDraft'
 
 type Status = 'idle' | 'loading' | 'ready' | 'saving' | 'error'
 
@@ -162,14 +168,11 @@ export async function pickSlot(number: SlotNumber, kind: 'exe' | 'window'): Prom
     if (kind === 'exe') {
       const result = await api.request('picker.exe', {}, 0)
       if (result.selected && !settings.closed && settings.slotDrafts[number] === draft)
-        draft.executable = result.executable
+        setDraftExecutableFromPicker(draft, result.executable)
     } else {
       const result = await api.request('picker.window', {}, 0)
       if (result.selected && !settings.closed && settings.slotDrafts[number] === draft) {
-        draft.executable = result.window.executable
-        draft.windowClass = result.window.windowClass
-        if (!draft.name.trim() || draft.name.trim() === `Слот ${number}`)
-          draft.name = result.window.title
+        setDraftWindow(draft, result.window, `Слот ${number}`)
       }
     }
   } catch (e) {

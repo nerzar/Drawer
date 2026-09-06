@@ -3,7 +3,12 @@ import { computed, ref, watch } from 'vue'
 import { settings, pickSlot, releaseSlot } from '../bridge/settings'
 import { fieldTarget } from '../bridge/fieldError'
 import { EDGE_OPTIONS, draftToWire } from '../bridge/general'
-import { resetToShared, draftBehavior } from '../bridge/slotDraft'
+import {
+  draftBehavior,
+  resetPermanentIdentityFromSlot,
+  resetToShared,
+  setDraftExecutable,
+} from '../bridge/slotDraft'
 import {
   useSlotStatus,
   edgeLabels,
@@ -108,17 +113,25 @@ const locked = computed(() => settings.status === 'saving' || settings.pickerAct
 function makeDynamic() {
   const d = draft.value
   const shared = currentShared.value
-  if (!d || !shared || locked.value) return
+  const slot = selectedSlot.value
+  if (!d || !shared || !slot || locked.value) return
   d.kind = 'dynamic'
   // Поведение возвращается к общим: секция [slotN] уходит, собственной
   // надстройки у слота не появляется — ровно то, что делает native.
   resetToShared(d, shared)
+  resetPermanentIdentityFromSlot(d, slot)
 }
 
 function makePermanent() {
   const d = draft.value
-  if (!d || locked.value) return
+  const slot = selectedSlot.value
+  if (!d || !slot || locked.value) return
   d.kind = 'permanent'
+  resetPermanentIdentityFromSlot(d, slot)
+}
+
+function onExecutableInput(val) {
+  if (draft.value) setDraftExecutable(draft.value, val)
 }
 
 function captureHotkey(event) {
@@ -291,7 +304,8 @@ function resetDynamic() {
                   data-testid="edit-executable"
                   :class="{ 'field-bad': bad('executable') }"
                   :aria-invalid="bad('executable')"
-                  v-model="draft.executable"
+                  :value="draft.executable"
+                  @input="onExecutableInput($event.target.value)"
                 />
                 <button class="btn-icon" type="button" title="Обзор…" data-testid="pick-exe" @click="pickSlot(selectedNumber, 'exe')">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
