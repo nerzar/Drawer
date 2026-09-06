@@ -1030,9 +1030,12 @@ WatchBlur() {
 }
 
 ; Синхронизация слежения за потерей фокуса после реконсиляции настроек.
-; Проверяет все живые привязанные окна:
-;  - если окно выдвинуто (IsDeployed) и у его слота включён hideOnBlur,
-;    оно обязано быть в watched с актуальной конфигурацией;
+; Проверяет все живые привязанные окна. Конфигурация берётся через
+; SlotOf(), чтобы постоянная привязка имела тот же приоритет, что и во
+; всём остальном runtime:
+;  - уже watched окно сохраняет право на слежение (в том числе после
+;    FocusWindow при activateOnShow=false) и получает актуальный cfg;
+;  - новое окно добавляется только если обычный Show активировал бы его;
 ;  - если окно выдвинуто, но hideOnBlur выключен (или окно больше не
 ;    выдвинуто), оно удаляется из watched;
 ;  - таймер WatchBlur перевзводится с актуальным blurMs, если есть за кем
@@ -1042,11 +1045,15 @@ WatchSync() {
     boundMap := Map()
     for item in SlotBound() {
         hwnd := item.hwnd
+        if boundMap.Has(hwnd)
+            continue
         st := state.Has(hwnd) ? state[hwnd] : 0
         if (!st || !WinExist("ahk_id " hwnd) || !IsDeployed(hwnd, st))
             continue
-        if Opt(item.cfg, "hideOnBlur", true) {
-            watched[hwnd] := item.cfg
+        cfg := SlotOf(hwnd)
+        if (cfg && Opt(cfg, "hideOnBlur", true)
+            && (watched.Has(hwnd) || Opt(cfg, "activateOnShow", true))) {
+            watched[hwnd] := cfg
             boundMap[hwnd] := true
         }
     }

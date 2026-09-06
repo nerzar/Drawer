@@ -505,7 +505,6 @@ select.dd.narrow {
   min-width: 0;
 }
 button[disabled],
-fieldset[disabled],
 input[disabled],
 select[disabled] {
   opacity: 0.5;
