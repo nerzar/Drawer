@@ -57,26 +57,18 @@ Autonomous workers must never self-promote code into `wip/slots-parity`, self-de
 
 ## Текущий статус
 
-- Shared production identity после P06: `9162d157a3f6b3155519ed6248605b0f432ff832`; текущий `wip/slots-parity` выше docs/task/claim-коммитами.
+- Shared production identity after P07: `886e68663a0f487f3ad00c248a4aed87e02861c7`; current `wip/slots-parity` may be higher only by docs/task/claim/report commits.
 - G03 accepted + runtime verified + promoted.
 - G05/G05FIX accepted + runtime verified + promoted.
-- G06 Code SHA `5e9c717f23ee4503c0850a9be5d406892d49bed9`: DEV1 review `ACCEPT_WITH_RUNTIME_CHECK`; Antigravity live acceptance `ACCEPT` with 35/35 live checks + 63/63 frontend tests. P07 promotion currently claimed by Codex.
-- A02S1 Code SHA `ac71581b98a58e51128a987d20d8b5b1952c1756`: DEV1 independent review DONE with `ACCEPT_WITH_RUNTIME_CHECK`; Antigravity live runtime acceptance currently claimed.
+- G06 accepted, runtime verified, and promoted by P07. Frontend 63/63 + typecheck/build + AHK validate passed; settings seam remained inconclusive on Codex host due 20s timeout without diagnostics.
+- A02S1 Code SHA `ac71581b98a58e51128a987d20d8b5b1952c1756`: DEV1 review `ACCEPT_WITH_RUNTIME_CHECK`; Antigravity live acceptance currently claimed.
 - A03 analysis DONE with verdict `READY_TO_IMPLEMENT`; implementation remains sequenced behind accepted A02 lineage where required.
-- Model budget is scarce: keep at most one READY task per Codex/Antigravity and prefer high-value work only.
+- **CODEX quota exhausted after successful P07. Do not publish new READY tasks with `Eligible: CODEX` until operator reports quota reset. Codex worker should idle.**
+- Antigravity model budget remains scarce; keep at most one READY task at a time and reserve Claude fallback for hard work.
 
 ## AUTONOMOUS READY QUEUE
 
-### 1. P07 — promote accepted G06 + safe cleanup
-- Status: `CLAIMED/RUNNING`
-- Eligible: `CODEX`
-- Session: `REUSE_OK`
-- Run ID: `RUN-20260906-AUTO-CODEX-P07-G06-PROMOTE-CLEANUP-01`
-- Base: current shared remote tip + accepted G06 Code SHA `5e9c717f23ee4503c0850a9be5d406892d49bed9`
-- Branch: authorized shared promotion to `refs/heads/wip/slots-parity`; no extra remote feature branch unless task requires a temporary local branch
-- Task file: `docs/agent-tasks/RUN-20260906-AUTO-CODEX-P07-G06-PROMOTE-CLEANUP-01.md`
-
-### 2. A02S1ACCEPT — live watcher-seam acceptance
+### 1. A02S1ACCEPT — live watcher-seam acceptance
 - Status: `CLAIMED/RUNNING`
 - Eligible: `ANTIGRAVITY`
 - Preferred model: `Gemini 3.8 Flash`
@@ -86,7 +78,7 @@ Autonomous workers must never self-promote code into `wip/slots-parity`, self-de
 - Branch: `verify/a02s1-window-focus-watch-seam`
 - Task file: `docs/agent-tasks/RUN-20260906-AUTO-ANTIGRAVITY-A02S1-ACCEPT-01.md`
 
-### 3. A02S1R — independent watcher-seam review
+### 2. A02S1R — independent watcher-seam review
 - Status: `DONE`
 - Eligible: `DEV1`
 - Run ID: `RUN-20260906-AUTO-DEV1-A02S1-REVIEW-01`
@@ -97,6 +89,7 @@ Autonomous workers must never self-promote code into `wip/slots-parity`, self-de
 
 ## COMPLETED AUTONOMOUS RUNS — recent
 
+- `RUN-20260906-AUTO-CODEX-P07-G06-PROMOTE-CLEANUP-01` — DONE, shared production Code SHA `886e68663a0f487f3ad00c248a4aed87e02861c7`.
 - `RUN-20260906-AUTO-DEV1-G06REVIEW-01` — DONE, `ACCEPT_WITH_RUNTIME_CHECK`.
 - `RUN-20260906-AUTO-ANTIGRAVITY-G06ACCEPT-01` — DONE, `ACCEPT`.
 - `RUN-20260906-AUTO-CODEX-A02S1-01` — DONE, Code SHA `ac71581b98a58e51128a987d20d8b5b1952c1756`.
@@ -105,8 +98,7 @@ Autonomous workers must never self-promote code into `wip/slots-parity`, self-de
 
 ## NEXT AFTER ARCHITECT REVIEW
 
-- After P07, G06 is part of the shared production lineage and G06 temporary refs can be retired safely.
-- If A02S1 DEV1 review + Antigravity live acceptance both pass: publish A02S2 focus-history/foreground-state extraction as the next high-value coding task.
+- If Antigravity A02S1 live acceptance passes: promote A02S1, then publish A02S2 focus-history/foreground-state extraction to an available capable agent (not Codex until quota reset).
 - Use completed A03 analysis to shape A03 implementation after A02 lineage is accepted where dependency requires it.
 - Then A04 handles seam, A05 Settings service/tray seams.
 - T01/T02 test debt after architecture stabilizes.
