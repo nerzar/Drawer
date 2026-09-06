@@ -8,194 +8,188 @@ Blackboard между архитектором ChatGPT и coding agents.
 
 1. `git fetch dev`.
 2. Прочитать актуальный `AGENT_BOARD.md` из `dev/wip/slots-parity`.
-3. Взять задачу, назначенную своей модели/чату.
-4. Проверить Git фактами. Продолжать указанную feature-ветку либо создать отдельную от указанного base.
-5. Выполнить задачу целиком, не расширяя scope.
-6. Разумные целевые проверки; VM/full suite только если задача прямо требует.
-7. Перед завершением: commit, push feature-ветки в `dev`, clean tree, factual report в `docs/agent-reports/<date>-<agent>-<task>.md`.
-8. Не merge/cherry-pick/rebase в `wip/slots-parity` без отдельной integration-задачи.
-9. `docs/ARCHITECT_STATE.md` не редактировать.
+3. Прочитать `docs/agent-reports/REPORT_FORMAT.md` из `dev/wip/slots-parity`.
+4. Взять только задачу, чей Run ID дан оператором в чате.
+5. Проверить Git фактами и создать/использовать указанный отдельный worktree.
+6. Выполнить задачу целиком, не расширяя scope.
+7. Разумные целевые проверки; VM/full suite только если задача прямо требует.
+8. Перед завершением: factual report, commit, push feature-ветки в `dev`, clean tree.
+9. Не merge/cherry-pick/rebase в `wip/slots-parity` без отдельной integration-задачи.
+10. `docs/ARCHITECT_STATE.md` не редактировать.
 
-Если есть блокер, неоднозначное продуктовое решение, конфликт с параллельной задачей или риск потери данных: записать `BLOCKED` в factual report, commit/push текущее состояние и остановиться.
+Если есть блокер, неоднозначное продуктовое решение, конфликт с параллельной задачей или риск потери данных: записать `BLOCKED` в factual report, commit/push безопасное состояние и остановиться.
 
-## ОБЯЗАТЕЛЬНО: изоляция рабочих каталогов параллельных агентов
+## Обязательная идентификация чата/запуска
 
-- Два одновременно работающих агента **никогда не используют один и тот же working tree**.
-- Нельзя создавать worktree внутри другого repo/worktree. Никаких вложенных `...\drawer-settings-integration\...\worktree`.
-- Для параллельных задач использовать отдельные sibling-каталоги, например `C:\Users\nerza\Projects\drawer-agent-worktrees\<task-id>`.
-- Перед стартом агент обязан проверить `git worktree list` и убедиться, что его каталог уникален.
-- Если в общем checkout уже есть незапушенная работа другого агента, второй агент туда не заходит: первый сначала commit+push либо переносит свою ветку в отдельный worktree.
-- Удалять worktree можно только после того, как его ветка safely committed+pushed и больше не нужна для текущей проверки.
-- Если есть две локальные ветки с одинаковой интеграцией, каноническое имя для Wave 1: `integration/slots-settings-wave1`. Перед удалением дубля сравнить SHA; если одинаковы — удалить дубль. Если расходятся — `BLOCKED`, не выбрасывать изменения.
+Каждая задача получает **Run ID** от архитектора/оператора. Агент обязан повторить его в factual report и финальном ответе.
+
+Формат отчёта строго по `docs/agent-reports/REPORT_FORMAT.md`: Task ID, Run ID, client, model, chat/session ID если реально доступен, chat title если доступен, Search anchor, timestamps, worktree, branch, base SHA, final SHA.
+
+Chat/session ID **не придумывать**. Если клиент его не показывает — `NOT_EXPOSED`. Search anchor обязателен и должен быть также в финальном ответе агента.
+
+## Изоляция параллельных агентов
+
+- Два одновременно работающих агента никогда не используют один working tree.
+- Worktree нельзя создавать внутри другого repo/worktree.
+- Канонический корень параллельных worktree: `C:\Users\nerza\Projects\drawer-agent-worktrees\<task-id>`.
+- Перед стартом: `git worktree list`; каталог задачи должен быть уникальным.
+- Незакоммиченная работа другого агента не трогается.
+- Удалять worktree только после safe commit+push.
+- Публичный `origin` не трогать; private remote — `dev` (`nerzar/Drawer.Dev`).
 
 ## Общие правила
 
-- Private repo: `nerzar/Drawer.Dev`, remote `dev`.
-- Публичный `origin` не трогать.
 - Git CLI/remote — источник истины.
-- Не плодить сущности/слои/harnesses/docs/worktrees без необходимости.
-- `drawer-debug.log` и `Нашёл баг…` сохранять и использовать для runtime-диагностики.
+- Не плодить слои/harnesses/docs/абстракции без необходимости.
+- `drawer-debug.log` и tray action `Нашёл баг…` сохранять.
 - Claude — резерв. Astra без отдельного решения архитектора не использовать.
 - Gemini — основной дешёвый worker; Codex — сложная логика/многослойные задачи.
-- Два параллельных агента — нормальный режим, но только в отдельных worktree и с разведёнными по файлам/границам задачами.
-- Для frontend typecheck использовать `npm --prefix settings-ui run typecheck` / `npm run typecheck` из `settings-ui`. Не использовать внешний `npx vue-tsc` как gate.
-
-## Текущее состояние
-
-- orchestration branch: `dev/wip/slots-parity`
-- diagnostics на `b2ec249` вручную приняты пользователем.
-- hotkey product contract: `docs/03-решения.md`, Р24.
-- remote feature inputs Wave 1: `dev/codex/slots-user-contract@e4f5271`, `dev/feat/settings-ui-build-cleanup@8d01da3`.
-- T00 remote branch: `dev/chore/frontend-local-typecheck@9c856ea`.
-- На GitHub сейчас **нет** опубликованной integration-ветки Wave 1; обнаруженные две одинаковые integration-ветки — локальная workspace-проблема.
+- Frontend typecheck: `npm --prefix settings-ui run typecheck`; внешний `npx vue-tsc` не использовать как gate.
+- VM/full `safe` suite не является default gate.
 
 ---
 
-# ЗАВЕРШЁННАЯ ПАРАЛЛЕЛЬНАЯ ВОЛНА
+# Текущее фактическое состояние
 
-## TASK C01 — Slots product contract
-
-**Status:** READY_FOR_INTEGRATION  
-**Executor:** Codex, GPT-5.6 Terra High  
-**Branch:** `codex/slots-user-contract`  
-**Reviewed remote HEAD:** `e4f5271`
-
-Реализовано: один persisted show/hide hotkey на слот, runtime rebind без restart, dynamic/permanent, WebView keyboard capture, native Hotkey control, release/reset dynamic, late permanent discovery через foreground lifecycle, handle после bind, удаление старого `focusHotkey`, factual report.
-
-Integration обязана дополнительно проверить/исправить два review-дефекта C01:
-- поле `Имя` permanent-слота должно быть редактируемым, лишний `readonly` убрать;
-- `Tab` в поле capture hotkey должен переводить фокус на следующий контрол и **не** записываться как hotkey.
-
-## TASK G01 — Settings/build cleanup
-
-**Status:** READY_FOR_INTEGRATION  
-**Executor:** Gemini  
-**Branch:** `feat/settings-ui-build-cleanup`  
-**Reviewed remote HEAD:** `8d01da3`
-
-Реализовано: удалён внутренний WebView titlebar, native titlebar стилизован через DWM с fallback, build не затирает существующий `config.ini`, release zip исключает `.log`, About/mock cleanup, внешний GitHub link, dark select readability, checkbox targets, keyboard accessibility color controls.
-
-## TASK T00 — frontend typecheck
-
-**Status:** DONE  
-**Executor:** Gemini  
-**Branch:** `chore/frontend-local-typecheck`  
-**Reviewed remote HEAD:** `9c856ea`
-
-Проверено: в repo уже есть корректный локальный `typecheck = tsc -p tsconfig.json`, который проверяет все `.ts` bridge-файлы; `npm ci`, `npm test`, `npm run typecheck`, `npm run build` проходят. Ошибка C01 была вызвана неправильным внешним `npx vue-tsc`, а не отсутствием рабочего repo typecheck. Код/lockfile менять не потребовалось; branch содержит factual report.
+- orchestration branch: `dev/wip/slots-parity`.
+- diagnostics base `b2ec249` вручную принята пользователем.
+- T00 typecheck investigation: `dev/chore/frontend-local-typecheck@9c856ea`; код менять не потребовалось, локальный `tsc` уже корректен.
+- Wave 1 integration опубликована: `dev/integration/slots-settings-wave1@ac63ead`.
+- C01 + G01 объединены; permanent `Имя` снова редактируется; `Tab` не захватывается полем hotkey; narrow/frontend checks зелёные.
+- **Wave 1 ещё не считается полностью принятой базой**, потому что production build в isolated worktree завершился `Ahk2Exe` exit code 17. Это отдельный активный blocker B01.
+- Static review архитектора заметил, что на integration branch `ApplyDwmTitlebarTheme` определён и в `src/drawer.ahk`, и в `src/webview/SettingsWebView.ahk`. Не считать это заранее причиной exit 17, но B01 обязан проверить дублирование и оставить одну корректную реализацию, если оно реально участвует в build/runtime.
+- `wip/slots-parity` пока содержит orchestration docs и не передвинут на integration code, чтобы не скрыть build blocker.
 
 ---
 
-# ACTIVE — сначала привести в порядок I01 и workspace
-
-## TASK I01-PUBLISH — сохранить законченную интеграцию и убрать локальный дубль
-
-**Status:** READY  
-**Executor:** Codex, GPT-5.6 Terra High  
-**Canonical branch:** `integration/slots-settings-wave1`
-
-Codex уже сообщил о завершении I01 локально, но remote integration branch ещё не существует. Сейчас **не переписывать интеграцию с нуля**.
-
-### Сделать
-
-1. В текущем локальном состоянии проверить `git status`, `git branch -vv`, `git worktree list` и найти законченную работу I01.
-2. Убедиться, что review-дефекты закрыты: permanent `Имя` редактируется; `Tab` выходит из hotkey capture и не становится хоткеем.
-3. Зафиксировать всю законченную интеграцию в канонической ветке `integration/slots-settings-wave1`.
-4. Если локально есть две одинаковые integration-ветки: сравнить их HEAD/tree; при идентичности оставить только `integration/slots-settings-wave1`, вторую удалить. Если не идентичны — не удалять, записать `BLOCKED` с разницей.
-5. Commit + push канонической ветки в remote `dev`.
-6. Проверить, что `dev/integration/slots-settings-wave1` существует и local HEAD ему равен.
-7. Factual report в `docs/agent-reports/2026-09-06-codex-i01.md`, clean tree.
-8. Не вливать в `wip/slots-parity` самостоятельно.
-
-### Проверки
-
-- AHK `/validate`;
-- settings-seam;
-- webview-slice;
-- `npm --prefix settings-ui test`;
-- `npm --prefix settings-ui run typecheck`;
-- `npm --prefix settings-ui run build`;
-- production build + fresh config / rebuild-preserves-config check;
-- VM/full suite не запускать.
-
-### Workspace cleanup
-
-После commit+push убрать только лишний локальный integration branch/worktree, если он доказанно дубликат. Не трогать `chore/frontend-local-typecheck`: T00 уже safely pushed и может быть удалён локально позже отдельной уборкой.
-
----
-
-# СЛЕДОМ
-
-## TASK A01 — ручная приёмка интегрированных Slots + Settings shell
-
-**Status:** BLOCKED_ON_I01_PUBLISH  
-**Executor:** пользователь; инструкции даёт архитектор
-
-После принятой remote integration-ветки пользователь проверяет только человеческие сценарии: custom show/hide hotkeys, hotkey меняется сразу, Tab у hotkey field, editable permanent name, dynamic bind/release/reset, permanent↔dynamic с живым окном, handle после bind, late permanent launch, Settings titlebar/About, build config safety. При баге: воспроизвести → `Нашёл баг…` → сообщить номер BUG и действие/результат.
-
----
-
-# WAVE 3 — Settings correctness
+# ACTIVE WAVE — две отдельные папки
 
 ## TASK C02 — General + dynamic override в одном Save
 
-**Status:** BLOCKED_ON_I01_PUBLISH  
-**Preferred executor:** Codex Terra High
+**Status:** READY  
+**Executor:** Codex, GPT-5.6 Terra High  
+**Run ID:** `RUN-20260906-CODEX-C02-01`  
+**Base:** `dev/integration/slots-settings-wave1@ac63ead`  
+**Branch:** `fix/settings-general-override-atomic`  
+**Worktree:** `C:\Users\nerza\Projects\drawer-agent-worktrees\C02`
 
-Подтверждённый дефект: old General=70, slot override=50; одним Apply General→50 и slot→70. План сравнивает slot с old General 70 и ошибочно удаляет override. Планировать overrides нужно относительно **финального General state этого же Save**. Добавить regression и симметричные no-op/delete случаи; persistence pipeline не переписывать.
+### Подтверждённый дефект
+
+Old General=70, slot override=50. В одном Apply пользователь меняет General→50 и slot→70. Текущий plan сравнивает slot с **old General 70**, считает override лишним и удаляет его; затем General становится 50, поэтому slot ошибочно получает 50.
+
+### Требование
+
+- Планировать dynamic slot overrides относительно **финального General state этого же Save**, а не старого canonical.
+- Один Save должен давать ровно результат текущего draft.
+- Добавить regression на описанный сценарий и симметричные no-op/delete cases.
+- Не переписывать persistence pipeline заново.
+- Не трогать DWM/build/toolchain/B01 area.
+
+### Проверки
+
+AHK `/validate`, settings-seam, webview-slice, relevant frontend tests/typecheck/build. VM/full suite не нужен. Production package build не нужен для C02.
+
+Перед завершением: factual report по REPORT_FORMAT, commit, push `dev/fix/settings-general-override-atomic`, clean tree. Не merge.
+
+---
+
+## TASK B01 — восстановить production build и проверить config-preservation
+
+**Status:** READY  
+**Executor:** Gemini, strongest available Gemini mode; NOT Astra  
+**Run ID:** `RUN-20260906-GEMINI-B01-01`  
+**Base:** `dev/integration/slots-settings-wave1@ac63ead`  
+**Branch:** `fix/integration-production-build`  
+**Worktree:** `C:\Users\nerza\Projects\drawer-agent-worktrees\B01`
+
+### Причина
+
+Integration I01 прошла `/validate`, settings-seam, webview-slice, frontend test/typecheck/build, но production `build/build.ps1` в isolated worktree упал на `Ahk2Exe` exit code 17 при компиляции `src/drawer.ahk`. G01 build/config safety нельзя считать проверенной, пока production build не проходит.
+
+### Задача
+
+1. Воспроизвести exit 17 из отдельного worktree и получить фактическую причину, а не гадать по коду возврата.
+2. Проверить integration-only состояние вокруг DWM. На branch одновременно видны определения `ApplyDwmTitlebarTheme` в `src/drawer.ahk` и `src/webview/SettingsWebView.ahk`; выяснить, является ли это ошибочным дублированием/причиной compile failure. Если да — оставить одну реализацию с полным нужным поведением: dark mode + caption/text/border colors + fallback, без custom chrome.
+3. Исправить только build/integration defect; не брать Settings correctness C02/C03 и не менять slot semantics.
+4. Production build должен завершаться успешно.
+5. Проверить build/config safety:
+   - fresh output получает default `config.ini`;
+   - изменить этот `config.ini`, повторить build → файл остаётся изменённым, не затирается;
+   - release zip не содержит `.log`;
+   - WebView assets реально embedded, как проверяет build script.
+6. Если exit 17 вызван только некорректной локальной установкой/копированием Ahk2Exe, а код исправлять не нужно — зафиксировать точную причину и воспроизводимый правильный способ запуска; не вносить фиктивный code change.
+
+### Проверки
+
+Production build обязателен; плюс AHK `/validate` и узкие checks, затронутые фактическим исправлением. VM/full suite не нужен.
+
+Перед завершением: factual report по REPORT_FORMAT, commit (report-only допустим, если code change не нужен), push `dev/fix/integration-production-build`, clean tree. Не merge.
+
+---
+
+# NEXT — после C02 + B01
+
+## TASK I02 — интегрировать C02 + B01 + orchestration docs
+
+**Status:** BLOCKED_ON_C02_B01
+
+Создать единую base branch, сохранить integration Wave 1, build fix, C02 и свежие `AGENT_BOARD.md`/`REPORT_FORMAT.md`; затем архитектор проверяет remote и только после этого передвигает `wip/slots-parity`.
+
+## TASK A01 — короткая ручная приёмка
+
+**Status:** BLOCKED_ON_I02  
+**Executor:** пользователь
+
+Проверить обычными действиями: custom show/hide hotkey, смена hotkey без restart, Tab из hotkey field, editable permanent name, dynamic bind/release/reset, permanent↔dynamic с живым окном, handle после bind, late permanent launch, native dark titlebar/About. При баге: `Нашёл баг…`, затем сообщить архитектору номер BUG + действие/результат.
+
+---
+
+# BACKLOG — Settings correctness
 
 ## TASK C03 — partial/retryable/diagnostics correctness
-
-**Status:** BLOCKED_ON_C02_OR_SEPARATE_FILE_REVIEW  
+**Status:** BLOCKED_ON_C02
 **Preferred executor:** Codex Terra High / Opus reserve
 
-Structured partial-save/reload/reconcile должен доходить до UI; без ложного `Сохранено`, без потери draft/field diagnostics, warning не должен исчезать после no-op. Один persistence path, без фиктивного rollback.
+Structured partial-save/reload/reconcile должен доходить до UI; без ложного `Сохранено`, потери draft/field diagnostics и исчезновения warning после no-op. Один persistence path, без фиктивного rollback.
 
 ## TASK G02 — stale windowClass + picker identity
-
-**Status:** BLOCKED_ON_I01_PUBLISH  
+**Status:** BLOCKED_ON_I02
 **Preferred executor:** Gemini
 
-Смена exe не оставляет class старого app; picker согласованно обновляет exe/class/name seed; dynamic→permanent с live window получает чистые identity data. Не менять permanent FindWindow больше необходимого.
+Смена exe не оставляет class старого app; picker согласованно обновляет exe/class/name seed; dynamic→permanent получает чистые identity data. Не менять FindWindow больше необходимого.
 
 ## TASK G03 — live hideOnBlur/blurMs + save lock
+**Status:** BLOCKED_ON_I02
+**Preferred executor:** Gemini / Codex при runtime race
 
-**Status:** BLOCKED_ON_I01_PUBLISH  
-**Preferred executor:** Gemini, эскалация Codex при runtime race
-
-После Apply runtime-настройки должны реально влиять на уже показанное окно; blur timer не stale; General inputs защищены во время Save от перезаписи позднего ввода.
+После Apply runtime-настройки реально влияют на уже показанное окно; blur timer не stale; General inputs защищены во время Save.
 
 ## TASK G04 — custom animation preset `Своя`
-
-**Status:** BLOCKED_ON_I01_PUBLISH  
+**Status:** BLOCKED_ON_I02
 **Preferred executor:** Gemini
 
-Пользовательские animation duration/steps сохраняются и отображаются корректно, не сбрасываются preset/canonical. Целевые tests.
+Custom animation duration/steps сохраняются, корректно отображаются и не сбрасываются preset/canonical.
 
 ---
 
-# WAVE 4 — UX cleanup
+# BACKLOG — UX
 
 ## TASK G05 — Slots terminology/onboarding
+**Status:** BLOCKED_ON_SETTINGS_CORRECTNESS
 
-**Status:** BLOCKED_ON_WAVE3  
-**Preferred executor:** Gemini
-
-Убрать INI/internal jargon; понятно объяснить Permanent vs Dynamic; хороший empty dynamic onboarding; exe dynamic — информация о live window, не persistent binding; release/reset obvious; без redesign.
+Убрать INI/internal jargon; ясно объяснить Permanent/Dynamic; хороший empty dynamic onboarding; release/reset очевидны; без redesign.
 
 ## TASK G06 — navigation/accessibility/polish
+**Status:** BLOCKED_ON_SETTINGS_CORRECTNESS
 
-**Status:** BLOCKED_ON_WAVE3  
-**Preferred executor:** Gemini
-
-Selected slot сохраняется между tabs; scrollbar/list behavior; оставшиеся labels/select/contrast/keyboard issues; About follow-up; без arbitrary slots.
+Selected slot сохраняется между tabs; scrollbar/list behavior; remaining labels/select/contrast/keyboard issues; About follow-up.
 
 ---
 
-# WAVE 5 — modular architecture после стабилизации UX/Settings
+# BACKLOG — modular architecture после стабилизации
 
 ## TASK A02 — windows/focus seam
-**Status:** BLOCKED_ON_STABILIZATION  
+**Status:** BLOCKED_ON_STABILIZATION
 **Preferred executor:** Codex Terra High / Opus reserve
 
 Вынести оконную модель `state`, `watched`, Show/Hide, focus/foreground lifecycle за явный seam без изменения поведения.
@@ -203,17 +197,11 @@ Selected slot сохраняется между tabs; scrollbar/list behavior; �
 ## TASK A03 — parking/geometries seam
 **Status:** BLOCKED_ON_A02
 
-Отделить CaptureOrigin/ComputeGeom/parking logic без изменения multi-monitor behavior.
-
 ## TASK A04 — handles seam
 **Status:** BLOCKED_ON_A02_A03
 
-Вынести handles/edge sync lifecycle за Slot/window API, без второй модели slot state.
-
 ## TASK A05 — Settings service + tray seams
 **Status:** BLOCKED_ON_A02_A04
-
-Уменьшить `drawer.ahk`, не дублируя persistence/runtime paths.
 
 ---
 
@@ -222,69 +210,57 @@ Selected slot сохраняется между tabs; scrollbar/list behavior; �
 ## TASK T01 — stale VM/safe tests
 **Status:** PARKED_UNTIL_ARCH_STABLE
 
-Разобраться с `setstat`/F11/F12; stale tests убрать из default safe либо сделать детерминированными; VM не должна быть gate каждой правки.
-
 ## TASK T02 — common VM/test helper
 **Status:** PARKED_UNTIL_T01
-
-Вынести повторяющиеся `Check`, `Out`, `OnScreen`, `PosOf`, `WaitOn` только если это реально уменьшает поддержку.
 
 ## TASK R01 — diagnostics production policy
 **Status:** BLOCKED_ON_STABILIZATION
 
-Bounded/rotated `drawer-debug.log`, dev/release policy, сохранить `Нашёл баг…`, без logging framework.
+Bounded/rotated debug log, dev/release policy, сохранить `Нашёл баг…`, без logging framework.
 
 ## TASK R02 — production build acceptance
-**Status:** BLOCKED_ON_G01_AND_STABILIZATION
+**Status:** BLOCKED_ON_STABILIZATION
 
-Fresh build, rebuild existing config, compiled Settings, clean package/version metadata.
+Fresh build, rebuild preserving config, compiled Settings, clean package/version metadata.
 
 ## TASK R03 — final human acceptance
 **Status:** BLOCKED_ON_1_0_BLOCKERS
-
-Реальные окна, 1/2 monitors, dynamic/permanent, hotkeys, handles, Settings, restart, late app launch, exit/cleanup; VM только где полезна.
 
 ---
 
 # FUTURE PRODUCT
 
-## F01 arbitrary slots
+## F01 — arbitrary slots
 **Status:** FUTURE_PRODUCT_DECISION
 
-Убрать фундаментальный 1–9; новая slot identity/config/UI migration; старым слотам сохранить Ctrl+Alt+1…9 defaults.
-
-## F02 Add/Delete slot UI
+## F02 — Add/Delete slot UI
 **Status:** BLOCKED_ON_F01
 
-## F03 handle context menu + tray slot actions
+## F03 — handle context menu + tray slot actions
 **Status:** BLOCKED_ON_F01_F02
 
-## F04 reset semantics
+## F04 — reset semantics
 **Status:** FUTURE_AFTER_F02
 
-Отдельно reset bindings/settings и полный reset Drawer.
-
-## F12 конкретное permanent-window
+## F12 — concrete permanent-window selection
 **Status:** DEFERRED_PRODUCT
 
-Сейчас exe + optional class + largest candidate. Отдельный выбор документа/чата требует отдельного решения.
-
-## F08 убрать parked window из Alt+Tab
+## F08 — remove parked window from Alt+Tab
 **Status:** DEFERRED_RISKY
 
-## F11 autostart
+## F11 — autostart
 **Status:** DEFERRED_UNTIL_DAILY_USE
 
 ---
 
 # Ближайший порядок
 
-1. Сейчас: **I01-PUBLISH Codex**, Gemini не трогает общий checkout.
-2. Архитектор проверяет `dev/integration/slots-settings-wave1`.
-3. Принятая integration-база → A01 ручная приёмка.
-4. Следующая пара агентов стартует только в **двух отдельных sibling worktree**.
-5. Wave 3 correctness по две непересекающиеся задачи.
-6. Wave 4 UX.
-7. Только потом modular architecture.
+1. Сейчас параллельно: `RUN-20260906-CODEX-C02-01` + `RUN-20260906-GEMINI-B01-01` в отдельных sibling worktree.
+2. I02 integration.
+3. A01 короткая ручная приёмка.
+4. C03 + один из G02/G03/G04 параллельно.
+5. Остальной Settings correctness.
+6. UX cleanup.
+7. Modular architecture.
 8. Test/release debt.
 9. Future product отдельно.
