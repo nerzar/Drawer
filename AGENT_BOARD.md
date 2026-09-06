@@ -1,315 +1,329 @@
-# AGENT_BOARD — Drawer autonomous work queue
+# AGENT_BOARD тАФ Drawer autonomous work queue
 
-Blackboard между архитектором ChatGPT и coding agents.
+Blackboard ╨╝╨╡╨╢╨┤╤Г ╨░╤А╤Е╨╕╤В╨╡╨║╤В╨╛╤А╨╛╨╝ ChatGPT ╨╕ coding agents.
 
-**Владелец файла:** архитектор ChatGPT. Coding agents этот файл не редактируют и приоритеты сами не меняют.
+**╨Т╨╗╨░╨┤╨╡╨╗╨╡╤Ж ╤Д╨░╨╣╨╗╨░:** ╨░╤А╤Е╨╕╤В╨╡╨║╤В╨╛╤А ChatGPT. Coding agents ╤Н╤В╨╛╤В ╤Д╨░╨╣╨╗ ╨╜╨╡ ╤А╨╡╨┤╨░╨║╤В╨╕╤А╤Г╤О╤В ╨╕ ╨┐╤А╨╕╨╛╤А╨╕╤В╨╡╤В╤Л ╤Б╨░╨╝╨╕ ╨╜╨╡ ╨╝╨╡╨╜╤П╤О╤В.
 
-## Общий протокол
+## ╨Ю╨▒╤Й╨╕╨╣ ╨┐╤А╨╛╤В╨╛╨║╨╛╨╗
 
 1. `git fetch dev`.
-2. Прочитать актуальный `AGENT_BOARD.md` из `dev/wip/slots-parity`.
-3. Прочитать `docs/agent-reports/REPORT_FORMAT.md` из `dev/wip/slots-parity`.
-4. Взять только задачу, чей Run ID дан оператором в чате.
-5. Проверить Git фактами и создать/использовать указанный отдельный worktree.
-6. Выполнить задачу целиком, не расширяя scope.
-7. Разумные целевые проверки; VM/full suite только если задача прямо требует.
-8. Перед завершением: factual report, commit, push feature-ветки в `dev`, clean tree.
-9. Не merge/cherry-pick/rebase в `wip/slots-parity` без отдельной integration-задачи.
-10. `docs/ARCHITECT_STATE.md` не редактировать.
+2. ╨Я╤А╨╛╤З╨╕╤В╨░╤В╤М ╨░╨║╤В╤Г╨░╨╗╤М╨╜╤Л╨╣ `AGENT_BOARD.md` ╨╕╨╖ `dev/wip/slots-parity`.
+3. ╨Я╤А╨╛╤З╨╕╤В╨░╤В╤М `docs/agent-reports/REPORT_FORMAT.md` ╨╕╨╖ `dev/wip/slots-parity`.
+4. ╨Т╨╖╤П╤В╤М ╤В╨╛╨╗╤М╨║╨╛ ╨╖╨░╨┤╨░╤З╤Г, ╤З╨╡╨╣ Run ID ╨┤╨░╨╜ ╨╛╨┐╨╡╤А╨░╤В╨╛╤А╨╛╨╝.
+5. ╨Я╨╡╤А╨╡╨┤ ╨╕╨╖╨╝╨╡╨╜╨╡╨╜╨╕╤П╨╝╨╕ ╨┐╤А╨╛╨▓╨╡╤А╨╕╤В╤М `git worktree list`, branch, base ╨╕ `git status`.
+6. ╨Я╨░╤А╨░╨╗╨╗╨╡╨╗╤М╨╜╤Л╨╡ ╨╖╨░╨┤╨░╤З╨╕ ╨▓╤Б╨╡╨│╨┤╨░ ╤А╨░╨▒╨╛╤В╨░╤О╤В ╨▓ ╨╛╤В╨┤╨╡╨╗╤М╨╜╤Л╤Е sibling-worktree: `C:\Users\nerza\Projects\drawer-agent-worktrees\<task-id>`.
+7. Worktree ╨╜╨╡╨╗╤М╨╖╤П ╤Б╨╛╨╖╨┤╨░╨▓╨░╤В╤М ╨▓╨╜╤Г╤В╤А╨╕ ╨┤╤А╤Г╨│╨╛╨│╨╛ repo/worktree. ╨Э╨╡╨╖╨░╨║╨╛╨╝╨╝╨╕╤З╨╡╨╜╨╜╤Г╤О ╤А╨░╨▒╨╛╤В╤Г ╨┤╤А╤Г╨│╨╛╨│╨╛ ╨░╨│╨╡╨╜╤В╨░ ╨╜╨╡╨╗╤М╨╖╤П reset/clean/discard.
+8. ╨Т╤Л╨┐╨╛╨╗╨╜╨╕╤В╤М ╨╖╨░╨┤╨░╤З╤Г ╤Ж╨╡╨╗╨╕╨║╨╛╨╝, ╨╜╨╡ ╤А╨░╤Б╤И╨╕╤А╤П╤П scope ╨▒╨╡╨╖ ╨╜╨╡╨╛╨▒╤Е╨╛╨┤╨╕╨╝╨╛╤Б╤В╨╕.
+9. VM/full suite ╨╜╨╡ ╤П╨▓╨╗╤П╨╡╤В╤Б╤П default gate; ╤В╨╛╨╗╤М╨║╨╛ ╤А╨░╨╖╤Г╨╝╨╜╤Л╨╡ ╤Ж╨╡╨╗╨╡╨▓╤Л╨╡ ╨┐╤А╨╛╨▓╨╡╤А╨║╨╕, ╨╡╤Б╨╗╨╕ ╨╖╨░╨┤╨░╤З╨░ ╨╜╨╡ ╤В╤А╨╡╨▒╤Г╨╡╤В ╨╕╨╜╨╛╨│╨╛.
+10. ╨Я╨╡╤А╨╡╨┤ ╨╖╨░╨▓╨╡╤А╤И╨╡╨╜╨╕╨╡╨╝: factual report ╨┐╨╛ `REPORT_FORMAT.md`, commit, push ╨▓ private remote `dev`, verify remote HEAD = local HEAD, clean tree.
+11. ╨Я╤Г╨▒╨╗╨╕╤З╨╜╤Л╨╣ `origin` ╨╜╨╡ ╤В╤А╨╛╨│╨░╤В╤М.
+12. `docs/ARCHITECT_STATE.md` coding agents ╨╜╨╡ ╤А╨╡╨┤╨░╨║╤В╨╕╤А╤Г╤О╤В.
 
-Если есть блокер, неоднозначное продуктовое решение, конфликт с параллельной задачей или риск потери данных: записать `BLOCKED` в factual report, commit/push безопасное состояние и остановиться.
+╨Х╤Б╨╗╨╕ ╨╡╤Б╤В╤М blocker, ╨╜╨╡╨╛╨┤╨╜╨╛╨╖╨╜╨░╤З╨╜╨╛╨╡ ╨┐╤А╨╛╨┤╤Г╨║╤В╨╛╨▓╨╛╨╡ ╤А╨╡╤И╨╡╨╜╨╕╨╡, ╨║╨╛╨╜╤Д╨╗╨╕╨║╤В ╤Б ╨┐╨░╤А╨░╨╗╨╗╨╡╨╗╤М╨╜╨╛╨╣ ╨╖╨░╨┤╨░╤З╨╡╨╣ ╨╕╨╗╨╕ ╤А╨╕╤Б╨║ ╨┐╨╛╤В╨╡╤А╨╕ ╨┤╨░╨╜╨╜╤Л╤Е: ╤Б╨╛╤Е╤А╨░╨╜╨╕╤В╤М ╨▒╨╡╨╖╨╛╨┐╨░╤Б╨╜╨╛╨╡ ╤Б╨╛╤Б╤В╨╛╤П╨╜╨╕╨╡, push ╨╕ ╨╛╤Б╤В╨░╨╜╨╛╨▓╨╕╤В╤М╤Б╤П ╤Б `BLOCKED` ╨▓ ╨╛╤В╤З╤С╤В╨╡.
 
-## Обязательная идентификация чата/запуска
+## ╨Ш╨┤╨╡╨╜╤В╨╕╤Д╨╕╨║╨░╤Ж╨╕╤П ╨╖╨░╨┐╤Г╤Б╨║╨╛╨▓
 
-Каждая задача получает **Run ID**. Формат отчёта — строго по `docs/agent-reports/REPORT_FORMAT.md`.
+╨Ъ╨░╨╢╨┤╨░╤П ╨╖╨░╨┤╨░╤З╨░ ╨┐╨╛╨╗╤Г╤З╨░╨╡╤В **Run ID**. ╨Р╨│╨╡╨╜╤В ╨┐╨╛╨▓╤В╨╛╤А╤П╨╡╤В ╨╡╨│╨╛ ╨▓ factual report ╨╕ ╤Д╨╕╨╜╨░╨╗╤М╨╜╨╛╨╝ ╨╛╤В╨▓╨╡╤В╨╡.
 
-Агент повторяет Run ID в factual report и финальном ответе. Chat/session ID не придумывать: если клиент не показывает — `NOT_EXPOSED`. Search anchor обязателен.
+╨Ю╤В╤З╤С╤В ╨╛╨▒╤П╨╖╨░╨╜ ╤Б╨╛╨┤╨╡╤А╨╢╨░╤В╤М: Task ID, Run ID, client, **╤Д╨░╨║╤В╨╕╤З╨╡╤Б╨║╨╕ ╨╕╤Б╨┐╨╛╨╗╤М╨╖╨╛╨▓╨░╨╜╨╜╤Г╤О ╨╝╨╛╨┤╨╡╨╗╤М**, chat/session ID ╨╡╤Б╨╗╨╕ ╨┤╨╛╤Б╤В╤Г╨┐╨╡╨╜, chat title ╨╡╤Б╨╗╨╕ ╨┤╨╛╤Б╤В╤Г╨┐╨╡╨╜, Search anchor, timestamps, worktree, branch, base SHA, final SHA.
 
-Если после зависания/перезапуска продолжается **тот же** реально сохранённый chat/session, Run ID можно сохранить. Если создаётся новый чат — новый Run ID, а previous Run ID указывается в отчёте. Код не начинать заново: сначала проверить existing worktree/branch.
+**╨Ь╨╛╨┤╨╡╨╗╤М ╨▓ ╨╛╤В╤З╤С╤В╨╡ ╨▒╤А╨░╤В╤М ╨╕╨╖ ╤Д╨░╨║╤В╨╕╤З╨╡╤Б╨║╨╛╨│╨╛ ╨▓╤Л╨▒╨╛╤А╨░ ╨║╨╗╨╕╨╡╨╜╤В╨░/╨╛╨┐╨╡╤А╨░╤В╨╛╤А╨░, ╨░ ╨╜╨╡ ╨║╨╛╨┐╨╕╤А╨╛╨▓╨░╤В╤М ╤Б╨╗╨╡╨┐╨╛ ╨╕╨╖ ╤Б╤В╨░╤А╨╛╨│╨╛ board.** ╨Х╤Б╨╗╨╕ ╨╡╤Б╤В╤М ╤А╨░╤Б╤Е╨╛╨╢╨┤╨╡╨╜╨╕╨╡ тАФ ╤П╨▓╨╜╨╛ ╨╜╨░╨┐╨╕╤Б╨░╤В╤М ╨╡╨│╨╛.
 
-## Изоляция рабочих каталогов
+## ╨а╨╡╤Б╤Г╤А╤Б╤Л ╨╝╨╛╨┤╨╡╨╗╨╡╨╣ ╤Б╨╡╨╣╤З╨░╤Б
 
-- Два одновременно работающих агента никогда не используют один working tree.
-- Worktree нельзя создавать внутри другого repo/worktree.
-- Канонический корень: `C:\Users\nerza\Projects\drawer-agent-worktrees\<task-id>`.
-- Перед стартом: `git worktree list`; каталог задачи должен быть уникальным.
-- Незакоммиченная работа другого агента не трогается.
-- Удалять worktree только после safe commit+push.
-- Публичный `origin` не трогать; private remote — `dev` (`nerzar/Drawer.Dev`).
+- Codex GPT quota ╨╕╤Б╤З╨╡╤А╨┐╨░╨╜╨░ ╨┐╨╛╤Б╨╗╨╡ C02; ╨╜╨╛╨▓╤Л╨╡ GPT-╨╖╨░╨┤╨░╤З╨╕ Codex ╨╜╨╡ ╨╜╨░╨╖╨╜╨░╤З╨░╤В╤М ╨┤╨╛ ╤Б╨╛╨╛╨▒╤Й╨╡╨╜╨╕╤П ╨╛╨┐╨╡╤А╨░╤В╨╛╤А╨░ ╨╛ reset.
+- OpenCode ╨┐╨╛╨┤╨║╨╗╤О╤З╤С╨╜ ╤З╨╡╤А╨╡╨╖ ╤Б╤В╨╛╤А╨╛╨╜╨╜╨╕╨╣ provider. Gemini 3.8 Flash ╤В╨░╨╝ ╨╜╨╡ ╨╖╨░╤А╨░╨▒╨╛╤В╨░╨╗.
+- OpenCode + ╨╖╨░╤П╨▓╨╗╨╡╨╜╨╜╨░╤П provider-╨╝╨╛╨┤╨╡╨╗╤М `GPT 5.6 Luna` ╤Г╤Б╨┐╨╡╤И╨╜╨╛ ╨┐╤А╨╛╤И╤С╨╗ ╤А╨╡╨░╨╗╤М╨╜╤Л╨╣ harness-test ╨╜╨░ I02: worktree/Git/merge/AHK/PowerShell/npm/build/report/push ╨▒╨╡╨╖ ╤А╤Г╤З╨╜╨╛╨╣ Git-╨┐╨╛╨╝╨╛╤Й╨╕.
+- ╨Э╨░╨╖╨▓╨░╨╜╨╕╤П ╨╝╨╛╨┤╨╡╨╗╨╡╨╣ ╤Б╤В╨╛╤А╨╛╨╜╨╜╨╡╨│╨╛ provider ╨╜╨╡ ╤Б╤З╨╕╤В╨░╨╡╨╝ ╨┤╨╛╨║╨░╨╖╨░╤В╨╡╨╗╤М╤Б╤В╨▓╨╛╨╝ ╨╛╤Д╨╕╤Ж╨╕╨░╨╗╤М╨╜╨╛╨│╨╛ endpoint; ╨╛╤Ж╨╡╨╜╨╕╨▓╨░╨╡╨╝ ╨┐╤А╨░╨║╤В╨╕╤З╨╡╤Б╨║╨╛╨╡ ╨║╨░╤З╨╡╤Б╤В╨▓╨╛.
+- ╨б╨╗╨╡╨┤╤Г╤О╤Й╨╕╨╣ qualification OpenCode: `Qwen 3.8 MAX` ╨╜╨░ G02. ╨Х╤Б╨╗╨╕ Qwen ╨╜╨╡ ╤Б╨┐╤А╨░╨▓╨╗╤П╨╡╤В╤Б╤П/╨╗╨╛╨╝╨░╨╡╤В tool-use тАФ ╤Б╨╛╤Е╤А╨░╨╜╨╕╤В╤М ╨▒╨╡╨╖╨╛╨┐╨░╤Б╨╜╨╛╨╡ ╤Б╨╛╤Б╤В╨╛╤П╨╜╨╕╨╡ ╨╕ ╨╛╤Б╤В╨░╨╜╨╛╨▓╨╕╤В╤М╤Б╤П; ╨╜╨╡ ╨┐╨╡╤А╨╡╨║╨╗╤О╤З╨░╤В╤М ╨╝╨╛╨┤╨╡╨╗╤М ╨▓╨╜╤Г╤В╤А╨╕ ╤В╨╛╨│╨╛ ╨╢╨╡ Run ID.
+- Antigravity ╨┤╨╛╤Б╤В╤Г╨┐╨╡╨╜. G04 ╤Д╨░╨║╤В╨╕╤З╨╡╤Б╨║╨╕ ╨▒╤Л╨╗ ╨▓╤Л╨┐╨╛╨╗╨╜╨╡╨╜ ╨╜╨░ Gemini 3.8 Flash High, ╨┐╨╛╤В╨╛╨╝╤Г ╤З╤В╨╛ Sonnet ╨╜╨╡ ╨▒╤Л╨╗ ╨▓╤Л╨▒╤А╨░╨╜ ╨╛╨┐╨╡╤А╨░╤В╨╛╤А╨╛╨╝.
+- ╨в╨╡╨║╤Г╤Й╨╕╨╣ Antigravity I03 ╨┤╨╛╨╗╨╢╨╡╨╜ ╤Д╨░╨║╤В╨╕╤З╨╡╤Б╨║╨╕ ╨╕╤Б╨┐╨╛╨╗╤М╨╖╨╛╨▓╨░╤В╤М **Claude Sonnet 4.6 (Thinking)** тАФ ╨┐╨╡╤А╨▓╤Л╨╣ ╨╜╨░╤Б╤В╨╛╤П╤Й╨╕╨╣ qualification run ╤Н╤В╨╛╨│╨╛ ╨┐╤Г╨╗╨░.
+- Claude Opus 4.6 Thinking ╨┤╨╡╤А╨╢╨░╤В╤М ╨┤╨╗╤П ╤В╤П╨╢╤С╨╗╤Л╤Е correctness/runtime/architecture escalation.
+- Astra ╨╜╨╡ ╨╕╤Б╨┐╨╛╨╗╤М╨╖╨╛╨▓╨░╤В╤М ╨▒╨╡╨╖ ╨╛╤В╨┤╨╡╨╗╤М╨╜╨╛╨│╨╛ ╤А╨╡╤И╨╡╨╜╨╕╤П.
 
-## Ресурсы моделей сейчас
+## ╨Ю╨▒╤Й╨╕╨╡ ╤В╨╡╤Е╨╜╨╕╤З╨╡╤Б╨║╨╕╨╡ ╨┐╤А╨░╨▓╨╕╨╗╨░
 
-- Codex GPT quota исчерпана после C02. **Новые задачи Codex не назначать до сообщения оператора о восстановлении лимита.**
-- OpenCode подключён и даёт доступ к `Gemini 3.8 Flash`; I02 используется как первый реальный qualification run этого harness.
-- Если OpenCode + Gemini 3.8 Flash нормально делает Git/worktree/tool use/tests/report, дальше использовать его как основной Gemini-worker.
-- Antigravity используем как отдельный сильный пул; текущий qualification — Claude Sonnet 4.6 Thinking на изолированной frontend-задаче G04.
-- Claude Opus держим для сложных correctness/runtime/architecture задач, не для дешёвых cleanup.
-- Старые/отдельно лимитируемые модели в Codex не использовать автоматически.
-- Astra не использовать без отдельного решения.
-
-## Общие правила
-
-- Git CLI/remote — источник истины.
-- Не плодить слои/harnesses/docs/абстракции без необходимости.
-- `drawer-debug.log` и tray action `Нашёл баг…` сохранять.
-- Frontend typecheck: `npm --prefix settings-ui run typecheck`; внешний `npx vue-tsc` не использовать как gate.
-- VM/full `safe` suite не является default gate.
+- Git CLI/remote тАФ ╨╕╤Б╤В╨╛╤З╨╜╨╕╨║ ╨╕╤Б╤В╨╕╨╜╤Л.
+- ╨Э╨╡ ╨┐╨╗╨╛╨┤╨╕╤В╤М ╨╜╨╛╨▓╤Л╨╡ ╤Б╨╗╨╛╨╕/harnesses/docs/╨░╨▒╤Б╤В╤А╨░╨║╤Ж╨╕╨╕ ╨▒╨╡╨╖ ╨╜╨╡╨╛╨▒╤Е╨╛╨┤╨╕╨╝╨╛╤Б╤В╨╕.
+- `drawer-debug.log` ╨╕ tray action `╨Э╨░╤И╤С╨╗ ╨▒╨░╨│тАж` ╤Б╨╛╤Е╤А╨░╨╜╤П╤В╤М.
+- Frontend typecheck: `npm --prefix settings-ui run typecheck`; ╨▓╨╜╨╡╤И╨╜╨╕╨╣ `npx vue-tsc` ╨╜╨╡ ╨╕╤Б╨┐╨╛╨╗╤М╨╖╨╛╨▓╨░╤В╤М ╨║╨░╨║ gate.
+- Stable hotkey contract: ╨╛╨┤╨╕╨╜ ╨╜╨░╤Б╤В╤А╨░╨╕╨▓╨░╨╡╨╝╤Л╨╣ show/hide hotkey ╨╜╨░ slot; `Ctrl+Alt+N` default only; `Ctrl+Alt+Shift+N` тАФ fixed dynamic bind.
 
 ---
 
-# Текущее фактическое состояние
+# ╨в╨╡╨║╤Г╤Й╨╡╨╡ ╤Д╨░╨║╤В╨╕╤З╨╡╤Б╨║╨╛╨╡ ╤Б╨╛╤Б╤В╨╛╤П╨╜╨╕╨╡
 
-- orchestration branch: `dev/wip/slots-parity`.
-- diagnostics base `b2ec249` вручную принята пользователем.
-- Wave 1 integration: `dev/integration/slots-settings-wave1@ac63ead`.
-- T00: `dev/chore/frontend-local-typecheck@9c856ea`; repo typecheck уже корректен.
-- C02 опубликована: `dev/fix/settings-general-override-atomic@f75dcc6`.
-- B01 опубликована: `dev/fix/integration-production-build@1bd8f6e`.
-- C02 и B01 обе основаны непосредственно на `ac63ead`, поэтому следующая задача — одна контролируемая интеграция I02.
-- B01 доказала причину `Ahk2Exe exit 17`: duplicate `ApplyDwmTitlebarTheme`; production build теперь проходит, config preservation и embedded assets проверены.
-- `wip/slots-parity` пока не передвигаем на code integration до проверки I02 архитектором.
-- G04 можно делать параллельно с I02 только в frontend-границе: I02 не меняет `settings-ui/src/views/GeneralView.vue` и `settings-ui/src/bridge/general.ts`. Если для G04 окажется нужен backend/persistence, агент останавливается как `BLOCKED`, а не расширяет scope.
+- Private repo: `nerzar/Drawer.Dev`, remote `dev`.
+- Diagnostics base `b2ec249` ╨▓╤А╤Г╤З╨╜╤Г╤О ╨┐╤А╨╕╨╜╤П╤В╨░ ╨┐╨╛╨╗╤М╨╖╨╛╨▓╨░╤В╨╡╨╗╨╡╨╝.
+- Wave 1: `dev/integration/slots-settings-wave1@ac63ead`.
+- C02: `dev/fix/settings-general-override-atomic@f75dcc6`.
+- B01: `dev/fix/integration-production-build@1bd8f6e`.
+- **I02 architect-reviewed:** `dev/integration/slots-settings-wave2@4cc0d77`.
+- I02 ╤Б╨╛╨┤╨╡╤А╨╢╨╕╤В Wave 1 + C02 + B01. `SettingsDynamicFinal` ╨┐╤А╨╕╤Б╤Г╤В╤Б╤В╨▓╤Г╨╡╤В; duplicate `ApplyDwmTitlebarTheme` ╤Г╨┤╨░╨╗╤С╨╜; production build fixes ╨┐╤А╨╕╤Б╤Г╤В╤Б╤В╨▓╤Г╤О╤В.
+- I02 gates: AHK validate green, settings-seam green, frontend 25/25, typecheck/build green, production build green, fresh/rebuild config safety green, embedded assets green.
+- `webview-slice` ╨▒╨╛╨╗╤М╤И╨╡ ╨╜╨╡ ╨▒╨╗╨╛╨║╨╕╤А╤Г╨╡╤В╤Б╤П compile duplicate, ╨╜╨╛ ╨╛╤Б╤В╨░╤С╤В╤Б╤П CDP `inject-timeout` ╨┐╨╛╤Б╨╗╨╡ ╤Г╤Б╨┐╨╡╤И╨╜╤Л╤Е boot/getInitialState/dirty-Apply/dispose; ╤Б╤З╨╕╤В╨░╤В╤М environment blocker, ╨┐╨╛╨║╨░ ╨╜╨╡ ╨┤╨╛╨║╨░╨╖╨░╨╜╨╛ ╨╛╨▒╤А╨░╤В╨╜╨╛╨╡.
+- G04: `dev/fix/settings-custom-animation-preset@37cb31d`, frontend-only, tests 33/33, typecheck/build green.
+- `wip/slots-parity` ╨┐╨╛╨║╨░ orchestration branch; ╨║╨╛╨┤╨╛╨▓╤Г╤О base ╨╜╨╡ ╨┤╨▓╨╕╨│╨░╤В╤М ╨┤╨╛ I03 + architect review + P01.
 
----
+## ╨Я╤А╨╛╨▓╨╡╤А╨║╨░ I02 ╨░╤А╤Е╨╕╤В╨╡╨║╤В╨╛╤А╨╛╨╝
 
-# DONE / WAITING FOR I02
-
-## TASK C02 — General + dynamic override в одном Save
-
-**Status:** DONE_WAITING_FOR_I02  
-**Executor:** Codex  
-**Run ID:** `RUN-20260906-CODEX-C02-01`  
-**Branch:** `dev/fix/settings-general-override-atomic`  
-**Reviewed remote HEAD:** `f75dcc6`  
-**Base:** `ac63ead`
-
-Результат: dynamic overrides планируются относительно финального General state того же Save; regression покрывает swap/delete/no-op. `/validate`, settings-seam, frontend test/typecheck/build зелёные. WebView smoke на этой branch блокировался старым duplicate DWM из base, который закрыт B01.
-
-Factual report: `docs/agent-reports/2026-09-06-codex-c02.md` в ветке C02.
-
-## TASK B01 — production build + config preservation
-
-**Status:** DONE_WAITING_FOR_I02  
-**Executor:** Gemini / Antigravity  
-**Run ID:** `RUN-20260906-GEMINI-B01-01`  
-**Chat/session ID:** `58a95442-23fa-4251-a1f2-9276631611c8`  
-**Branch:** `dev/fix/integration-production-build`  
-**Reviewed remote HEAD:** `1bd8f6e`  
-**Base:** `ac63ead`
-
-Результат:
-- duplicate `ApplyDwmTitlebarTheme` действительно был причиной Ahk2Exe exit 17;
-- оставлена одна полная DWM implementation в `src/drawer.ahk`, duplicate из `SettingsWebView.ahk` удалён;
-- build запускает Ahk2Exe с `/silent`;
-- Windows PowerShell 5.1 compatibility build check исправлена (`ISO-8859-1`, UTF-8 BOM);
-- fresh build получает default config, rebuild сохраняет изменённый config;
-- `.log` исключён из zip;
-- `index.html` + `WebView2Loader.dll` доказанно embedded;
-- `/validate`, settings-seam 226/226, frontend 25/25, typecheck/build, `pwsh build` и `powershell.exe -SkipFrontend` зелёные.
-
-Known environment note: `webview-slice.ps1` в B01 упёрся в interactive CDP/headless inject timeout; это не тот duplicate compile blocker, который уже устранён. I02 обязана повторить WebView slice в объединённом состоянии и зафиксировать результат.
-
-Factual report: `docs/agent-reports/2026-09-06-gemini-b01.md` в ветке B01.
+╨Я╤А╨╛╨▓╨╡╤А╨╡╨╜╨╛ ╨╜╨░ remote:
+- branch HEAD `4cc0d77`;
+- B01 merge `07c7d10`, C02 ╨▓╤Е╨╛╨┤╨╕╤В ╨▓ ╨╕╤Б╤В╨╛╤А╨╕╤О;
+- `src/drawer.ahk` ╤Б╨╛╨┤╨╡╤А╨╢╨╕╤В `SettingsDynamicFinal(...)` ╨╕ ╨╛╨┤╨╜╤Г ╨┐╨╛╨╗╨╜╤Г╤О `ApplyDwmTitlebarTheme(...)`;
+- `src/webview/SettingsWebView.ahk` ╨▓╤Л╨╖╤Л╨▓╨░╨╡╤В helper, ╨╜╨╛ duplicate ╨╜╨╡ ╨╛╨▒╤К╤П╨▓╨╗╤П╨╡╤В;
+- `build/build.ps1` ╤Б╨╛╨┤╨╡╤А╨╢╨╕╤В `/silent`, PS5.1-compatible ISO-8859-1 check ╨╕ ╤Б╨╛╤Е╤А╨░╨╜╤П╨╡╤В ╤Б╤Г╤Й╨╡╤Б╤В╨▓╤Г╤О╤Й╨╕╨╣ `config.ini`.
 
 ---
 
-# ACTIVE — параллельные отдельные worktree
+# DONE / WAITING
 
-## TASK I02 — интегрировать C02 + B01 + orchestration docs
+## TASK I02 тАФ C02 + B01 integration
 
-**Status:** READY  
-**Executor:** OpenCode, `Gemini 3.8 Flash`, reasoning `High`  
-**Run ID:** `RUN-20260906-OPENCODE-I02-01`  
-**Purpose:** real qualification run for OpenCode harness  
-**Base:** `dev/integration/slots-settings-wave1@ac63ead`  
-**Inputs:**
-- `dev/fix/settings-general-override-atomic@f75dcc6`
-- `dev/fix/integration-production-build@1bd8f6e`
-- актуальные `AGENT_BOARD.md` + `docs/agent-reports/REPORT_FORMAT.md` из `dev/wip/slots-parity`
+**Status:** DONE_ARCH_REVIEWED  
+**Run ID:** `RUN-20260906-OPENCODE-I02-02`  
+**Client:** OpenCode  
+**Actual model selected by operator:** `GPT 5.6 Luna` via APInex UI  
+**Branch:** `dev/integration/slots-settings-wave2`  
+**Reviewed HEAD:** `4cc0d77`
 
-**Branch:** `integration/slots-settings-wave2`  
-**Worktree:** `C:\Users\nerza\Projects\drawer-agent-worktrees\I02`
+Metadata note: self-report ╨╛╤И╨╕╨▒╨╛╤З╨╜╨╛ ╨╖╨░╨┐╨╕╤Б╨░╨╗ Gemini 3.8 Flash ╨╕╨╖ stale board. I03 ╨┤╨╛╨▒╨░╨▓╨╗╤П╨╡╤В correction note ╤Б ╨┐╨╛╨┤╤В╨▓╨╡╤А╨╢╨┤╨╡╨╜╨╕╨╡╨╝ ╨╛╨┐╨╡╤А╨░╤В╨╛╤А╨░.
 
-### Цель
+## TASK G04 тАФ custom animation preset `╨б╨▓╨╛╤П`
 
-Получить одну чистую integration branch с Wave 1 + C02 + B01 + актуальными orchestration docs. Заодно проверить OpenCode как полноценный coding harness: Git/worktree, чтение repo, конфликт-интеграция, тесты, commit/push/report. Не начинать новые product/correctness задачи.
+**Status:** DONE_WAITING_FOR_I03  
+**Run ID:** `RUN-20260906-ANTIGRAVITY-G04-01`  
+**Client:** Antigravity  
+**Actual model:** `Gemini 3.8 Flash (High)`  
+**Chat/session ID:** `f5c32174-862b-4f11-9177-8e8771fa41e2`  
+**Branch:** `dev/fix/settings-custom-animation-preset`  
+**Reviewed HEAD:** `37cb31d`
 
-### Обязательно
+---
 
-1. Создать **новый отдельный sibling worktree I02**, не работать в B01/C02/G04 worktrees и не использовать общий checkout.
-2. Интегрировать C02 и B01 по смыслу. Обе ветки меняют `src/drawer.ahk` и `test/narrow/settings-seam.ahk`; не разрешать конфликт простым выбором одной стороны.
-3. Сохранить одновременно:
-   - `SettingsDynamicFinal` / final-General override semantics из C02;
-   - единственную полную DWM implementation из B01;
-   - B01 build fixes (`/silent`, PS5.1-compatible encoding, config safety);
-   - C01/G01 slot/hotkey/settings behavior из Wave 1.
-4. Подтянуть `AGENT_BOARD.md` и `docs/agent-reports/REPORT_FORMAT.md` из актуального `dev/wip/slots-parity` **без движения самого `wip/slots-parity` ref**.
-5. Не интегрировать G04 в рамках I02: G04 идёт параллельно отдельной веткой и будет рассмотрена после I02.
-6. Не менять slot product contract, persistence beyond C02 fix, или следующие backlog-задачи.
-7. В factual report отдельно коротко отметить качество работы harness: смог ли OpenCode сам корректно создать worktree, выполнить Git operations, запускать PowerShell/AHK/npm и push без ручной помощи.
+# ACTIVE тАФ ╨┐╨░╤А╨░╨╗╨╗╨╡╨╗╤М╨╜╤Л╨╡ ╨╛╤В╨┤╨╡╨╗╤М╨╜╤Л╨╡ worktree
 
-### Проверки
+## TASK I03 тАФ ╨╕╨╜╤В╨╡╨│╤А╨╕╤А╨╛╨▓╨░╤В╤М G04 ╨▓ Wave 2 ╨╕ ╨┐╨╛╨┤╨│╨╛╤В╨╛╨▓╨╕╤В╤М ╨▒╨░╨╖╤Г ╨║ ╤А╤Г╤З╨╜╨╛╨╣ ╨┐╤А╨╕╤С╨╝╨║╨╡
 
-- AHK `/validate src/drawer.ahk`;
-- settings-seam;
-- webview-slice — повторить на объединённой ветке; если interactive environment снова не даёт пройти, зафиксировать точный runtime blocker, но duplicate compile error недопустим;
+**Status:** ACTIVE  
+**Executor:** Antigravity  
+**MODEL: Claude Sonnet 4.6 (Thinking) тАФ ╤Д╨░╨║╤В╨╕╤З╨╡╤Б╨║╨╕ ╨▓╤Л╨▒╤А╨░╤В╤М ╨▓ UI**  
+**Run ID:** `RUN-20260906-ANTIGRAVITY-I03-01`  
+**Base:** `dev/integration/slots-settings-wave2@4cc0d77`  
+**Input:** `dev/fix/settings-custom-animation-preset@37cb31d`  
+**Branch:** `integration/slots-settings-wave3`  
+**Worktree:** `C:\Users\nerza\Projects\drawer-agent-worktrees\I03`
+
+### ╨ж╨╡╨╗╤М
+
+╨Я╨╛╨╗╤Г╤З╨╕╤В╤М clean candidate-base ╨┤╨╗╤П A01: Wave 2 + ╨┐╤А╨╛╨▓╨╡╤А╨╡╨╜╨╜╤Л╨╣ frontend-fix G04 + ╨░╨║╤В╤Г╨░╨╗╤М╨╜╤Л╨╡ orchestration docs. ╨н╤В╨╛ integration/review task, ╨╜╨╡ ╨╜╨╛╨▓╨░╤П feature-wave.
+
+### ╨Ю╨▒╤П╨╖╨░╤В╨╡╨╗╤М╨╜╨╛
+
+1. ╨Э╨╛╨▓╤Л╨╣ sibling-worktree I03 ╨╛╤В exact base `4cc0d77`; ╨╜╨╡ ╤А╨░╨▒╨╛╤В╨░╤В╤М ╨▓ I02/G04/shared checkout.
+2. ╨Ш╨╜╤В╨╡╨│╤А╨╕╤А╨╛╨▓╨░╤В╤М G04 ╨┐╨╛ ╤Б╨╝╤Л╤Б╨╗╤Г, ╨╜╨╡ ╨┐╨╡╤А╨╡╨┐╨╕╤Б╤Л╨▓╨░╤В╤М ╨▒╨╡╨╖ ╨┐╤А╨╕╤З╨╕╨╜╤Л.
+3. ╨Я╤А╨╛╨▓╨╡╤А╨╕╤В╤М, ╤З╤В╨╛ `animCustom` ╨╛╤Б╤В╨░╤С╤В╤Б╤П ╤В╨╛╨╗╤М╨║╨╛ draft/UI ╤Б╨╛╤Б╤В╨╛╤П╨╜╨╕╨╡╨╝; wire ╨┐╨╛-╨┐╤А╨╡╨╢╨╜╨╡╨╝╤Г `durationMs/steps`.
+4. ╨Я╨╛╨┤╤В╤П╨╜╤Г╤В╤М ╨░╨║╤В╤Г╨░╨╗╤М╨╜╤Л╨╡ `AGENT_BOARD.md` ╨╕ `REPORT_FORMAT.md` ╨╕╨╖ `dev/wip/slots-parity`.
+5. ╨Т `docs/agent-reports/2026-09-06-opencode-i02.md` ╨┤╨╛╨▒╨░╨▓╨╕╤В╤М correction note: ╨╛╨┐╨╡╤А╨░╤В╨╛╤А ╨┐╨╛╨┤╤В╨▓╨╡╤А╨╢╨┤╨░╨╡╤В ╤Д╨░╨║╤В╨╕╤З╨╡╤Б╨║╨╕ ╨▓╤Л╨▒╤А╨░╨╜╨╜╤Г╤О ╨╝╨╛╨┤╨╡╨╗╤М `GPT 5.6 Luna` ╤З╨╡╤А╨╡╨╖ APInex UI; ╤Б╤В╨░╤А╨░╤П ╤Б╤В╤А╨╛╨║╨░ Gemini ╨▒╤Л╨╗╨░ stale metadata.
+6. ╨Э╨╡ ╨▒╤А╨░╤В╤М G02/G03/C03 ╨╕ ╨╜╨╡ ╨╝╨╡╨╜╤П╤В╤М slot/runtime semantics.
+7. Diff ╨┤╨╛╨╗╨╢╨╡╨╜ ╤Б╨╛╨┤╨╡╤А╨╢╨░╤В╤М ╤В╨╛╨╗╤М╨║╨╛ I02 + G04 + docs/correction.
+
+### ╨Я╤А╨╛╨▓╨╡╤А╨║╨╕
+
+AHK validate; settings-seam; frontend tests >=33; typecheck; frontend build; production build; quick fresh-config + rebuild-preserves-config. WebView slice ╨╝╨░╨║╤Б╨╕╨╝╤Г╨╝ ╨╛╨┤╨╕╨╜ ╤А╨░╨╖; ╨┐╨╛╨▓╤В╨╛╤А ╤В╨╛╨│╨╛ ╨╢╨╡ CDP timeout ╨╖╨░╤Д╨╕╨║╤Б╨╕╤А╨╛╨▓╨░╤В╤М ╨╕ ╨╜╨╡ ╤А╨╡╤В╤А╨░╨╕╤В╤М ╨▒╨╡╤Б╨║╨╛╨╜╨╡╤З╨╜╨╛. VM/full suite ╨╜╨╡ ╨╖╨░╨┐╤Г╤Б╨║╨░╤В╤М.
+
+╨Я╨╡╤А╨╡╨┤ ╨╖╨░╨▓╨╡╤А╤И╨╡╨╜╨╕╨╡╨╝: factual report, commit, push `dev/integration/slots-settings-wave3`, verify remote HEAD = local HEAD, clean tree. `wip/slots-parity` ╨╜╨╡ ╨┤╨▓╨╕╨│╨░╤В╤М.
+
+## TASK G02 тАФ stale windowClass + picker identity
+
+**Status:** READY_PARALLEL_WITH_I03_WAITING_FOR_A01_INTEGRATION  
+**Executor:** OpenCode  
+**MODEL: `Qwen 3.8 MAX` тАФ ╤Д╨░╨║╤В╨╕╤З╨╡╤Б╨║╨╕ ╨▓╤Л╨▒╤А╨░╤В╤М ╨▓ OpenCode/APInex UI**  
+**Run ID:** `RUN-20260906-OPENCODE-G02-01`  
+**Purpose:** ╨▓╤В╨╛╤А╨╛╨╣ qualification run OpenCode, ╤В╨╡╨┐╨╡╤А╤М ╨╜╨░ ╨┤╤А╤Г╨│╨╛╨╣ provider-╨╝╨╛╨┤╨╡╨╗╨╕  
+**Base:** `dev/integration/slots-settings-wave2@4cc0d77`  
+**Branch:** `fix/settings-picker-identity`  
+**Worktree:** `C:\Users\nerza\Projects\drawer-agent-worktrees\G02`
+
+### ╨Я╨╛╤З╨╡╨╝╤Г ╨╝╨╛╨╢╨╜╨╛ ╨┐╨░╤А╨░╨╗╨╗╨╡╨╗╤М╨╜╨╛
+
+I03 ╨╕╨╜╤В╨╡╨│╤А╨╕╤А╤Г╨╡╤В ╤В╨╛╨╗╤М╨║╨╛ G04 (`GeneralView.vue`, `general.ts`, animation test/package test-list + docs). G02 ╨╖╨░╨╜╨╕╨╝╨░╨╡╤В╤Б╤П identity ╨┐╨╛╤Б╤В╨╛╤П╨╜╨╜╨╛╨│╨╛ ╤Б╨╗╨╛╤В╨░ ╨╕ picker flow. **G02 ╨╜╨╡ ╨╕╨╜╤В╨╡╨│╤А╨╕╤А╨╛╨▓╨░╤В╤М ╨▓ candidate-base ╨┤╨╛ A01**, ╨┤╨░╨╢╨╡ ╨╡╤Б╨╗╨╕ ╨╖╨░╨║╨╛╨╜╤З╨╕╤В ╤А╨░╨╜╤М╤И╨╡.
+
+### ╨ж╨╡╨╗╤М
+
+╨г╨▒╤А╨░╤В╤М stale `windowClass` ╨╕ ╤Б╨┤╨╡╨╗╨░╤В╤М identity ╨┐╨╛╤Б╤В╨╛╤П╨╜╨╜╨╛╨│╨╛ ╤Б╨╗╨╛╤В╨░ ╤Б╨╛╨│╨╗╨░╤Б╨╛╨▓╨░╨╜╨╜╤Л╨╝ ╨┐╤А╨╕ ╤А╤Г╤З╨╜╨╛╨╣ ╤Б╨╝╨╡╨╜╨╡ exe, `picker.exe`, `picker.window` ╨╕ dynamicтЖТpermanent, ╨╜╨╡ ╨╝╨╡╨╜╤П╤П ╨╛╨▒╤Й╤Г╤О FindWindow/slot ╨░╤А╤Е╨╕╤В╨╡╨║╤В╤Г╤А╤Г.
+
+### ╨Я╨╛╨┤╤В╨▓╨╡╤А╨┤╨╕╤В╤М ╤В╨╡╨║╤Г╤Й╨╕╨╣ ╨┤╨╡╤Д╨╡╨║╤В
+
+╨Э╨░ Wave 2 `picker.exe` ╨╝╨╡╨╜╤П╨╡╤В `draft.executable`, ╨╜╨╛ ╨╜╨╡ ╨╛╤З╨╕╤Й╨░╨╡╤В `draft.windowClass`; ╤Б╤В╨░╤А╤Л╨╣ `ahk_class` ╨╝╨╛╨╢╨╡╤В ╨╛╤Б╤В╨░╤В╤М╤Б╤П ╨╛╤В ╨┤╤А╤Г╨│╨╛╨│╨╛ ╨┐╤А╨╕╨╗╨╛╨╢╨╡╨╜╨╕╤П/╨╛╨║╨╜╨░ ╨╕ ╨╖╨░╤В╨╡╨╝ ╨┐╨╛╨┐╨░╤Б╤В╤М ╨▓ permanent rule. ╨Э╨╡ ╤Б╤З╨╕╤В╨░╤В╤М ╤Н╤В╨╛ ╨╡╨┤╨╕╨╜╤Б╤В╨▓╨╡╨╜╨╜╤Л╨╝ ╤Б╤Ж╨╡╨╜╨░╤А╨╕╨╡╨╝ тАФ ╨┐╤А╨╛╨▓╨╡╤А╨╕╤В╤М ╨║╨╛╨┤╨╛╨╝ ╨╕ ╤В╨╡╤Б╤В╨░╨╝╨╕.
+
+### ╨Ю╨▒╤П╨╖╨░╤В╨╡╨╗╤М╨╜╨╛╨╡ ╨┐╨╛╨▓╨╡╨┤╨╡╨╜╨╕╨╡
+
+1. ╨Х╤Б╨╗╨╕ ╨┐╨╛╨╗╤М╨╖╨╛╨▓╨░╤В╨╡╨╗╤М **╤А╨╡╨░╨╗╤М╨╜╨╛ ╨╝╨╡╨╜╤П╨╡╤В exe ╨▓╤А╤Г╤З╨╜╤Г╤О**, `windowClass` ╤Б╤В╨░╤А╨╛╨│╨╛ exe ╨╜╨╡ ╨┤╨╛╨╗╨╢╨╡╨╜ ╤В╨╕╤Е╨╛ ╨┐╨╡╤А╨╡╨╢╨╕╤В╤М ╨╕╨╖╨╝╨╡╨╜╨╡╨╜╨╕╨╡.
+2. ╨Х╤Б╨╗╨╕ `picker.exe` ╨▓╤Л╨▒╨╕╤А╨░╨╡╤В ╨╜╨╛╨▓╤Л╨╣ executable, stale class ╤Б╤В╨░╤А╨╛╨│╨╛ ╨╛╨║╨╜╨░ ╨╜╨╡ ╨┤╨╛╨╗╨╢╨╡╨╜ ╨╛╤Б╤В╨░╤В╤М╤Б╤П.
+3. `picker.window` ╨┤╨╛╨╗╨╢╨╡╨╜ ╤Б╨╛╨│╨╗╨░╤Б╨╛╨▓╨░╨╜╨╜╨╛ ╤Г╤Б╤В╨░╨╜╨╛╨▓╨╕╤В╤М executable + windowClass ╨╕╨╖ ╨╛╨┤╨╜╨╛╨│╨╛ ╨▓╤Л╨▒╤А╨░╨╜╨╜╨╛╨│╨╛ ╨╛╨║╨╜╨░; default/╨┐╤Г╤Б╤В╨╛╨╡ ╨╕╨╝╤П ╨╝╨╛╨╢╨╜╨╛ ╤А╨░╨╖╤Г╨╝╨╜╨╛ ╨╖╨░╤Б╨╡╤П╤В╤М title ╨║╨░╨║ ╤Б╨╡╨╣╤З╨░╤Б.
+4. DynamicтЖТPermanent ╨┤╨╛╨╗╨╢╨╡╨╜ ╨╕╤Б╨┐╨╛╨╗╤М╨╖╨╛╨▓╨░╤В╤М ╤З╨╕╤Б╤В╤Л╨╣ identity seed, ╨║╨╛╤В╨╛╤А╤Л╨╣ backend ╤Г╨╢╨╡ ╨╛╤В╨┤╨░╤С╤В ╤З╨╡╤А╨╡╨╖ `permanentDefaults` ╨┤╨╗╤П ╨╢╨╕╨▓╨╛╨│╨╛ dynamic window. ╨Э╨╡ ╨▓╤Л╨┤╤Г╨╝╤Л╨▓╨░╤В╤М exe/class ╨╜╨░ frontend ╨╕ ╨╜╨╡ ╨┐╤А╨╡╨▓╤А╨░╤Й╨░╤В╤М dynamic ╨▓ persistent identity ╨┤╨╛ Apply.
+5. ╨Х╤Б╨╗╨╕ ╨╢╨╕╨▓╨╛╨│╨╛ ╨╛╨║╨╜╨░ ╨╜╨╡╤В, ╨╜╨╡ ╨┐╤А╨╕╨┤╤Г╨╝╤Л╨▓╨░╤В╤М ╨▓╨░╨╗╨╕╨┤╨╜╤Л╨╣ permanent identity; ╤Б╤Г╤Й╨╡╤Б╤В╨▓╤Г╤О╤Й╨░╤П backend validation ╨┤╨╛╨╗╨╢╨╜╨░ ╨╛╤Б╤В╨░╤В╤М╤Б╤П ╨╕╤Б╤В╨╛╤З╨╜╨╕╨║╨╛╨╝ ╨╕╤Б╤В╨╕╨╜╤Л.
+6. ╨Э╨╡ ╤А╨░╤Б╤И╨╕╤А╤П╤В╤М ╨╖╨░╨┤╨░╤З╤Г ╨┤╨╛ ╨▓╤Л╨▒╨╛╤А╨░ ╨║╨╛╨╜╨║╤А╨╡╤В╨╜╨╛╨│╨╛ permanent-window (`F12`) ╨╕ ╨╜╨╡ ╨┐╨╡╤А╨╡╨┐╨╕╤Б╤Л╨▓╨░╤В╤М `FindWindow`.
+7. ╨б╨╛╤Е╤А╨░╨╜╨╕╤В╤М Apply/Cancel draft semantics.
+
+### ╨Ц╤С╤Б╤В╨║╨░╤П ╨│╤А╨░╨╜╨╕╤Ж╨░ ╨┐╨░╤А╨░╨╗╨╗╨╡╨╗╤М╨╜╨╛╤Б╤В╨╕
+
+╨Ь╨╛╨╢╨╜╨╛ ╨╝╨╡╨╜╤П╤В╤М ╨┐╨╛ ╨╜╨╡╨╛╨▒╤Е╨╛╨┤╨╕╨╝╨╛╤Б╤В╨╕: `settings-ui/src/views/SlotsView.vue`, `settings-ui/src/bridge/settings.ts`, `settings-ui/src/bridge/slotDraft.ts`, ╤Б╨▓╤П╨╖╨░╨╜╨╜╤Л╨╡ slot/frontend tests; backend picker/port ╤В╨╛╨╗╤М╨║╨╛ ╨╡╤Б╨╗╨╕ ╤Д╨░╨║╤В╨╕╤З╨╡╤Б╨║╨╕ ╨┤╨╛╨║╨░╨╖╨░╨╜╨╛, ╤З╤В╨╛ frontend-only fix ╨╜╨╡╨┤╨╛╤Б╤В╨░╤В╨╛╤З╨╡╨╜.
+
+**╨Э╨╡ ╨╝╨╡╨╜╤П╤В╤М**, ╨┐╨╛╤В╨╛╨╝╤Г ╤З╤В╨╛ ╤Н╤В╨╕╨╝ ╨▓╨╗╨░╨┤╨╡╨╡╤В I03/G04: `settings-ui/src/views/GeneralView.vue`, `settings-ui/src/bridge/general.ts`, `settings-ui/package.json`, `settings-ui/test/animationPreset.test.ts`. ╨Э╨╡ ╨╝╨╡╨╜╤П╤В╤М `build/build.ps1`, DWM/titlebar, hotkey product contract.
+
+╨Х╤Б╨╗╨╕ ╨╜╤Г╨╢╨╡╨╜ frontend regression, ╨┐╤А╨╡╨┤╨┐╨╛╤З╨╡╤Б╤В╤М ╤Б╤Г╤Й╨╡╤Б╤В╨▓╤Г╤О╤Й╨╕╨╣ test entrypoint/file ╨╕╨╗╨╕ ╨╛╤В╨┤╨╡╨╗╤М╨╜╤Л╨╣ targeted command; **╨╜╨╡ ╨┐╤А╨░╨▓╨╕╤В╤М `settings-ui/package.json` ╨▓ ╤Н╤В╨╛╨╣ ╨┐╨░╤А╨░╨╗╨╗╨╡╨╗╤М╨╜╨╛╨╣ ╨▓╨╡╤В╨║╨╡**.
+
+### ╨Я╤А╨╛╨▓╨╡╤А╨║╨╕
+
 - `npm --prefix settings-ui test`;
 - `npm --prefix settings-ui run typecheck`;
 - `npm --prefix settings-ui run build`;
-- production `build/build.ps1`;
-- повторно быстро проверить fresh-config + rebuild-preserves-config + embedded assets;
-- VM/full suite не запускать.
+- targeted regression ╨┤╨╗╤П stale-class/picker identity;
+- ╨╡╤Б╨╗╨╕ ╨╖╨░╤В╤А╨╛╨╜╤Г╤В AHK/backend: AHK validate + settings-seam;
+- production build ╨╕ VM/full suite ╨╜╨╡ ╨╜╤Г╨╢╨╜╤Л.
 
-Перед завершением: factual report по REPORT_FORMAT, commit, push `dev/integration/slots-settings-wave2`, verify remote HEAD = local HEAD, clean tree. **Не двигать `wip/slots-parity` самостоятельно.**
-
-## TASK G04 — custom animation preset `Своя`
-
-**Status:** READY_PARALLEL_WITH_I02  
-**Executor:** Antigravity, `Claude Sonnet 4.6 (Thinking)`  
-**Run ID:** `RUN-20260906-ANTIGRAVITY-G04-01`  
-**Base:** `dev/integration/slots-settings-wave1@ac63ead`  
-**Branch:** `fix/settings-custom-animation-preset`  
-**Worktree:** `C:\Users\nerza\Projects\drawer-agent-worktrees\G04`
-
-### Цель
-
-Исправить UX/состояние пресета анимации `Своя` без изменения backend/persistence semantics.
-
-### Что проверить
-
-На текущем frontend `preset` вычисляется из пары `animMs/animSteps`, а `applyAnimPreset(..., 'custom')` ничего не меняет. Подтвердить фактический пользовательский дефект: при выборе `Своя` из уже совпадающего preset поля `Длительность`/`Шагов` могут остаться disabled или выбор немедленно визуально откатывается назад. Не принимать это описание за доказательство — воспроизвести тестом/кодом.
-
-### Требование
-
-- Пользователь выбирает `Своя` → поля custom animation становятся редактируемыми сразу.
-- Текущие числовые значения при самом переключении на `Своя` не должны самопроизвольно меняться.
-- После ручной правки значения остаются в draft, уходят обычным существующим Save path и после canonical response отображаются корректно.
-- Если сохранённая пара случайно совпадает с известным preset, canonical state после reload может закономерно отображаться как этот preset; но **во время текущего unsaved edit-session явный выбор `Своя` не должен сам себя отменять до ввода**.
-- Добавить узкий frontend regression.
-
-### Жёсткая граница параллельности
-
-Предпочтительно трогать только `settings-ui/src/views/GeneralView.vue`, `settings-ui/src/bridge/general.ts` и frontend tests. **Не трогать** `src/drawer.ahk`, `src/webview/SettingsPort.ahk`, `build/build.ps1`, `test/narrow/settings-seam.ahk`, Slots/runtime/hotkeys. Если выяснится, что корректный фикс реально требует backend/persistence — не расширять scope: factual report `BLOCKED` с причиной и push безопасное состояние.
-
-### Проверки
-
-`npm --prefix settings-ui test`, `npm --prefix settings-ui run typecheck`, `npm --prefix settings-ui run build`. VM/full suite и production build не нужны.
-
-Перед завершением: factual report по REPORT_FORMAT, commit, push `dev/fix/settings-custom-animation-preset`, verify remote HEAD = local HEAD, clean tree. Не merge.
+╨Я╨╡╤А╨╡╨┤ ╨╖╨░╨▓╨╡╤А╤И╨╡╨╜╨╕╨╡╨╝: factual report, commit, push `dev/fix/settings-picker-identity`, verify remote HEAD = local HEAD, clean tree. **╨Э╨╡ merge ╨▓ Wave 3 / wip.** ╨Т ╨╛╤В╤З╤С╤В╨╡ ╨╛╤В╨┤╨╡╨╗╤М╨╜╨╛ ╨╛╤Ж╨╡╨╜╨╕╤В╤М OpenCode+Qwen tool-use/╨║╨░╤З╨╡╤Б╤В╨▓╨╛ ╨╛╤В╨╜╨╛╤Б╨╕╤В╨╡╨╗╤М╨╜╨╛ ╨┐╤А╨╡╨┤╤Л╨┤╤Г╤Й╨╡╨│╨╛ Luna run.
 
 ---
 
 # NEXT
 
-## TASK A01 — короткая ручная приёмка
+## TASK P01 тАФ promotion ╨┐╨╛╤Б╨╗╨╡ architect review I03
 
-**Status:** BLOCKED_ON_I02_ARCH_REVIEW  
-**Executor:** пользователь
+**Status:** BLOCKED_ON_I03_ARCH_REVIEW
 
-После проверки I02 архитектором рабочая base branch будет передвинута на принятую integration и пользователь получит короткий человеческий checklist: hotkeys, Tab, editable name, dynamic bind/release/reset, permanent↔dynamic, handle lifecycle, late permanent app, dark titlebar/About. При баге: `Нашёл баг…` → номер BUG + действие/результат.
+╨Я╨╛╤Б╨╗╨╡ ╨┐╤А╨╛╨▓╨╡╤А╨║╨╕ I03 ╨░╤А╤Е╨╕╤В╨╡╨║╤В╨╛╤А ╨┤╨░╤Б╤В ╨░╨│╨╡╨╜╤В╤Г ╨║╨╛╤А╨╛╤В╨║╤Г╤О promotion-╨╖╨░╨┤╨░╤З╤Г: ╨▒╨╡╨╖╨╛╨┐╨░╤Б╨╜╨╛ ╨┐╤А╨╕╨▓╨╡╤Б╤В╨╕ `dev/wip/slots-parity` ╨╕ ╨╗╨╛╨║╨░╨╗╤М╨╜╤Л╨╣ checkout `C:\Users\nerza\Projects\drawer-settings-integration` ╨║ ╨┐╤А╨╕╨╜╤П╤В╨╛╨╣ candidate-base ╨▒╨╡╨╖ ╨┐╨╛╤В╨╡╤А╨╕ ╤З╤Г╨╢╨╛╨╣ ╤А╨░╨▒╨╛╤В╤Л. ╨Я╨╛╨╗╤М╨╖╨╛╨▓╨░╤В╨╡╨╗╤М Git ╤А╤Г╨║╨░╨╝╨╕ ╨╜╨╡ ╨┤╨╡╨╗╨░╨╡╤В.
 
----
+## TASK A01 тАФ ╨║╨╛╤А╨╛╤В╨║╨░╤П ╤А╤Г╤З╨╜╨░╤П ╨┐╤А╨╕╤С╨╝╨║╨░
 
-# BACKLOG — Settings correctness
+**Status:** BLOCKED_ON_P01  
+**Executor:** ╨┐╨╛╨╗╤М╨╖╨╛╨▓╨░╤В╨╡╨╗╤М
 
-## TASK C03 — partial/retryable/diagnostics correctness
-**Status:** BLOCKED_ON_I02_AND_STRONG_MODEL
-**Preferred executor:** Codex после reset / Opus reserve по отдельному решению
+╨з╨╡╨╗╨╛╨▓╨╡╤З╨╡╤Б╨║╨╕╨╣ checklist:
+- custom show/hide hotkey ╤А╨░╨▒╨╛╤В╨░╨╡╤В ╤Б╤А╨░╨╖╤Г ╨┐╨╛╤Б╨╗╨╡ Apply, ╤Б╤В╨░╤А╤Л╨╣ ╨┐╨╡╤А╨╡╤Б╤В╨░╤С╤В;
+- Tab ╨▓╤Л╤Е╨╛╨┤╨╕╤В ╨╕╨╖ hotkey field;
+- permanent name ╤А╨╡╨┤╨░╨║╤В╨╕╤А╤Г╨╡╤В╤Б╤П;
+- dynamic bind тЖТ ╨║╤А╨╛╨╝╨║╨░ ╤Б╤А╨░╨╖╤Г тЖТ hotkey ╨┐╨╛╨║╨░╨╖╤Л╨▓╨░╨╡╤В/╤Г╨▒╨╕╤А╨░╨╡╤В;
+- Release ╨╛╤Б╨▓╨╛╨▒╨╛╨╢╨┤╨░╨╡╤В dynamic slot;
+- Reset slot settings ╨▓╨╛╨╖╨▓╤А╨░╤Й╨░╨╡╤В ╨╜╨░╤Б╨╗╨╡╨┤╨╛╨▓╨░╨╜╨╕╨╡ General;
+- permanentтЖФdynamic ╤Б ╨╢╨╕╨▓╤Л╨╝ ╨╛╨║╨╜╨╛╨╝ ╨╜╨╡ ╤В╨╡╤А╤П╨╡╤В ╨╛╨║╨╜╨╛;
+- permanent app, ╨╖╨░╨┐╤Г╤Й╨╡╨╜╨╜╨╛╨╡ ╨┐╨╛╤Б╨╗╨╡ Drawer, ╤Б╨░╨╝╨╛ ╨┐╨╛╨╗╤Г╤З╨░╨╡╤В ╨║╤А╨╛╨╝╨║╤Г;
+- ╤Б╨╕╤Б╤В╨╡╨╝╨╜╤Л╨╣ titlebar ╤В╤С╨╝╨╜╤Л╨╣ ╨╕ About ╨▒╨╡╨╖ mock-╤Н╨╗╨╡╨╝╨╡╨╜╤В╨╛╨▓;
+- ┬л╨б╨▓╨╛╤П┬╗ ╤Б╤А╨░╨╖╤Г ╨╛╤В╨║╤А╤Л╨▓╨░╨╡╤В ╨┐╨╛╨╗╤П ╨░╨╜╨╕╨╝╨░╤Ж╨╕╨╕ ╨╕ ╨╜╨╡ ╨╛╤В╨║╨░╤В╤Л╨▓╨░╨╡╤В╤Б╤П ╨┤╨╛ ╨▓╨▓╨╛╨┤╨░.
 
-Structured partial-save/reload/reconcile должен доходить до UI; без ложного `Сохранено`, потери draft/field diagnostics и исчезновения warning после no-op. Один persistence path.
-
-## TASK G02 — stale windowClass + picker identity
-**Status:** BLOCKED_ON_I02
-**Preferred executor:** OpenCode/Gemini либо Antigravity/Sonnet по доступности
-
-Смена exe не оставляет class старого app; picker согласованно обновляет exe/class/name seed; dynamic→permanent получает чистые identity data.
-
-## TASK G03 — live hideOnBlur/blurMs + save lock
-**Status:** BLOCKED_ON_I02
-**Preferred executor:** OpenCode/Gemini либо Antigravity/Sonnet по доступности
-
-После Apply runtime-настройки реально влияют на уже показанное окно; blur timer не stale; General inputs защищены во время Save.
+╨Я╤А╨╕ ╨▒╨░╨│╨╡: tray `╨Э╨░╤И╤С╨╗ ╨▒╨░╨│тАж` тЖТ ╨╜╨╛╨╝╨╡╤А BUG + ╤З╤В╨╛ ╤Б╨┤╨╡╨╗╨░╨╗ + ╤З╤В╨╛ ╨┐╤А╨╛╨╕╨╖╨╛╤И╨╗╨╛.
 
 ---
 
-# BACKLOG — UX
+# BACKLOG тАФ Settings correctness
 
-## TASK G05 — Slots terminology/onboarding
+## TASK C03 тАФ partial/retryable/diagnostics correctness
+**Status:** BLOCKED_ON_A01_AND_STRONG_MODEL
+**Preferred:** Codex after reset / Sonnet / Opus reserve if genuinely hard
+
+Structured partial-save/reload/reconcile ╨┤╨╛╨╗╨╢╨╡╨╜ ╨┤╨╛╤Е╨╛╨┤╨╕╤В╤М ╨┤╨╛ UI; ╨▒╨╡╨╖ ╨╗╨╛╨╢╨╜╨╛╨│╨╛ `╨б╨╛╤Е╤А╨░╨╜╨╡╨╜╨╛`, ╨┐╨╛╤В╨╡╤А╨╕ draft/field diagnostics ╨╕ ╨╕╤Б╤З╨╡╨╖╨╜╨╛╨▓╨╡╨╜╨╕╤П warning ╨┐╨╛╤Б╨╗╨╡ no-op. ╨Ю╨┤╨╕╨╜ persistence path.
+
+## TASK G02 integration
+**Status:** BLOCKED_ON_G02_RESULT_AND_A01
+
+╨Х╤Б╨╗╨╕ G02 ╨┐╤А╨╛╤И╤С╨╗ review, ╨╕╨╜╤В╨╡╨│╤А╨╕╤А╨╛╨▓╨░╤В╤М ╨╡╨│╨╛ ╤Г╨╢╨╡ **╨┐╨╛╤Б╨╗╨╡** A01 ╨╛╤В╨┤╨╡╨╗╤М╨╜╨╛╨╣ controlled task; ╨╜╨╡ ╨┐╨╛╨┤╨╝╨╡╤И╨╕╨▓╨░╤В╤М ╨▓ ╤В╨╡╨║╤Г╤Й╤Г╤О candidate-base ╨┐╨╡╤А╨╡╨┤ ╤А╤Г╤З╨╜╨╛╨╣ ╨┐╤А╨╕╤С╨╝╨║╨╛╨╣.
+
+## TASK G03 тАФ live hideOnBlur/blurMs + save lock
+**Status:** BLOCKED_ON_A01
+**Preferred:** Antigravity Sonnet / OpenCode if runtime tool-use proves stable
+
+╨Я╨╛╤Б╨╗╨╡ Apply runtime-╨╜╨░╤Б╤В╤А╨╛╨╣╨║╨╕ ╤А╨╡╨░╨╗╤М╨╜╨╛ ╨▓╨╗╨╕╤П╤О╤В ╨╜╨░ ╤Г╨╢╨╡ ╨┐╨╛╨║╨░╨╖╨░╨╜╨╜╨╛╨╡ ╨╛╨║╨╜╨╛; blur timer ╨╜╨╡ stale; General inputs ╨╖╨░╤Й╨╕╤Й╨╡╨╜╤Л ╨▓╨╛ ╨▓╤А╨╡╨╝╤П Save.
+
+---
+
+# BACKLOG тАФ UX
+
+## TASK G05 тАФ Slots terminology/onboarding
 **Status:** BLOCKED_ON_SETTINGS_CORRECTNESS
 
-## TASK G06 — navigation/accessibility/polish
+╨г╨▒╤А╨░╤В╤М INI/internal jargon; ╤П╤Б╨╜╨╛ ╨╛╨▒╤К╤П╤Б╨╜╨╕╤В╤М Permanent/Dynamic; ╤Е╨╛╤А╨╛╤И╨╕╨╣ empty dynamic onboarding; release/reset ╨╛╤З╨╡╨▓╨╕╨┤╨╜╤Л; ╨▒╨╡╨╖ redesign.
+
+## TASK G06 тАФ navigation/accessibility/polish
 **Status:** BLOCKED_ON_SETTINGS_CORRECTNESS
+
+Selected slot ╤Б╨╛╤Е╤А╨░╨╜╤П╨╡╤В╤Б╤П ╨╝╨╡╨╢╨┤╤Г tabs; scrollbar/list behavior; remaining labels/select/contrast/keyboard issues; About follow-up.
 
 ---
 
-# BACKLOG — modular architecture
+# BACKLOG тАФ modular architecture ╨┐╨╛╤Б╨╗╨╡ ╤Б╤В╨░╨▒╨╕╨╗╨╕╨╖╨░╤Ж╨╕╨╕
 
-## TASK A02 — windows/focus seam
+## TASK A02 тАФ windows/focus seam
 **Status:** BLOCKED_ON_STABILIZATION_AND_STRONG_MODEL
 
-## TASK A03 — parking/geometries seam
+## TASK A03 тАФ parking/geometries seam
 **Status:** BLOCKED_ON_A02
 
-## TASK A04 — handles seam
+## TASK A04 тАФ handles seam
 **Status:** BLOCKED_ON_A02_A03
 
-## TASK A05 — Settings service + tray seams
+## TASK A05 тАФ Settings service + tray seams
 **Status:** BLOCKED_ON_A02_A04
 
 ---
 
 # TEST / RELEASE DEBT
 
-## TASK T01 — stale VM/safe tests
+## TASK T01 тАФ stale VM/safe tests
 **Status:** PARKED_UNTIL_ARCH_STABLE
 
-## TASK T02 — common VM/test helper
+## TASK T02 тАФ common VM/test helper
 **Status:** PARKED_UNTIL_T01
 
-## TASK R01 — diagnostics production policy
+## TASK R01 тАФ diagnostics production policy
 **Status:** BLOCKED_ON_STABILIZATION
 
-## TASK R02 — production build acceptance
+Bounded/rotated debug log, dev/release policy, ╤Б╨╛╤Е╤А╨░╨╜╨╕╤В╤М `╨Э╨░╤И╤С╨╗ ╨▒╨░╨│тАж`, ╨▒╨╡╨╖ logging framework.
+
+## TASK R02 тАФ production build acceptance
 **Status:** BLOCKED_ON_STABILIZATION
 
-## TASK R03 — final human acceptance
+Fresh build, rebuild preserving config, compiled Settings, clean package/version metadata.
+
+## TASK R03 тАФ final human acceptance
 **Status:** BLOCKED_ON_1_0_BLOCKERS
 
 ---
 
 # FUTURE PRODUCT
 
-## F01 — arbitrary slots
+## F01 тАФ arbitrary slots
 **Status:** FUTURE_PRODUCT_DECISION
 
-## F02 — Add/Delete slot UI
+## F02 тАФ Add/Delete slot UI
 **Status:** BLOCKED_ON_F01
 
-## F03 — handle context menu + tray slot actions
+## F03 тАФ handle context menu + tray slot actions
 **Status:** BLOCKED_ON_F01_F02
 
-## F04 — reset semantics
+## F04 тАФ reset semantics
 **Status:** FUTURE_AFTER_F02
 
-## F12 — concrete permanent-window selection
+## F12 тАФ concrete permanent-window selection
 **Status:** DEFERRED_PRODUCT
 
-## F08 — remove parked window from Alt+Tab
+## F08 тАФ remove parked window from Alt+Tab
 **Status:** DEFERRED_RISKY
 
-## F11 — autostart
+## F11 тАФ autostart
 **Status:** DEFERRED_UNTIL_DAILY_USE
 
 ---
 
-# Ближайший порядок
+# ╨С╨╗╨╕╨╢╨░╨╣╤И╨╕╨╣ ╨┐╨╛╤А╤П╨┤╨╛╨║
 
-1. Сейчас параллельно: `RUN-20260906-OPENCODE-I02-01` (OpenCode + Gemini 3.8 Flash High) и `RUN-20260906-ANTIGRAVITY-G04-01` (Antigravity + Claude Sonnet 4.6 Thinking), каждый в своём sibling worktree.
-2. Архитектор проверяет remote `integration/slots-settings-wave2` и `fix/settings-custom-animation-preset`, отдельно оценивает пригодность обоих harness/model pools.
-3. После I02 — A01 короткая ручная приёмка; G04 интегрируется только после проверки diff и отсутствия пересечений.
-4. Если OpenCode прошёл qualification, следующие Gemini-задачи по умолчанию идут туда; Antigravity используем для Sonnet/Opus там, где нужна более сильная reasoning-модель.
-5. Затем G02/G03 и C03 по доступности сильной модели.
+1. ╨Я╨░╤А╨░╨╗╨╗╨╡╨╗╤М╨╜╨╛ ╤Б╨╡╨╣╤З╨░╤Б: I03 ╨▓ Antigravity/Sonnet ╨╕ G02 ╨▓ OpenCode/Qwen, ╨║╨░╨╢╨┤╤Л╨╣ ╨▓ ╤Б╨▓╨╛╤С╨╝ sibling-worktree.
+2. ╨Р╤А╤Е╨╕╤В╨╡╨║╤В╨╛╤А ╨┐╤А╨╛╨▓╨╡╤А╤П╨╡╤В I03 remote; ╨╖╨░╤В╨╡╨╝ P01.
+3. A01 тАФ ╨║╨╛╤А╨╛╤В╨║╨░╤П ╤А╤Г╤З╨╜╨░╤П ╨┐╤А╨╕╤С╨╝╨║╨░ candidate-base **╨▒╨╡╨╖ G02**.
+4. ╨Р╤А╤Е╨╕╤В╨╡╨║╤В╨╛╤А ╨╛╤В╨┤╨╡╨╗╤М╨╜╨╛ ╨┐╤А╨╛╨▓╨╡╤А╤П╨╡╤В G02; ╨┐╨╛╤Б╨╗╨╡ A01 тАФ controlled integration G02, ╨╡╤Б╨╗╨╕ ╤А╨╡╨╖╤Г╨╗╤М╤В╨░╤В ╨┐╤А╨╕╨╜╤П╤В.
+5. ╨Ч╨░╤В╨╡╨╝ C03 + G03 ╨┐╨╛ ╨┤╨╛╤Б╤В╤Г╨┐╨╜╤Л╨╝ ╨┐╤Г╨╗╨░╨╝.
 6. UX cleanup.
 7. Modular architecture.
 8. Test/release debt.
-9. Future product отдельно.
+9. Future product ╨╛╤В╨┤╨╡╨╗╤М╨╜╨╛.
