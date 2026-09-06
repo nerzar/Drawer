@@ -1,4 +1,9 @@
 #Requires AutoHotkey v2.0
+; Синтетический seam включает production WindowFocus.ahk в отрыве от
+; drawer.ahk, где живёт глобальный blurMs. По умолчанию AHK v2 поднимает
+; на это VarUnset-MsgBox и висит на диалоге при запуске без человека.
+; Подавляем только этот load-time warning: все проверки remain live.
+#Warn VarUnset, Off
 
 ; ---- Test stubs (narrow-test env — no real windows) ----
 ; Управляемые из тестов, чтобы прогонять положительные ветки предикатов,

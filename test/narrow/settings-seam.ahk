@@ -1714,6 +1714,34 @@ if FileExist(drawerPath) {
 ; Точка 20 (A01FIX): регрессионные тесты для SettingsSectionSlot,
 ; SettingsChangedSlots, RebindSlotHotkeys и сброса к General.
 ; ---------------------------------------------------------------
+; Копии чистых функций из src/drawer.ahk (см. вступление к точкам):
+; без них 20a/20b/20c исполнялись в никуда, а несоответствие fake-name
+; давало runtime-error и процесс висел на ошибке вместо выхода.
+SettingsChangedSlots(slotPlan) {
+    seen := Map()
+    for w in slotPlan.writes {
+        target := (w.sec = "hotkeys" && w.HasOwnProp("key")) ? w.key : w.sec
+        if (s := SettingsSectionSlot(target))
+            seen[s] := true
+    }
+    for d in slotPlan.keyDeletes {
+        target := (d.sec = "hotkeys" && d.HasOwnProp("key")) ? d.key : d.sec
+        if (s := SettingsSectionSlot(target))
+            seen[s] := true
+    }
+    for n in slotPlan.deletes
+        seen[n] := true
+    for n in slotPlan.dynDeletes
+        seen[n] := true
+    out := []
+    Loop 9
+        if seen.Has(A_Index)
+            out.Push(A_Index)
+    return out
+}
+SettingsSectionSlot(sec) {
+    return RegExMatch(sec, "\d+", &m) ? Integer(m[0]) : 0
+}
 Assert("20a: SettingsSectionSlot парсит slot1..slot9 и dynamicSlot1..dynamicSlot9",
     SettingsSectionSlot("slot1") = 1
  && SettingsSectionSlot("slot9") = 9
