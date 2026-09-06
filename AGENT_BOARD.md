@@ -52,32 +52,32 @@ On blocker/conflict/product ambiguity/data-loss risk: preserve safe state, push 
 
 ## Текущий статус
 
-- Shared production identity after P07: `886e68663a0f487f3ad00c248a4aed87e02861c7`; higher shared commits may be docs/tasks/claims/reports.
+- Shared production identity after P08: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`; higher shared commits may be docs/tasks/claims/reports.
 - G03, G05/G05FIX, G06 accepted + runtime verified + promoted.
-- A02S1 Code SHA `ac71581b98a58e51128a987d20d8b5b1952c1756`: DEV1 review `ACCEPT_WITH_RUNTIME_CHECK`; Antigravity live acceptance `ACCEPT` with validates + 9/9 seam + 7/7 acceptance. It is ready for promotion.
-- A03 analysis verdict `READY_TO_IMPLEMENT`; A03S1 is independent of unaccepted A02S2.
+- A02S1 accepted, runtime verified and promoted by P08. P08 validate + window-focus seam 9/9 passed; `config.ini` untouched.
+- A02S2 focus-history/foreground extraction is currently claimed by Antigravity from accepted P08 lineage.
+- A03 analysis verdict `READY_TO_IMPLEMENT`; A03S1 is independent of unaccepted A02S2 and remains the single queued READY task for Antigravity.
 - **CODEX quota exhausted. No new `Eligible: CODEX` work until operator reports reset.**
-- Antigravity has only a small remaining model budget. The following three tasks are deliberately the high-value final wave; do not invent additional work.
+- Antigravity has only a small remaining model budget. Do not invent additional work beyond the deliberate final wave without architect review.
 
-## AUTONOMOUS READY QUEUE — ANTIGRAVITY priority order
+## AUTONOMOUS QUEUE — ANTIGRAVITY priority order
 
 ### 1. P08 — promote accepted A02S1
-- Status: `READY`
+- Status: `DONE`
 - Eligible: `ANTIGRAVITY`
-- Preferred model: `Gemini 3.8 Flash`
-- Session: `REUSE_OK`
+- Model used: `Gemini 3.8 Flash`
 - Run ID: `RUN-20260906-AUTO-ANTIGRAVITY-P08-A02S1-PROMOTE-01`
-- Base/source: current shared lineage + accepted A02S1 `ac71581b98a58e51128a987d20d8b5b1952c1756`
-- Branch: authorized push to `refs/heads/wip/slots-parity`
+- Code SHA: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
+- Verdict: `ACCEPT`
 - Task file: `docs/agent-tasks/RUN-20260906-AUTO-ANTIGRAVITY-P08-A02S1-PROMOTE-01.md`
 
 ### 2. A02S2 — focus history + foreground state extraction
-- Status: `READY`
+- Status: `CLAIMED/RUNNING`
 - Eligible: `ANTIGRAVITY`
-- Preferred model: `Claude` if Gemini budget is low; Gemini allowed
+- Model: `Gemini 3.8 Flash`
 - Session: `NEW`
 - Run ID: `RUN-20260906-AUTO-ANTIGRAVITY-A02S2-IMPLEMENT-01`
-- Base/source rule: claim only after shared branch contains both `886e68663a0f487f3ad00c248a4aed87e02861c7` and accepted A02S1 `ac71581b98a58e51128a987d20d8b5b1952c1756` as ancestors
+- Base: accepted P08 Code SHA `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
 - Branch: `refactor/window-focus-history-foreground`
 - Task file: `docs/agent-tasks/RUN-20260906-AUTO-ANTIGRAVITY-A02S2-IMPLEMENT-01.md`
 
@@ -87,15 +87,16 @@ On blocker/conflict/product ambiguity/data-loss risk: preserve safe state, push 
 - Preferred model: `Claude` if available; Gemini allowed
 - Session: `NEW`
 - Run ID: `RUN-20260906-AUTO-ANTIGRAVITY-A03S1-IMPLEMENT-01`
-- Base/source rule: current accepted shared lineage after P08 containing both shared G06 lineage and accepted A02S1; must not depend on unaccepted A02S2
+- Base/source rule: accepted shared lineage at or above P08 `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`; must not depend on unaccepted A02S2
 - Branch: `refactor/window-geometry-plan-seam`
 - Task file: `docs/agent-tasks/RUN-20260906-AUTO-ANTIGRAVITY-A03S1-IMPLEMENT-01.md`
 
-Workers must take these in listed priority order. After these three, Antigravity should idle unless architect publishes more work.
+After A03S1, Antigravity must idle unless architect publishes more work.
 
 ## COMPLETED AUTONOMOUS RUNS — recent
 
-- `RUN-20260906-AUTO-CODEX-P07-G06-PROMOTE-CLEANUP-01` — DONE, shared production Code SHA `886e68663a0f487f3ad00c248a4aed87e02861c7`.
+- `RUN-20260906-AUTO-ANTIGRAVITY-P08-A02S1-PROMOTE-01` — DONE, shared production Code SHA `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`.
+- `RUN-20260906-AUTO-CODEX-P07-G06-PROMOTE-CLEANUP-01` — DONE, prior shared production Code SHA `886e68663a0f487f3ad00c248a4aed87e02861c7`.
 - `RUN-20260906-AUTO-ANTIGRAVITY-A02S1-ACCEPT-01` — DONE, `ACCEPT`.
 - `RUN-20260906-AUTO-DEV1-A02S1-REVIEW-01` — DONE, `ACCEPT_WITH_RUNTIME_CHECK`.
 - `RUN-20260906-AUTO-ANTIGRAVITY-G06ACCEPT-01` — DONE, `ACCEPT`.
