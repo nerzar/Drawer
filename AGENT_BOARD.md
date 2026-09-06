@@ -40,8 +40,10 @@ Blackboard между архитектором ChatGPT и coding agents.
 ## Ресурсы моделей сейчас
 
 - Codex GPT quota исчерпана после C02. **Новые задачи Codex не назначать до сообщения оператора о восстановлении лимита.**
-- Claude держим в резерве.
-- Gemini/Antigravity — основной доступный worker сейчас.
+- OpenCode подключён и даёт доступ к `Gemini 3.8 Flash`; I02 используется как первый реальный qualification run этого harness.
+- Если OpenCode + Gemini 3.8 Flash нормально делает Git/worktree/tool use/tests/report, дальше использовать его как основной Gemini-worker.
+- Antigravity после успешной квалификации OpenCode можно освободить под Claude Sonnet/Opus или другой сильный резерв, а не тратить его только на Gemini.
+- Claude/Opus держим для сложных correctness/runtime/architecture задач, не для дешёвых cleanup.
 - Старые/отдельно лимитируемые модели в Codex не использовать автоматически.
 - Astra не использовать без отдельного решения.
 
@@ -115,8 +117,9 @@ Factual report: `docs/agent-reports/2026-09-06-gemini-b01.md` в ветке B01.
 ## TASK I02 — интегрировать C02 + B01 + orchestration docs
 
 **Status:** READY  
-**Executor:** Gemini / Antigravity, `Gemini 3.8 Flash High` либо strongest available Gemini mode; NOT Astra  
-**Run ID:** `RUN-20260906-GEMINI-I02-01`  
+**Executor:** OpenCode, `Gemini 3.8 Flash`, reasoning `High`  
+**Run ID:** `RUN-20260906-OPENCODE-I02-01`  
+**Purpose:** real qualification run for OpenCode harness  
 **Base:** `dev/integration/slots-settings-wave1@ac63ead`  
 **Inputs:**
 - `dev/fix/settings-general-override-atomic@f75dcc6`
@@ -128,7 +131,7 @@ Factual report: `docs/agent-reports/2026-09-06-gemini-b01.md` в ветке B01.
 
 ### Цель
 
-Получить одну чистую integration branch с Wave 1 + C02 + B01 + актуальными orchestration docs. Не начинать новые product/correctness задачи.
+Получить одну чистую integration branch с Wave 1 + C02 + B01 + актуальными orchestration docs. Заодно проверить OpenCode как полноценный coding harness: Git/worktree, чтение repo, конфликт-интеграция, тесты, commit/push/report. Не начинать новые product/correctness задачи.
 
 ### Обязательно
 
@@ -141,6 +144,7 @@ Factual report: `docs/agent-reports/2026-09-06-gemini-b01.md` в ветке B01.
    - C01/G01 slot/hotkey/settings behavior из Wave 1.
 4. Подтянуть `AGENT_BOARD.md` и `docs/agent-reports/REPORT_FORMAT.md` из актуального `dev/wip/slots-parity` **без движения самого `wip/slots-parity` ref**.
 5. Не менять slot product contract, persistence beyond C02 fix, или следующие backlog-задачи.
+6. В factual report отдельно коротко отметить качество работы harness: смог ли OpenCode сам корректно создать worktree, выполнить Git operations, запускать PowerShell/AHK/npm и push без ручной помощи.
 
 ### Проверки
 
@@ -269,11 +273,12 @@ Custom animation duration/steps сохраняются, корректно от�
 
 # Ближайший порядок
 
-1. Сейчас: `RUN-20260906-GEMINI-I02-01` — I02 integration в отдельном sibling worktree.
-2. Архитектор проверяет remote `integration/slots-settings-wave2` и только затем двигает рабочую base branch.
+1. Сейчас: `RUN-20260906-OPENCODE-I02-01` — I02 через OpenCode + Gemini 3.8 Flash High в отдельном sibling worktree.
+2. Архитектор проверяет remote `integration/slots-settings-wave2` и отдельно оценивает пригодность OpenCode harness.
 3. A01 короткая ручная приёмка.
-4. Затем G02/G03/G04 и C03 по доступности сильной модели.
-5. UX cleanup.
-6. Modular architecture.
-7. Test/release debt.
-8. Future product отдельно.
+4. Если OpenCode прошёл qualification, следующие Gemini-задачи по умолчанию идут туда; Antigravity освобождаем для Claude/другого сильного резерва.
+5. Затем G02/G03/G04 и C03 по доступности сильной модели.
+6. UX cleanup.
+7. Modular architecture.
+8. Test/release debt.
+9. Future product отдельно.
