@@ -2268,8 +2268,13 @@ SettingsSlotEdited(ui, key, val) {
     n := ui.editingSlot
     if !n
         return
-    if !ui.edits.Has(n)
+    if !ui.edits.Has(n) {
         ui.edits[n] := SettingsEditSeed(n)
+        ; Редактирование dynamic не должно неявно превращать его в perm:
+        ; род меняет только отдельная команда conversion.
+        if !SlotIsPermanent(n)
+            ui.edits[n].kind := "dyn"
+    }
     ui.edits[n].%key% := val
     if SettingsSlotUnchanged(ui.edits[n], n)
         ui.edits.Delete(n)
