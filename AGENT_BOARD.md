@@ -18,6 +18,16 @@ Blackboard между архитектором ChatGPT и coding agents.
 
 Если есть блокер, неоднозначное продуктовое решение, конфликт с параллельной задачей или риск потери данных: записать `BLOCKED` в factual report, commit/push текущее состояние и остановиться.
 
+## ОБЯЗАТЕЛЬНО: изоляция рабочих каталогов параллельных агентов
+
+- Два одновременно работающих агента **никогда не используют один и тот же working tree**.
+- Нельзя создавать worktree внутри другого repo/worktree. Никаких вложенных `...\drawer-settings-integration\...\worktree`.
+- Для параллельных задач использовать отдельные sibling-каталоги, например `C:\Users\nerza\Projects\drawer-agent-worktrees\<task-id>`.
+- Перед стартом агент обязан проверить `git worktree list` и убедиться, что его каталог уникален.
+- Если в общем checkout уже есть незапушенная работа другого агента, второй агент туда не заходит: первый сначала commit+push либо переносит свою ветку в отдельный worktree.
+- Удалять worktree можно только после того, как его ветка safely committed+pushed и больше не нужна для текущей проверки.
+- Если есть две локальные ветки с одинаковой интеграцией, каноническое имя для Wave 1: `integration/slots-settings-wave1`. Перед удалением дубля сравнить SHA; если одинаковы — удалить дубль. Если расходятся — `BLOCKED`, не выбрасывать изменения.
+
 ## Общие правила
 
 - Private repo: `nerzar/Drawer.Dev`, remote `dev`.
@@ -27,14 +37,17 @@ Blackboard между архитектором ChatGPT и coding agents.
 - `drawer-debug.log` и `Нашёл баг…` сохранять и использовать для runtime-диагностики.
 - Claude — резерв. Astra без отдельного решения архитектора не использовать.
 - Gemini — основной дешёвый worker; Codex — сложная логика/многослойные задачи.
-- Два параллельных агента — нормальный режим, но задачи должны быть разведены по файлам/границам.
+- Два параллельных агента — нормальный режим, но только в отдельных worktree и с разведёнными по файлам/границам задачами.
+- Для frontend typecheck использовать `npm --prefix settings-ui run typecheck` / `npm run typecheck` из `settings-ui`. Не использовать внешний `npx vue-tsc` как gate.
 
 ## Текущее состояние
 
 - orchestration branch: `dev/wip/slots-parity`
-- базовая кодовая точка первой волны: `b2ec249`
 - diagnostics на `b2ec249` вручную приняты пользователем.
 - hotkey product contract: `docs/03-решения.md`, Р24.
+- remote feature inputs Wave 1: `dev/codex/slots-user-contract@e4f5271`, `dev/feat/settings-ui-build-cleanup@8d01da3`.
+- T00 remote branch: `dev/chore/frontend-local-typecheck@9c856ea`.
+- На GitHub сейчас **нет** опубликованной integration-ветки Wave 1; обнаруженные две одинаковые integration-ветки — локальная workspace-проблема.
 
 ---
 
@@ -49,13 +62,9 @@ Blackboard между архитектором ChatGPT и coding agents.
 
 Реализовано: один persisted show/hide hotkey на слот, runtime rebind без restart, dynamic/permanent, WebView keyboard capture, native Hotkey control, release/reset dynamic, late permanent discovery через foreground lifecycle, handle после bind, удаление старого `focusHotkey`, factual report.
 
-### Review note для integration
-
-В `e4f5271` в `SlotsView.vue` случайно появился `readonly` на поле **имени permanent-слота** (`slot-name`). Имя — человеческая подпись и должно оставаться редактируемым. При интеграции убрать этот `readonly` и добавить/сохранить простой regression, если это уместно.
-
-Codex сообщил один toolchain issue: `npx vue-tsc --noEmit` подтягивает внешний несовместимый `vue-tsc`; локального `vue-tsc` в repo нет. Это вынесено в отдельную задачу T00 и не является продуктовым blocker C01.
-
----
+Integration обязана дополнительно проверить/исправить два review-дефекта C01:
+- поле `Имя` permanent-слота должно быть редактируемым, лишний `readonly` убрать;
+- `Tab` в поле capture hotkey должен переводить фокус на следующий контрол и **не** записываться как hotkey.
 
 ## TASK G01 — Settings/build cleanup
 
@@ -66,74 +75,52 @@ Codex сообщил один toolchain issue: `npx vue-tsc --noEmit` подтя
 
 Реализовано: удалён внутренний WebView titlebar, native titlebar стилизован через DWM с fallback, build не затирает существующий `config.ini`, release zip исключает `.log`, About/mock cleanup, внешний GitHub link, dark select readability, checkbox targets, keyboard accessibility color controls.
 
-Отдельного нового factual report в ветке нет; два commit message достаточно подробно фиксируют изменения. Не блокировать интеграцию только из-за отсутствия отчёта.
+## TASK T00 — frontend typecheck
+
+**Status:** DONE  
+**Executor:** Gemini  
+**Branch:** `chore/frontend-local-typecheck`  
+**Reviewed remote HEAD:** `9c856ea`
+
+Проверено: в repo уже есть корректный локальный `typecheck = tsc -p tsconfig.json`, который проверяет все `.ts` bridge-файлы; `npm ci`, `npm test`, `npm run typecheck`, `npm run build` проходят. Ошибка C01 была вызвана неправильным внешним `npx vue-tsc`, а не отсутствием рабочего repo typecheck. Код/lockfile менять не потребовалось; branch содержит factual report.
 
 ---
 
-# ACTIVE WAVE 2
+# ACTIVE — сначала привести в порядок I01 и workspace
 
-## TASK I01 — интегрировать C01 + G01
+## TASK I01-PUBLISH — сохранить законченную интеграцию и убрать локальный дубль
 
 **Status:** READY  
 **Executor:** Codex, GPT-5.6 Terra High  
-**Base:** актуальный `dev/wip/slots-parity`  
-**Inputs:** `dev/codex/slots-user-contract@e4f5271` + `dev/feat/settings-ui-build-cleanup@8d01da3`  
-**Suggested branch:** `integration/slots-settings-wave1`
+**Canonical branch:** `integration/slots-settings-wave1`
 
-### Цель
+Codex уже сообщил о завершении I01 локально, но remote integration branch ещё не существует. Сейчас **не переписывать интеграцию с нуля**.
 
-Создать отдельную integration-ветку от актуального `dev/wip/slots-parity`, интегрировать обе feature-ветки и получить одну проверенную кодовую базу.
+### Сделать
 
-### Обязательно
-
-- не терять изменения ни C01, ни G01;
-- конфликты `src/drawer.ahk` решить по смыслу: сохранить новую hotkey/slot runtime-семантику Codex и DWM/theme изменения Gemini;
-- убрать случайный `readonly` с имени permanent-слота;
-- убедиться, что `focusHotkey` не возвращён конфликтом;
-- сохранить `drawer-debug.log` / `Нашёл баг…`;
-- сохранить build/config safety Gemini;
-- не начинать Wave 3 correctness/architecture в этой задаче.
+1. В текущем локальном состоянии проверить `git status`, `git branch -vv`, `git worktree list` и найти законченную работу I01.
+2. Убедиться, что review-дефекты закрыты: permanent `Имя` редактируется; `Tab` выходит из hotkey capture и не становится хоткеем.
+3. Зафиксировать всю законченную интеграцию в канонической ветке `integration/slots-settings-wave1`.
+4. Если локально есть две одинаковые integration-ветки: сравнить их HEAD/tree; при идентичности оставить только `integration/slots-settings-wave1`, вторую удалить. Если не идентичны — не удалять, записать `BLOCKED` с разницей.
+5. Commit + push канонической ветки в remote `dev`.
+6. Проверить, что `dev/integration/slots-settings-wave1` существует и local HEAD ему равен.
+7. Factual report в `docs/agent-reports/2026-09-06-codex-i01.md`, clean tree.
+8. Не вливать в `wip/slots-parity` самостоятельно.
 
 ### Проверки
 
 - AHK `/validate`;
-- `settings-seam`;
-- `webview-slice`;
-- frontend `npm test` + build;
-- typecheck использовать локальный repo script/dependency, если он уже существует; внешний `npx vue-tsc` не считать достоверным gate до T00;
-- production build запустить, потому что G01 менял packaging/config safety; проверить два случая: fresh output получает default config, rebuild существующего output сохраняет изменённый config;
+- settings-seam;
+- webview-slice;
+- `npm --prefix settings-ui test`;
+- `npm --prefix settings-ui run typecheck`;
+- `npm --prefix settings-ui run build`;
+- production build + fresh config / rebuild-preserves-config check;
 - VM/full suite не запускать.
 
-После зелёной интеграции: commit + push `dev/integration/slots-settings-wave1`, clean tree, обновить `PROJECT_STATE.md`, factual integration report. **Не вливать в `wip/slots-parity` самостоятельно** — архитектор проверит remote branch и передвинет базу.
+### Workspace cleanup
 
----
-
-## TASK T00 — сделать frontend typecheck локальным и воспроизводимым
-
-**Status:** READY  
-**Executor:** Gemini, strongest available Gemini mode; NOT Astra  
-**Base:** актуальный `dev/wip/slots-parity`  
-**Suggested branch:** `chore/frontend-local-typecheck`
-
-### Причина
-
-C01 обнаружил: `npx vue-tsc --noEmit` подтягивает внешний `vue-tsc`, несовместимый с установленным TypeScript 5.9 (`ERR_PACKAGE_PATH_NOT_EXPORTED`), а локального `vue-tsc` в repo нет. Значит typecheck зависит от случайного внешнего состояния машины.
-
-### Цель
-
-Сделать `settings-ui` typecheck локальным, детерминированным и запускаемым одной repo-командой.
-
-### Требования
-
-- проверить текущие `package.json` / lockfile / TypeScript / Vue версии;
-- добавить совместимую локальную dev dependency только если она действительно нужна;
-- завести/исправить `npm run typecheck` так, чтобы он использовал локальную dependency, а не скачивал что-то через внешний `npx`;
-- lockfile должен фиксировать результат;
-- не обновлять весь dependency graph без необходимости;
-- не трогать runtime Drawer, Slots, Settings UI behavior или build semantics;
-- `npm test`, `npm run typecheck`, `npm run build` должны проходить из clean install state (`npm ci` если применимо).
-
-Перед завершением: commit + push `dev/chore/frontend-local-typecheck`, clean tree, factual report. Не merge в `wip/slots-parity`.
+После commit+push убрать только лишний локальный integration branch/worktree, если он доказанно дубликат. Не трогать `chore/frontend-local-typecheck`: T00 уже safely pushed и может быть удалён локально позже отдельной уборкой.
 
 ---
 
@@ -141,10 +128,10 @@ C01 обнаружил: `npx vue-tsc --noEmit` подтягивает внешн
 
 ## TASK A01 — ручная приёмка интегрированных Slots + Settings shell
 
-**Status:** BLOCKED_ON_I01  
+**Status:** BLOCKED_ON_I01_PUBLISH  
 **Executor:** пользователь; инструкции даёт архитектор
 
-После принятой integration-ветки пользователь проверяет только человеческие сценарии: custom show/hide hotkeys, hotkey меняется сразу, dynamic bind/release/reset, permanent↔dynamic с живым окном, handle после bind, late permanent launch, Settings titlebar/About, build config safety. При баге: воспроизвести → `Нашёл баг…` → сообщить номер BUG и действие/результат.
+После принятой remote integration-ветки пользователь проверяет только человеческие сценарии: custom show/hide hotkeys, hotkey меняется сразу, Tab у hotkey field, editable permanent name, dynamic bind/release/reset, permanent↔dynamic с живым окном, handle после bind, late permanent launch, Settings titlebar/About, build config safety. При баге: воспроизвести → `Нашёл баг…` → сообщить номер BUG и действие/результат.
 
 ---
 
@@ -152,7 +139,7 @@ C01 обнаружил: `npx vue-tsc --noEmit` подтягивает внешн
 
 ## TASK C02 — General + dynamic override в одном Save
 
-**Status:** BLOCKED_ON_I01  
+**Status:** BLOCKED_ON_I01_PUBLISH  
 **Preferred executor:** Codex Terra High
 
 Подтверждённый дефект: old General=70, slot override=50; одним Apply General→50 и slot→70. План сравнивает slot с old General 70 и ошибочно удаляет override. Планировать overrides нужно относительно **финального General state этого же Save**. Добавить regression и симметричные no-op/delete случаи; persistence pipeline не переписывать.
@@ -166,21 +153,21 @@ Structured partial-save/reload/reconcile должен доходить до UI; 
 
 ## TASK G02 — stale windowClass + picker identity
 
-**Status:** BLOCKED_ON_I01  
+**Status:** BLOCKED_ON_I01_PUBLISH  
 **Preferred executor:** Gemini
 
 Смена exe не оставляет class старого app; picker согласованно обновляет exe/class/name seed; dynamic→permanent с live window получает чистые identity data. Не менять permanent FindWindow больше необходимого.
 
 ## TASK G03 — live hideOnBlur/blurMs + save lock
 
-**Status:** BLOCKED_ON_I01  
+**Status:** BLOCKED_ON_I01_PUBLISH  
 **Preferred executor:** Gemini, эскалация Codex при runtime race
 
 После Apply runtime-настройки должны реально влиять на уже показанное окно; blur timer не stale; General inputs защищены во время Save от перезаписи позднего ввода.
 
 ## TASK G04 — custom animation preset `Своя`
 
-**Status:** BLOCKED_ON_I01  
+**Status:** BLOCKED_ON_I01_PUBLISH  
 **Preferred executor:** Gemini
 
 Пользовательские animation duration/steps сохраняются и отображаются корректно, не сбрасываются preset/canonical. Целевые tests.
@@ -292,11 +279,12 @@ Fresh build, rebuild existing config, compiled Settings, clean package/version m
 
 # Ближайший порядок
 
-1. Сейчас параллельно: **I01 Codex + T00 Gemini**.
-2. Архитектор проверяет обе remote branches.
+1. Сейчас: **I01-PUBLISH Codex**, Gemini не трогает общий checkout.
+2. Архитектор проверяет `dev/integration/slots-settings-wave1`.
 3. Принятая integration-база → A01 ручная приёмка.
-4. Wave 3 correctness по две непересекающиеся задачи.
-5. Wave 4 UX.
-6. Только потом modular architecture.
-7. Test/release debt.
-8. Future product отдельно.
+4. Следующая пара агентов стартует только в **двух отдельных sibling worktree**.
+5. Wave 3 correctness по две непересекающиеся задачи.
+6. Wave 4 UX.
+7. Только потом modular architecture.
+8. Test/release debt.
+9. Future product отдельно.
