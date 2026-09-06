@@ -8,7 +8,7 @@
 - Chat title: `NOT_EXPOSED`
 - Search anchor: `Drawer P03 recover Wave 5 — codex/20260906`
 - Started at: `2026-09-06T13:51:00+03:00`
-- Finished at: `2026-09-06T14:02:25+03:00`
+- Finished at: `2026-09-06T14:05:00+03:00`
 - Worktree: `C:\Users\nerza\Projects\drawer-settings-integration`
 - Branch: `wip/slots-parity`
 - Base SHA: `afea7c34cd956449d6284893da2bd3c04a4fe8f6`
@@ -26,6 +26,7 @@ Promote accepted Wave 5 `9db6fdf27cddc56e528fcf1f3edc9c9ae67a3466` into the shar
 - Preserved later orchestration-only commits that appeared on `dev/wip/slots-parity` during the run; they were merged into the local integration branch without changing production files.
 - Confirmed that `src/config.ini` has no Wave 5 promotion diff.
 - Confirmed that G03 commit `47fb682b3efd1cda8196d7146f57e69eb19cfddd` is not reachable from the promoted branch.
+- Deleted remote branches `orchestration/p02-task`, `tmp-p02`, `tmp-p02-task`, `tmp-ignore`, and `tmp-final`; no corresponding local branches existed.
 
 ## 3. Commits
 
@@ -58,7 +59,7 @@ Promote accepted Wave 5 `9db6fdf27cddc56e528fcf1f3edc9c9ae67a3466` into the shar
 ## 7. Known issues / unfinished
 
 - The settings-seam runtime gate must be rerun after the concurrent `A01FIX` Drawer and `G03VERIFY` seam processes exit.
-- Remote dummy-branch deletion and final remote/local SHA verification are pending the final report commit.
+- No production or cleanup work remains; the run is reported BLOCKED only because the required runtime seam gate could not execute in the concurrent AutoHotkey environment.
 
 ## 8. Suggested next step
 
