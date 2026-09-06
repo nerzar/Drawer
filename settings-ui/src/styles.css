@@ -1,3 +1,7 @@
+:root {
+  color-scheme: dark;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -50,39 +54,9 @@ body {
   text-decoration: underline;
 }
 
-/* Titlebar */
-.titlebar {
-  height: 44px;
-  display: flex;
-  align-items: center;
-  padding: 0 10px 0 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-app);
-  flex: 0 0 auto;
-}
-.titlebar-title {
-  margin-left: 10px;
-  font-size: 12.5px;
-  font-weight: 600;
-}
-.winbtn {
-  width: 32px;
-  height: 30px;
-  border: none;
-  background: transparent;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 5px;
-  color: var(--text-2);
-  cursor: default;
-}
-.winbtn:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-.winbtn.close:hover {
-  background: #e81123;
-  color: #fff;
+select option {
+  background-color: var(--bg-card);
+  color: var(--text);
 }
 
 /* Body / sidebar */
@@ -108,7 +82,7 @@ body {
   font-size: 13px;
   color: var(--text-2);
   margin-bottom: 2px;
-  cursor: default;
+  cursor: pointer;
   user-select: none;
   border: none;
   background: transparent;
@@ -156,9 +130,15 @@ body {
   border: 1px solid var(--border-strong);
   background: transparent;
   color: var(--text);
+  cursor: pointer;
 }
-.btn-outline:hover {
+.btn-outline:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.05);
+}
+.btn-outline:disabled,
+.btn-primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 .btn-primary {
   font: inherit;
@@ -170,7 +150,8 @@ body {
   background: var(--accent-fg);
   color: #14151a;
   font-weight: 600;
+  cursor: pointer;
 }
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
   background: var(--accent-fg-hover);
 }

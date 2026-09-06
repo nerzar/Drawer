@@ -125,7 +125,13 @@ foreach ($asset in @($webFiles[0].FullName, $loader)) {
 }
 Write-Host "Ассеты найдены внутри exe: index.html, WebView2Loader.dll"
 
-Copy-Item (Join-Path $root "src\config.ini") $outDir -Force
+$targetConfig = Join-Path $outDir "config.ini"
+if (-not (Test-Path $targetConfig)) {
+    Copy-Item (Join-Path $root "src\config.ini") $targetConfig -Force
+    Write-Host "Создан начальный config.ini по умолчанию в $outDir"
+} else {
+    Write-Host "Сохранён существующий config.ini в $outDir (повторная сборка не перезаписывает рабочий конфиг)"
+}
 Copy-Item (Join-Path $root "LICENSE")        $outDir -Force
 # В архиве два описания: короткое github\README.md — то же, что на
 # странице проекта, и подробная инструкция из корня репозитория. Без
@@ -138,7 +144,10 @@ Copy-Item (Join-Path $root "README.md")        (Join-Path $outDir "SETUP.md")  -
 
 $zip = Join-Path $root "dist\Drawer-$Version.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }
-Compress-Archive -Path (Join-Path $outDir "*") -DestinationPath $zip
+# При упаковке архива исключаем файлы логов (например drawer-debug.log),
+# если релизная папка уже запускалась на тестовом стенде.
+$archiveItems = @(Get-ChildItem -LiteralPath $outDir | Where-Object { $_.Extension -ne ".log" })
+Compress-Archive -Path $archiveItems.FullName -DestinationPath $zip
 
 Write-Host "`nГотово: $outDir"
 Get-ChildItem $outDir | Format-Table Name, Length

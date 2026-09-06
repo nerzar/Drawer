@@ -1,8 +1,5 @@
 <script setup>
 import AppLogo from '../components/AppLogo.vue'
-import { bridge } from '../mock/bridge'
-
-const configPath = '%LOCALAPPDATA%\\Drawer\\config.ini'
 
 const hotkeys = [
   { combo: ['Ctrl', 'Alt', '1–9'], desc: 'Выдвинуть / убрать окно слота' },
@@ -21,18 +18,9 @@ const hotkeys = [
       </div>
     </div>
 
-    <h3 class="section">config.ini</h3>
-    <div class="path-row">
-      <div class="path-field">{{ configPath }}</div>
-      <button class="icon-btn" title="Копировать путь" @click="bridge.copyConfigPath()">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
-          <rect x="9" y="9" width="11" height="11" rx="1.5" />
-          <path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" />
-        </svg>
-      </button>
-    </div>
-
+    <h3 class="section">Файл конфигурации</h3>
     <p class="about-p">
+      Настройки сохраняются в файле <code>config.ini</code> в папке с программой.
       Программа трогает этот файл только тогда, когда вы нажали «Применить» или «ОК», и записывает
       ровно те строки, которые вы изменили. Ни закрытие окна, ни выход из программы ничего не
       сохраняют.
@@ -44,7 +32,7 @@ const hotkeys = [
         <path d="M10 14 21 3" />
         <path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5" />
       </svg>
-      <a href="#">github.com/nerzar/Drawer</a>
+      <a href="https://github.com/nerzar/Drawer" target="_blank" rel="noopener noreferrer">github.com/nerzar/Drawer</a>
       <span class="muted">· лицензия MIT</span>
     </div>
 
@@ -100,48 +88,19 @@ h3.section {
   color: var(--text-2);
   margin: 0 0 10px;
 }
-.path-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 22px;
-}
-.path-field {
-  flex: 1;
-  height: 32px;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 6px;
-  padding: 0 10px;
-  display: flex;
-  align-items: center;
-  font-family: 'Cascadia Code', Consolas, monospace;
-  font-size: 12px;
-  color: var(--text-2);
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.icon-btn {
-  width: 32px;
-  height: 32px;
-  flex: 0 0 auto;
-  border: 1px solid var(--border-strong);
-  background: transparent;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-2);
-}
-.icon-btn:hover {
-  background: rgba(255, 255, 255, 0.05);
-}
 .about-p {
   font-size: 12.5px;
   color: var(--text-2);
   line-height: 1.65;
   margin: 0 0 22px;
+}
+.about-p code {
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 11.5px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--text);
 }
 .link-row {
   display: flex;
