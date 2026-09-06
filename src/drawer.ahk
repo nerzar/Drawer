@@ -235,9 +235,9 @@ ConfigApply(cfg) {
 ; знает о слотах, живёт там; здесь остаётся оконная модель, кромки и
 ; настройки. Контракт границы описан в шапке файла.
 #Include Slots.ahk
+#Include WindowFocus.ahk
 
 state     := Map()   ; hwnd -> { orig, geom }
-watched   := Map()   ; выдвинутые окна с hideOnBlur: hwnd -> настройки
 notified  := Map()   ; текст уведомления -> true, пока оно ещё актуально
 handles   := Map()   ; номер слота -> кромка припаркованного окна
 handleMode := 0      ; режим опроса кромок: 0 нет, 1 редкий, 2 частый
@@ -661,9 +661,8 @@ ReleaseSlot(n) {
 ; которого уже нет, это не касается — WinMove просто не сработает.
 Release(hwnd) {
     DebugLog("[RELEASE] Release(hwnd=" hwnd ")")
-    global state, watched
-    if watched.Has(hwnd)
-        watched.Delete(hwnd)
+    global state
+    WatchForget(hwnd)
     if !state.Has(hwnd)
         return
     st := state[hwnd]
@@ -900,7 +899,7 @@ Show(hwnd, cfg, st, forceActivate := false, prev := 0) {
     ; (hx) хотя бы на кадр показал бы его на соседнем мониторе.
     WinMove(g.slide ? g.hx : g.sx, g.slide ? g.hy : g.sy, g.w, g.h, "ahk_id " hwnd)
 
-    activate := forceActivate || Opt(cfg, "activateOnShow", true)
+    activate := WindowFocusShouldActivate(cfg, forceActivate)
     if activate
         WinActivate("ahk_id " hwnd)
     else
@@ -914,9 +913,7 @@ Show(hwnd, cfg, st, forceActivate := false, prev := 0) {
 }
 
 Hide(hwnd, st) {
-    global watched
-    if watched.Has(hwnd)
-        watched.Delete(hwnd)
+    WatchForget(hwnd)
     wasActive := WinActive("ahk_id " hwnd) ? true : false
     title := ""
     try title := WinGetTitle("ahk_id " hwnd)
@@ -992,79 +989,6 @@ FocusCandidate(hwnd, skip, service := false) {
         return HitsMonitor(x, y, w, h)
     }
     return false
-}
-
-; Слежение за потерей фокуса. Таймер живёт только пока есть выдвинутое
-; окно с hideOnBlur: в покое программа не делает ничего.
-Watch(hwnd, cfg) {
-    global watched, blurMs
-    if !Opt(cfg, "hideOnBlur", true)
-        return
-    watched[hwnd] := cfg
-    SetTimer(WatchBlur, blurMs)
-}
-
-; Убираем только то окно, которое выдвинул Ящик и которое он же
-; активировал. Обычные окна таймер не трогает.
-; Critical — по той же причине, что и в ToggleWindow, только с другой
-; стороны: Hide идёт через Slide со Sleep внутри, а Sleep — это место,
-; где AHK запускает другой поток. Без Critical хоткей или показ по
-; событию активации успевали целиком отработать посередине уборки, и
-; уже показанное окно тут же допрятывалось остатком старой анимации.
-WatchBlur() {
-    global watched, state
-    Critical()
-    for hwnd in watched.Clone() {
-        st := state.Has(hwnd) ? state[hwnd] : 0
-        if (!st || !WinExist("ahk_id " hwnd) || !IsDeployed(hwnd, st)) {
-            if watched.Has(hwnd)
-                watched.Delete(hwnd)
-            continue
-        }
-        if StillFocused(hwnd)
-            continue
-        try Hide(hwnd, st)
-    }
-    if !watched.Count
-        SetTimer(WatchBlur, 0)
-}
-
-; Синхронизация слежения за потерей фокуса после реконсиляции настроек.
-; Проверяет все живые привязанные окна. Конфигурация берётся через
-; SlotOf(), чтобы постоянная привязка имела тот же приоритет, что и во
-; всём остальном runtime:
-;  - уже watched окно сохраняет право на слежение (в том числе после
-;    FocusWindow при activateOnShow=false) и получает актуальный cfg;
-;  - новое окно добавляется только если обычный Show активировал бы его;
-;  - если окно выдвинуто, но hideOnBlur выключен (или окно больше не
-;    выдвинуто), оно удаляется из watched;
-;  - таймер WatchBlur перевзводится с актуальным blurMs, если есть за кем
-;    следить, либо выключается, если следить не за кем.
-WatchSync() {
-    global watched, state, blurMs
-    boundMap := Map()
-    for item in SlotBound() {
-        hwnd := item.hwnd
-        if boundMap.Has(hwnd)
-            continue
-        st := state.Has(hwnd) ? state[hwnd] : 0
-        if (!st || !WinExist("ahk_id " hwnd) || !IsDeployed(hwnd, st))
-            continue
-        cfg := SlotOf(hwnd)
-        if (cfg && Opt(cfg, "hideOnBlur", true)
-            && (watched.Has(hwnd) || Opt(cfg, "activateOnShow", true))) {
-            watched[hwnd] := cfg
-            boundMap[hwnd] := true
-        }
-    }
-    for hwnd in watched.Clone() {
-        if !boundMap.Has(hwnd)
-            watched.Delete(hwnd)
-    }
-    if watched.Count
-        SetTimer(WatchBlur, blurMs)
-    else
-        SetTimer(WatchBlur, 0)
 }
 
 ; Не потеря фокуса, а всплывающее меню того же приложения: у Qt-программ

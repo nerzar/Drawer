@@ -1946,16 +1946,18 @@ Assert("21o: stale watcher очищается, валидный watcher и та�
 
 if FileExist(drawerPath) {
     src21 := FileRead(drawerPath, "UTF-8")
-    Assert("21h: WatchSync() реализована в src/drawer.ahk и обращается к SlotBound()",
-        InStr(src21, "WatchSync() {") > 0 && InStr(src21, "for item in SlotBound()") > 0)
-    Assert("21i: WatchSync() перевзводит или останавливает SetTimer(WatchBlur, ...)",
-        InStr(src21, "SetTimer(WatchBlur, blurMs)") > 0 && InStr(src21, "SetTimer(WatchBlur, 0)") > 0)
+    focusPath := A_ScriptDir "\..\..\src\WindowFocus.ahk"
+    focusSrc := FileExist(focusPath) ? FileRead(focusPath, "UTF-8") : ""
+    Assert("21h: drawer подключает production WindowFocus seam",
+        InStr(src21, "#Include WindowFocus.ahk") > 0 && focusSrc != "")
+    Assert("21i: WindowFocus seam перевзводит или останавливает WatchBlur одним period decision",
+        InStr(focusSrc, "SetTimer(WatchBlur, WindowWatchPeriod(") > 0)
     Assert("21j: SettingsReconcileRuntime вызывает WatchSync() после Slots.Apply()",
         InStr(src21, "Slots.Apply(cfg, slotPlan.prevPerm)") > 0
      && InStr(src21, "WatchSync()") > InStr(src21, "Slots.Apply(cfg, slotPlan.prevPerm)"))
-    Assert("21p: production WatchSync использует SlotOf authority и сохраняет существующую eligibility",
-        InStr(src21, "cfg := SlotOf(hwnd)") > 0
-     && InStr(src21, "watched.Has(hwnd) || Opt(cfg, `"activateOnShow`", true)") > 0)
+    Assert("21p: live WatchSync использует SlotOf authority и production reconcile policy",
+        InStr(focusSrc, "cfg := SlotOf(hwnd)") > 0
+     && InStr(focusSrc, "WindowWatchReconcile(watched, candidates)") > 0)
 }
 
 out := ""
