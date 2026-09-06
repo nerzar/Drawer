@@ -1,6 +1,7 @@
 import { onUnmounted, ref, watch } from 'vue'
 import { settings, settingsClient } from './settings'
 import type { MonitorRef, SlotState, SlotStatus } from './protocol'
+import type { SlotDraft } from './slotDraft'
 
 export function useSlotStatus() {
   const error = ref('')
@@ -30,6 +31,22 @@ export function useSlotStatus() {
 
 export const slotBehavior = (slot: SlotState) => slot.kind === 'permanent' ? slot.value : slot.effective
 export const slotLabel = (slot: SlotState) => slot.kind === 'permanent' ? slot.value.name : slot.label
+
+export function isPendingDynamicConversion(slot: SlotState, draft?: SlotDraft): boolean {
+  return slot.kind === 'permanent' && draft?.kind === 'dynamic'
+}
+
+export function isRuntimeDynamicBound(slot: SlotState): boolean {
+  return slot.kind === 'dynamic' && slot.status.state !== 'empty'
+}
+
+export type HotkeyPresentation = { active: string; pending: string | null }
+
+export function hotkeyPresentation(slot: SlotState, draft?: SlotDraft): HotkeyPresentation {
+  const active = slot.kind === 'permanent' ? slot.value.hotkey : slot.hotkey
+  const pending = draft && draft.hotkey !== active ? draft.hotkey : null
+  return { active, pending }
+}
 
 // Чем строка списка подписана. У постоянного слота имя задал человек. У
 // динамического имени нет вовсе — там стоит «Слот N», и пока слот занят,

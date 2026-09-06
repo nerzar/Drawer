@@ -12,6 +12,9 @@ import {
 import {
   useSlotStatus,
   edgeLabels,
+  hotkeyPresentation,
+  isPendingDynamicConversion,
+  isRuntimeDynamicBound,
   monitorLabel,
   rowLabel,
   slotBehavior,
@@ -79,7 +82,7 @@ const hasDraftOverrides = computed(() => {
 })
 
 const hasAppliedOverrides = computed(() => {
-  if (kind.value !== 'dynamic') return false
+  if (selectedSlot.value?.kind !== 'dynamic') return false
   const shared = currentShared.value
   const applied = behavior.value
   if (!shared) return false
@@ -90,6 +93,15 @@ const hasAppliedOverrides = computed(() => {
 
 const hasOverrides = computed(() => hasAppliedOverrides.value || hasDraftOverrides.value)
 const resetPending = computed(() => hasAppliedOverrides.value && !hasDraftOverrides.value)
+const pendingDynamicConversion = computed(() =>
+  Boolean(selectedSlot.value && isPendingDynamicConversion(selectedSlot.value, draft.value)),
+)
+const runtimeDynamicBound = computed(() =>
+  Boolean(selectedSlot.value && isRuntimeDynamicBound(selectedSlot.value)),
+)
+const shownHotkey = computed(() =>
+  selectedSlot.value ? hotkeyPresentation(selectedSlot.value, draft.value) : { active: '', pending: null },
+)
 
 const overrideNote = computed(() => {
   const shared = currentShared.value
@@ -246,7 +258,7 @@ function resetDynamic() {
               Сделать временным…
             </button>
             <button
-              v-if="kind === 'dynamic' && selectedSlot.status.state !== 'empty'"
+              v-if="runtimeDynamicBound"
               class="btn-danger-hd"
               type="button"
               data-testid="release-slot"
@@ -413,20 +425,38 @@ function resetDynamic() {
         </template>
 
         <template v-else>
-          <div class="temporary-intro" :class="{ 'temporary-intro-empty': selectedSlot.status.state === 'empty' }">
-            <strong v-if="selectedSlot.status.state === 'empty'">Слот свободен.</strong>
-            <strong v-else>Окно привязано временно.</strong>
-            <div v-if="selectedSlot.status.state === 'empty'">
-              Откройте нужное окно и нажмите
-              <kbd>Ctrl + Alt + Shift + {{ selectedSlot.number }}</kbd> — оно будет привязано
-              к слоту {{ selectedSlot.number }} до перезапуска Drawer.
+          <div class="temporary-intro" :class="{ 'temporary-intro-empty': !runtimeDynamicBound }">
+            <template v-if="pendingDynamicConversion">
+              <strong>Изменение ещё не применено.</strong>
+              <div v-if="selectedSlot.status.state === 'applicationNotRunning' || selectedSlot.status.state === 'empty'">
+                После «Применить» слот станет временным и свободным.
+              </div>
+              <div v-else>
+                После «Применить» текущее окно останется привязано к временному слоту.
+              </div>
+            </template>
+            <template v-else>
+              <strong v-if="!runtimeDynamicBound">Слот свободен.</strong>
+              <strong v-else>Окно привязано временно.</strong>
+              <div v-if="!runtimeDynamicBound">
+                Откройте нужное окно и нажмите
+                <kbd>Ctrl + Alt + Shift + {{ selectedSlot.number }}</kbd> — оно будет привязано
+                к слоту {{ selectedSlot.number }} до перезапуска Drawer.
+              </div>
+              <div v-else>
+                Привязка текущего окна живёт до перезапуска Drawer. «Отвязать окно» уберёт
+                только привязку; параметры слота останутся.
+              </div>
+            </template>
+            <div v-if="shownHotkey.active">
+              Сейчас: <kbd>{{ shownHotkey.active }}</kbd> — показать или убрать окно.
             </div>
-            <div v-else>
-              Привязка текущего окна живёт до перезапуска Drawer. «Отвязать окно» уберёт
-              только привязку; параметры слота останутся.
-            </div>
-            <div>
-              <kbd>{{ draft?.hotkey || `Ctrl + Alt + ${selectedSlot.number}` }}</kbd> — показать или убрать окно.
+            <div v-else>Сейчас горячая клавиша «Показать / убрать» отключена.</div>
+            <div v-if="shownHotkey.pending !== null">
+              <template v-if="shownHotkey.pending">
+                После «Применить»: <kbd>{{ shownHotkey.pending }}</kbd>.
+              </template>
+              <template v-else>После «Применить» горячая клавиша будет отключена.</template>
             </div>
           </div>
 
