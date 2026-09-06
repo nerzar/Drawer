@@ -1796,6 +1796,107 @@ if FileExist(drawerPath) {
         InStr(src20, "slotRegistered.Delete(n)") > 0)
 }
 
+; ---------------------------------------------------------------
+; Точка 21 (G03): живое применение hideOnBlur и blurMs без перезапуска.
+; Модель WatchSync проверяет синхронизацию членства в watched и
+; перевзвод таймера WatchBlur на актуальный blurMs для уже выдвинутых
+; окон при любом направлении изменения (true -> false и false -> true),
+; приоритет per-slot override над общими умолчаниями, независимость
+; постоянных слотов и очистку таймера при опустении watched.
+; ---------------------------------------------------------------
+WatchSyncModel(slotBounds, stateMap, watchedMap, blurMs, &timerPeriod) {
+    boundMap := Map()
+    for item in slotBounds {
+        hwnd := item.hwnd
+        st := stateMap.Has(hwnd) ? stateMap[hwnd] : 0
+        if (!st || !st.exists || !st.deployed)
+            continue
+        hideOnBlur := item.cfg.HasOwnProp("hideOnBlur") ? item.cfg.hideOnBlur : true
+        if hideOnBlur {
+            watchedMap[hwnd] := item.cfg
+            boundMap[hwnd] := true
+        }
+    }
+    for hwnd in watchedMap.Clone() {
+        if !boundMap.Has(hwnd)
+            watchedMap.Delete(hwnd)
+    }
+    if watchedMap.Count
+        timerPeriod := blurMs
+    else
+        timerPeriod := 0
+}
+
+; 21a: hideOnBlur true -> false для уже выдвинутого окна убирает его из watched и гасит таймер
+stMap := Map(101, { exists: true, deployed: true })
+wMap := Map(101, { hideOnBlur: true })
+tPeriod := 2000
+boundsA := [{ n: 1, hwnd: 101, cfg: { hideOnBlur: false } }]
+WatchSyncModel(boundsA, stMap, wMap, 2000, &tPeriod)
+Assert("21a: hideOnBlur true -> false убирает выдвинутое окно из watched и останавливает таймер",
+    !wMap.Has(101) && wMap.Count = 0 && tPeriod = 0)
+
+; 21b: hideOnBlur false -> true для уже выдвинутого окна добавляет его в watched и запускает таймер
+stMap := Map(101, { exists: true, deployed: true })
+wMap := Map()
+tPeriod := 0
+boundsB := [{ n: 1, hwnd: 101, cfg: { hideOnBlur: true } }]
+WatchSyncModel(boundsB, stMap, wMap, 250, &tPeriod)
+Assert("21b: hideOnBlur false -> true включает слежение за уже выдвинутым окном и взводит таймер",
+    wMap.Has(101) && wMap.Count = 1 && tPeriod = 250)
+
+; 21c: per-slot override dynamicSlot побеждает общее умолчание
+stMap := Map(101, { exists: true, deployed: true })
+wMap := Map(101, { hideOnBlur: true })
+tPeriod := 250
+boundsC := [{ n: 1, hwnd: 101, cfg: { hideOnBlur: false } }] ; override hideOnBlur=false
+WatchSyncModel(boundsC, stMap, wMap, 250, &tPeriod)
+Assert("21c: per-slot override динамического слота имеет приоритет над общими настройками",
+    !wMap.Has(101) && wMap.Count = 0 && tPeriod = 0)
+
+; 21d: постоянный слот сохраняет собственный hideOnBlur независимо от смены General
+stMap := Map(102, { exists: true, deployed: true })
+wMap := Map()
+tPeriod := 0
+boundsD := [{ n: 2, hwnd: 102, cfg: { hideOnBlur: true } }] ; permanent slot
+WatchSyncModel(boundsD, stMap, wMap, 250, &tPeriod)
+Assert("21d: постоянный слот сохраняет своё поведение hideOnBlur при смене общих настроек",
+    wMap.Has(102) && wMap.Count = 1 && tPeriod = 250)
+
+; 21e: сдвиг blurMs 2000 -> 100 перевзводит активный таймер без сохранения старого интервала
+stMap := Map(101, { exists: true, deployed: true })
+wMap := Map(101, { hideOnBlur: true })
+tPeriod := 2000
+boundsE := [{ n: 1, hwnd: 101, cfg: { hideOnBlur: true } }]
+WatchSyncModel(boundsE, stMap, wMap, 100, &tPeriod)
+Assert("21e: blurMs 2000 -> 100 перевзводит таймер на 100 мс без устаревшего интервала",
+    tPeriod = 100)
+
+; 21f: сдвиг blurMs 100 -> 2000 перевзводит активный таймер на 2000 мс
+WatchSyncModel(boundsE, stMap, wMap, 2000, &tPeriod)
+Assert("21f: blurMs 100 -> 2000 перевзводит таймер на 2000 мс без устаревшего интервала",
+    tPeriod = 2000)
+
+; 21g: невыдвинутое (свёрнутое) окно удаляется из watched
+stMapNotDep := Map(101, { exists: true, deployed: false })
+wMapNotDep := Map(101, { hideOnBlur: true })
+tPeriod := 250
+boundsG := [{ n: 1, hwnd: 101, cfg: { hideOnBlur: true } }]
+WatchSyncModel(boundsG, stMapNotDep, wMapNotDep, 250, &tPeriod)
+Assert("21g: окно, переставшее быть выдвинутым, удаляется из watched и гасит таймер",
+    !wMapNotDep.Has(101) && wMapNotDep.Count = 0 && tPeriod = 0)
+
+if FileExist(drawerPath) {
+    src21 := FileRead(drawerPath, "UTF-8")
+    Assert("21h: WatchSync() реализована в src/drawer.ahk и обращается к SlotBound()",
+        InStr(src21, "WatchSync() {") > 0 && InStr(src21, "for item in SlotBound()") > 0)
+    Assert("21i: WatchSync() перевзводит или останавливает SetTimer(WatchBlur, ...)",
+        InStr(src21, "SetTimer(WatchBlur, blurMs)") > 0 && InStr(src21, "SetTimer(WatchBlur, 0)") > 0)
+    Assert("21j: SettingsReconcileRuntime вызывает WatchSync() после Slots.Apply()",
+        InStr(src21, "Slots.Apply(cfg, slotPlan.prevPerm)") > 0
+     && InStr(src21, "WatchSync()") > InStr(src21, "Slots.Apply(cfg, slotPlan.prevPerm)"))
+}
+
 out := ""
 allOk := true
 for r in results {

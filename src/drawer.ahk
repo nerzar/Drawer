@@ -1029,6 +1029,37 @@ WatchBlur() {
         SetTimer(WatchBlur, 0)
 }
 
+; Синхронизация слежения за потерей фокуса после реконсиляции настроек.
+; Проверяет все живые привязанные окна:
+;  - если окно выдвинуто (IsDeployed) и у его слота включён hideOnBlur,
+;    оно обязано быть в watched с актуальной конфигурацией;
+;  - если окно выдвинуто, но hideOnBlur выключен (или окно больше не
+;    выдвинуто), оно удаляется из watched;
+;  - таймер WatchBlur перевзводится с актуальным blurMs, если есть за кем
+;    следить, либо выключается, если следить не за кем.
+WatchSync() {
+    global watched, state, blurMs
+    boundMap := Map()
+    for item in SlotBound() {
+        hwnd := item.hwnd
+        st := state.Has(hwnd) ? state[hwnd] : 0
+        if (!st || !WinExist("ahk_id " hwnd) || !IsDeployed(hwnd, st))
+            continue
+        if Opt(item.cfg, "hideOnBlur", true) {
+            watched[hwnd] := item.cfg
+            boundMap[hwnd] := true
+        }
+    }
+    for hwnd in watched.Clone() {
+        if !boundMap.Has(hwnd)
+            watched.Delete(hwnd)
+    }
+    if watched.Count
+        SetTimer(WatchBlur, blurMs)
+    else
+        SetTimer(WatchBlur, 0)
+}
+
 ; Не потеря фокуса, а всплывающее меню того же приложения: у Qt-программ
 ; (Telegram и подобных) контекстное меню — отдельное окно верхнего
 ; уровня, и на миг само становится передним планом, хотя пользователь
@@ -4231,6 +4262,7 @@ SettingsReconcileRuntime(slotPlan, &diags) {
     Slots.Apply(cfg, slotPlan.prevPerm)
     RebindSlotHotkeys()
     SlotsSeedManaged()
+    WatchSync()
 
     SetTimer(HandlesSync, -1)
     DebugLog("[SETTINGS] SettingsReconcileRuntime completed")
