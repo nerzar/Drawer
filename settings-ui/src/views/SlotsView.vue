@@ -16,7 +16,6 @@ import {
   rowLabel,
   slotBehavior,
   slotIcon,
-  slotLabel,
   statusFor,
 } from '../bridge/slots'
 
@@ -51,9 +50,9 @@ watch(
   { immediate: true },
 )
 
-// Какие значения динамический слот держит своими, а какие берёт из
-// General. Считается по применённому состоянию, а не по черновику:
-// подпись описывает то, что действует, а не то, что набрано.
+// Какие значения временный слот держит своими, а какие берёт из
+// General. Подпись следует за черновиком, чтобы Reset сразу давал
+// понятную обратную связь до «Применить».
 const OVERRIDE_NAMES = {
   monitor: 'монитор',
   edge: 'край',
@@ -79,27 +78,30 @@ const hasDraftOverrides = computed(() => {
   )
 })
 
-const hasOverrides = computed(() => {
+const hasAppliedOverrides = computed(() => {
   if (kind.value !== 'dynamic') return false
   const shared = currentShared.value
   const applied = behavior.value
   if (!shared) return false
-  const canonicalHas = applied
+  return applied
     ? Object.keys(OVERRIDE_NAMES).some((k) => JSON.stringify(applied[k]) !== JSON.stringify(shared[k]))
     : false
-  return canonicalHas || hasDraftOverrides.value
 })
+
+const hasOverrides = computed(() => hasAppliedOverrides.value || hasDraftOverrides.value)
+const resetPending = computed(() => hasAppliedOverrides.value && !hasDraftOverrides.value)
 
 const overrideNote = computed(() => {
   const shared = currentShared.value
-  const applied = behavior.value
-  if (!shared || !applied) return ''
+  const d = draft.value
+  if (!shared || !d || d.kind !== 'dynamic') return ''
+  const current = draftBehavior(d)
   const own = Object.keys(OVERRIDE_NAMES).filter(
-    (k) => JSON.stringify(applied[k]) !== JSON.stringify(shared[k]),
+    (k) => JSON.stringify(current[k]) !== JSON.stringify(shared[k]),
   )
   return own.length
-    ? `своё в [dynamicSlot${selectedNumber.value}]: ${own.map((k) => OVERRIDE_NAMES[k]).join(', ')}`
-    : 'всё из [dynamic] — общих настроек динамических слотов'
+    ? `Свои параметры: ${own.map((k) => OVERRIDE_NAMES[k]).join(', ')}`
+    : 'Параметры: общие'
 })
 
 // Форма правит черновик, поэтому род слота на экране — из черновика, а
@@ -220,7 +222,7 @@ function resetDynamic() {
                 color: slot.kind === 'permanent' ? 'var(--accent-fg)' : 'var(--neutral-text)',
               }"
             >
-              {{ slot.kind === 'permanent' ? 'Постоянный' : 'Динамический' }}
+              {{ slot.kind === 'permanent' ? 'Постоянный' : 'Временный' }}
             </div>
           </div>
         </button>
@@ -238,10 +240,10 @@ function resetDynamic() {
               type="button"
               data-testid="make-dynamic"
               :disabled="locked"
-              title="Секция [slot N] будет удалена по «Применить»"
+              title="После «Применить» Drawer перестанет автоматически искать это приложение"
               @click="makeDynamic()"
             >
-              Сделать динамическим…
+              Сделать временным…
             </button>
             <button
               v-if="kind === 'dynamic' && selectedSlot.status.state !== 'empty'"
@@ -251,7 +253,7 @@ function resetDynamic() {
               :disabled="locked"
               @click="releaseSlot(selectedNumber)"
             >
-              Освободить слот
+              Отвязать окно
             </button>
             <button
               v-if="kind === 'dynamic'"
@@ -261,7 +263,7 @@ function resetDynamic() {
               :disabled="locked"
               @click="makePermanent()"
             >
-              Сделать постоянным…
+              Закрепить за приложением…
             </button>
           </div>
         </div>
@@ -295,7 +297,7 @@ function resetDynamic() {
               </div>
             </div>
             <div class="row">
-              <label for="slot-exe">Файл (exe)</label>
+              <label for="slot-exe">Приложение (.exe)</label>
               <div class="field">
                 <input
                   id="slot-exe"
@@ -307,12 +309,12 @@ function resetDynamic() {
                   :value="draft.executable"
                   @input="onExecutableInput($event.target.value)"
                 />
-                <button class="btn-icon" type="button" title="Обзор…" data-testid="pick-exe" @click="pickSlot(selectedNumber, 'exe')">
+                <button class="btn-icon" type="button" title="Выбрать приложение…" data-testid="pick-exe" @click="pickSlot(selectedNumber, 'exe')">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
                     <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
                   </svg>
                 </button>
-                <button class="btn-icon" type="button" title="Окно…" data-testid="pick-window" @click="pickSlot(selectedNumber, 'window')">
+                <button class="btn-icon" type="button" title="Взять данные из открытого окна…" data-testid="pick-window" @click="pickSlot(selectedNumber, 'window')">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
                     <rect x="3" y="4" width="18" height="14" rx="1.5" />
                     <line x1="3" y1="8" x2="21" y2="8" />
@@ -325,9 +327,9 @@ function resetDynamic() {
                     <circle cx="12" cy="8" r="1" fill="currentColor" stroke="none" />
                   </svg>
                   <div class="tip">
-                    Класс окна (ahk_class): <code data-testid="slot-class">{{ draft.windowClass || '—' }}</code>.
-                    Уточняет, какое именно окно ловить, если под этим exe их несколько.
-                    Заполняется кнопкой «Окно…».
+                    Дополнительный признак окна: <code data-testid="slot-class">{{ draft.windowClass || '—' }}</code>.
+                    Помогает выбрать нужный тип окна, если у приложения их несколько.
+                    Заполняется кнопкой «Взять данные из открытого окна…».
                   </div>
                 </div>
               </div>
@@ -348,7 +350,7 @@ function resetDynamic() {
                        Пункт есть, пока его не заменили: подставить cursor
                        значило бы поменять настройку молча. -->
                   <option v-if="draft.monitorKind === 'invalid'" value="invalid">
-                    в файле: {{ draft.monitorRaw }}
+                    Некорректное значение: {{ draft.monitorRaw }} — выберите монитор
                   </option>
                 </select>
                 <input
@@ -406,23 +408,26 @@ function resetDynamic() {
                 />
               </div>
             </div>
-            <div class="hotkey-cap">show/hide, применяется сразу</div>
+            <div class="hotkey-cap">Показать / убрать; после «Применить» работает без перезапуска Drawer.</div>
           </fieldset>
         </template>
 
         <template v-else>
-          <!-- Имени, файла и своего хоткея у динамического слота нет —
-               это факты, а не поля. Поведение он настраивает: секция
-               [dynamicSlotN] надстраивается над общей [dynamic]. -->
-          <div class="detail-row">
-            <div class="l">Имя</div>
-            <div class="v">{{ slotLabel(selectedSlot) }}</div>
-            <div class="s">по умолчанию</div>
-          </div>
-          <div class="detail-row" style="margin-bottom: 12px">
-            <div class="l">Файл (exe)</div>
-            <div class="v">(пусто)</div>
-            <div class="s">по умолчанию</div>
+          <div class="temporary-intro" :class="{ 'temporary-intro-empty': selectedSlot.status.state === 'empty' }">
+            <strong v-if="selectedSlot.status.state === 'empty'">Слот свободен.</strong>
+            <strong v-else>Окно привязано временно.</strong>
+            <div v-if="selectedSlot.status.state === 'empty'">
+              Откройте нужное окно и нажмите
+              <kbd>Ctrl + Alt + Shift + {{ selectedSlot.number }}</kbd> — оно будет привязано
+              к слоту {{ selectedSlot.number }} до перезапуска Drawer.
+            </div>
+            <div v-else>
+              Привязка текущего окна живёт до перезапуска Drawer. «Отвязать окно» уберёт
+              только привязку; параметры слота останутся.
+            </div>
+            <div>
+              <kbd>{{ draft?.hotkey || `Ctrl + Alt + ${selectedSlot.number}` }}</kbd> — показать или убрать окно.
+            </div>
           </div>
 
           <fieldset v-if="draft" class="editor" :disabled="locked">
@@ -439,7 +444,7 @@ function resetDynamic() {
                   <option value="cursor">Под курсором</option>
                   <option value="number">Номер монитора</option>
                   <option v-if="draft.monitorKind === 'invalid'" value="invalid">
-                    в файле: {{ draft.monitorRaw }}
+                    Некорректное значение: {{ draft.monitorRaw }} — выберите монитор
                   </option>
                 </select>
                 <input
@@ -490,7 +495,15 @@ function resetDynamic() {
               </div>
             </div>
             <div class="override-box">
-              <div class="hotkey-cap" data-testid="dyn-source">{{ overrideNote }}</div>
+              <div class="override-copy">
+                <div class="hotkey-cap" data-testid="dyn-source">{{ overrideNote }}</div>
+                <div v-if="resetPending" class="reset-pending">
+                  Общие параметры будут применены после «Применить»; привязанное окно останется.
+                </div>
+                <div v-else-if="hasOverrides" class="reset-help">
+                  Сброс изменит только параметры; привязанное окно останется.
+                </div>
+              </div>
               <button
                 v-if="hasOverrides"
                 class="btn-reset-override"
@@ -499,7 +512,7 @@ function resetDynamic() {
                 :disabled="locked || !hasDraftOverrides"
                 @click="resetDynamic()"
               >
-                Использовать общие настройки
+                Вернуть общие настройки
               </button>
             </div>
           </fieldset>
@@ -512,8 +525,8 @@ function resetDynamic() {
               <circle cx="12" cy="16" r="1" fill="var(--accent-fg)" stroke="none" />
             </svg>
             <div>
-              Значения, совпадающие с общими, слот берёт из вкладки General и следует
-              за ними. Сделайте его постоянным, чтобы задать своё приложение и хоткей.
+              Параметры временного слота могут следовать общим настройкам. Чтобы Drawer
+              снова находил приложение после перезапуска, закрепите слот за приложением.
             </div>
           </div>
         </template>
@@ -653,6 +666,7 @@ function resetDynamic() {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
   margin-bottom: 4px;
 }
 .detail-head h2 {
@@ -810,6 +824,30 @@ select.dd.narrow {
   color: var(--text-3);
   margin: -3px 0 8px 120px;
 }
+.temporary-intro {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 14px;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-hover);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.temporary-intro-empty {
+  border-color: color-mix(in srgb, var(--accent-fg) 38%, var(--border));
+  background: var(--accent-tint);
+}
+.temporary-intro strong {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.temporary-intro kbd {
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+}
 .detail-row {
   display: flex;
   align-items: baseline;
@@ -886,18 +924,38 @@ fieldset[disabled] {
 .detail-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
 }
 .override-box {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
   margin-top: 10px;
   padding: 8px 12px;
   background: var(--bg-hover);
   border: 1px solid var(--border);
   border-radius: 6px;
+}
+.override-box .hotkey-cap {
+  margin: 0;
+}
+.override-copy {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.reset-help,
+.reset-pending {
+  margin-top: 3px;
+  color: var(--text-3);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+.reset-pending {
+  color: var(--accent-fg);
 }
 .btn-reset-override {
   font: inherit;
@@ -909,7 +967,9 @@ fieldset[disabled] {
   background: var(--bg-card);
   color: var(--text);
   cursor: pointer;
-  white-space: nowrap;
+  white-space: normal;
+  flex: 0 1 auto;
+  max-width: 100%;
   transition: background 0.15s, border-color 0.15s;
 }
 .btn-reset-override:hover:not(:disabled) {
