@@ -17,6 +17,7 @@ Safely promote architect-reviewed Wave 4 into `dev/wip/slots-parity` and synchro
 - Conflicts in `SlotsView.vue` and `canonical.test.ts` were resolved semantically in I04.
 - Automated gates reported green: AHK validate, settings-seam groups 1–20, frontend 42/42, typecheck, build.
 - Known non-blocking visual debt remains around `Использовать общие настройки` on narrow layouts; do not redesign it in P02.
+- I04 was actually run with Gemini 3.8 Flash (Medium), despite High being requested; this is metadata only and not a blocker.
 
 ## Required procedure
 1. `git fetch dev`.
@@ -27,6 +28,7 @@ Safely promote architect-reviewed Wave 4 into `dev/wip/slots-parity` and synchro
 6. Do not integrate any other branch (C03/G03/etc.). Do not change product/runtime/frontend semantics in this task.
 7. Synchronize local integration checkout to the promoted `dev/wip/slots-parity` safely.
 8. Verify the promoted working-code tree contains Wave 4 behavior and no accidental extra feature diff.
+9. Cleanup only these architect-created accidental temporary remote branches if they still exist and are unchanged from the pre-task wip point: `orchestration/p02-task`, `tmp-p02`, `tmp-p02-task`, `tmp-ignore`, `tmp-final`. Do not delete any other branch. If any of these branches has unexpected commits, leave it and report instead of deleting.
 
 ## Verification
 Run lightweight promotion gates only:
@@ -49,3 +51,4 @@ Final response must include:
 - local integration checkout branch/SHA
 - test results
 - any conflict or unexpected divergence found
+- result of temporary-branch cleanup
