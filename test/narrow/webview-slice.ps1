@@ -147,14 +147,10 @@ SmokeSlotWindow() {
 SmokeOpen() {
     global webTrace, live
     webTrace := A_ScriptDir "\bridge.log"
-    ; Регистрация focus-хоткея при старте — часть контракта постоянного
-    ; слота: значение берётся из реестра, тем же SlotPermList(), которым
-    ; ходит сам цикл регистрации. Пишем факт настоящего старта, а не
-    ; копию логики: 18 слотовых хоткеев + очистка + выход дают 20, и
-    ; двадцать первый может быть только focusHotkey слота 1.
+    ; Снимок реальной регистрации show/hide hotkey по каждому номеру.
     SettingsWebTrace("boot hotkeys live=" live)
-    for a in SlotPermList()
-        SettingsWebTrace("boot perm slot=" a.slot " focusHotkey=" Opt(a, "focusHotkey", ""))
+    Loop 9
+        SettingsWebTrace("boot slot=" A_Index " showHideHotkey=" SlotHotkey(A_Index))
     SettingsWebShow()
 }
 
@@ -237,7 +233,7 @@ SmokeWatch() {
 
     $cfg = Join-Path $runDir "config.ini"
     $fixtureExe = if ($Compiled) { 'Drawer.exe' } else { 'AutoHotkey64.exe' }
-    [IO.File]::AppendAllText($cfg, "`r`n[slot1]`r`nname=Smoke permanent`r`nexe=$fixtureExe`r`ncls=AutoHotkeyGUI`r`nmonitor=1`r`nedge=left`r`nwidth=61`r`nactivateOnShow=false`r`nhideOnBlur=false`r`nfocusHotkey=^!#1`r`n[dynamicSlot5]`r`nwidth=43`r`nedge=bottom`r`nmonitor=2`r`n", [Text.Encoding]::Unicode)
+    [IO.File]::AppendAllText($cfg, "`r`n[slot1]`r`nname=Smoke permanent`r`nexe=$fixtureExe`r`ncls=AutoHotkeyGUI`r`nmonitor=1`r`nedge=left`r`nwidth=61`r`nactivateOnShow=false`r`nhideOnBlur=false`r`n[hotkeys]`r`nslot1=^!#1`r`n[dynamicSlot5]`r`nwidth=43`r`nedge=bottom`r`nmonitor=2`r`n", [Text.Encoding]::Unicode)
     $before = [IO.File]::ReadAllText($cfg, [Text.Encoding]::Unicode)
     Check "0a: во временном config.ini blurMs=250 до запуска" ($before -match '(?m)^blurMs=250\s*$')
 
@@ -348,16 +344,13 @@ SmokeWatch() {
         (($after -match '(?m)^\[dynamicSlot5\]') -and ($after -match '(?m)^width=43\s*$'))
     Check "5e: slot fields persisted through Apply and OK" `
         (($after -match '(?m)^name=Saved by OK\s*$') -and ($after -match '(?m)^width=62\s*$') `
-         -and ($after -match '(?m)^cls=AutoHotkeyGUI\s*$') -and ($after -match '(?m)^focusHotkey=\^!F2\s*$'))
+         -and ($after -match '(?m)^cls=AutoHotkeyGUI\s*$') -and ($after -match '(?m)^slot1=\^!F2\s*$'))
 
-    # --- хоткей постоянного слота: весь путь от config.ini до старта ---
-    # Значение из файла обязано доехать до регистрации при старте. 20 —
-    # это 18 слотовых плюс очистка и выход; 21-й хоткей может быть только
-    # focusHotkey слота 1, взятый из реестра.
-    Check "7a: focusHotkey слота дошёл из config.ini до реестра при старте" `
-        ($log -match '(?m)^.*boot perm slot=1 focusHotkey=\^!#1\s*$')
-    Check "7b: и был зарегистрирован настоящим стартом, а не только прочитан" `
-        ($log -match '(?m)^.*boot hotkeys live=21\s*$')
+    # --- show/hide hotkey по номеру ---
+    Check "7a: show/hide hotkey слота дошёл из config.ini до реестра" `
+        ($log -match '(?m)^.*boot slot=1 showHideHotkey=\^!#1\s*$')
+    Check "7b: регистрация включает девять show/hide и девять bind hotkeys" `
+        ($log -match '(?m)^.*boot hotkeys live=20\s*$')
     Check "7c: негодное название клавиши отвергнуто backend'ом с адресом поля" `
         ($log -match 'smoke\.hotkey-rejected')
     Check "7d: отказ не тронул применённое состояние и файл" `

@@ -149,17 +149,15 @@ class DrawerSettingsPort {
         edits := this._SlotsInput(JsonGet(draft, "slotEdits", []), &err, &field)
         if (err != "")
             return true
-        slotPlan := SettingsSlotsPlan(edits, &err)
-        if (err != "" || slotPlan.writes.Length || slotPlan.deletes.Length
-                      || slotPlan.dynDeletes.Length || slotPlan.keyDeletes.Length)
-            return true
         input := this._GeneralInput(JsonGet(draft, "general", 0), &err, &field)
         if (err != "")
             return true
         writes := SettingsGeneralPlan(input, &err)
         if !writes
             return true
-        return writes.Length > 0
+        slotPlan := SettingsSlotsPlan(edits, &err, SettingsDynamicFinal(writes))
+        return err != "" || writes.Length || slotPlan.writes.Length || slotPlan.deletes.Length
+            || slotPlan.dynDeletes.Length || slotPlan.keyDeletes.Length
     }
 
     Unsupported(action) {
@@ -199,7 +197,7 @@ class DrawerSettingsPort {
         ; Границы значений проверяет он, и адрес поля называет тоже он:
         ; разбирать русский текст ответа, чтобы понять, к какому слоту
         ; вести человека, — ровно то, от чего уводил C3.
-        slotPlan := SettingsSlotsPlan(edits, &err)
+        slotPlan := SettingsSlotsPlan(edits, &err, SettingsDynamicFinal(generalWrites))
         if (err != "")
             return this._Invalid(err, slotPlan.field)
 
@@ -242,7 +240,7 @@ class DrawerSettingsPort {
     _RestartFields(nums) {
         out := []
         for n in nums
-            out.Push("slots." n ".focusHotkey")
+            out.Push("slots." n ".hotkey")
         return out
     }
 
@@ -416,7 +414,8 @@ class DrawerSettingsPort {
                     edge: this._Text(v, "edge", path ".edge", &err, &field),
                     monitor: this._MonitorIn(JsonGet(v, "monitor", 0), &err, &field, path ".monitor"),
                     activateOnShow: this._Bool(v, "activateOnShow", path ".activateOnShow", &err, &field),
-                    hideOnBlur: this._Bool(v, "hideOnBlur", path ".hideOnBlur", &err, &field)
+                    hideOnBlur: this._Bool(v, "hideOnBlur", path ".hideOnBlur", &err, &field),
+                    hotkey: this._Text(v, "hotkey", path ".hotkey", &err, &field)
                 }
                 if (err != "")
                     return 0
@@ -427,7 +426,7 @@ class DrawerSettingsPort {
                 name: this._Text(v, "name", path ".name", &err, &field),
                 exe: this._Text(v, "executable", path ".executable", &err, &field),
                 cls: this._Text(v, "windowClass", path ".windowClass", &err, &field),
-                focusHotkey: this._Text(v, "focusHotkey", path ".focusHotkey", &err, &field),
+                hotkey: this._Text(v, "hotkey", path ".hotkey", &err, &field),
                 width: this._Int(v, "widthPercent", path ".widthPercent", &err, &field),
                 edge: this._Text(v, "edge", path ".edge", &err, &field),
                 monitor: this._MonitorIn(JsonGet(v, "monitor", 0), &err, &field, path ".monitor"),
@@ -486,6 +485,7 @@ class DrawerSettingsPort {
         dto["kind"] := "dynamic"
         dto["label"] := String(Opt(s.cfg, "name", "Слот " s.n))
         dto["effective"] := this._BehaviorDto(s.cfg)
+        dto["hotkey"] := HotkeyAhkToHuman(String(Opt(s.cfg, "hotkey", SlotHotkey(s.n))))
         ; Тот же засев, которым native заполняет панель при «Сделать
         ; постоянным», — форма не должна выдумывать умолчания сама.
         dto["permanentDefaults"] := this._PermValueDto(SettingsEditSeed(s.n))
@@ -507,7 +507,7 @@ class DrawerSettingsPort {
             ; SettingsHotkeyIn() на стороне AHK разберёт её обратно в
             ; "^!F2" сама. Второго конвертера на стороне Vue не заводим —
             ; источник истины один, и он уже здесь.
-            "focusHotkey", HotkeyAhkToHuman(String(Opt(cfg, "focusHotkey", ""))))
+            "hotkey", HotkeyAhkToHuman(String(Opt(cfg, "hotkey", ""))))
     }
 
     ; windowTitle появляется только там, где окно найдено: в контракте

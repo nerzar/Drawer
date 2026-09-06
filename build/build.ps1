@@ -1,4 +1,4 @@
-<#
+﻿<#
 Собирает тестовый релиз Drawer: собирает фронтенд Settings, компилирует
 src\drawer.ahk в один exe (Ahk2Exe, без консоли, со своей иконкой) и
 складывает готовую папку Drawer-<version> рядом с config.ini, README.md
@@ -91,10 +91,11 @@ New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
 Write-Host "Компиляция $exeOut ..."
 $p = Start-Process -FilePath $ahk2exe -PassThru -Wait -NoNewWindow -ArgumentList @(
-    '/in',   (Join-Path $root "src\drawer.ahk"),
-    '/out',  $exeOut,
-    '/icon', (Join-Path $root "assets\icon.ico"),
-    '/base', $base
+    '/in',     (Join-Path $root "src\drawer.ahk"),
+    '/out',    $exeOut,
+    '/icon',   (Join-Path $root "assets\icon.ico"),
+    '/base',   $base,
+    '/silent'
 )
 if ($p.ExitCode -ne 0) {
     Write-Error "Ahk2Exe завершился с кодом $($p.ExitCode)"
@@ -109,7 +110,7 @@ function Test-Embedded {
     param([string]$ExePath, [string]$AssetPath)
     # Latin1 сохраняет байты один в один, поэтому поиск идёт обычным
     # IndexOf по строке, а не поэлементным циклом по массиву.
-    $l1 = [Text.Encoding]::Latin1
+    $l1 = [Text.Encoding]::GetEncoding("ISO-8859-1")
     $bytes = [IO.File]::ReadAllBytes($AssetPath)
     # Кусок из середины: начало DLL — PE-заголовок, он есть и у самого
     # exe, и совпадение по нему ничего не доказывало бы.
@@ -125,7 +126,13 @@ foreach ($asset in @($webFiles[0].FullName, $loader)) {
 }
 Write-Host "Ассеты найдены внутри exe: index.html, WebView2Loader.dll"
 
-Copy-Item (Join-Path $root "src\config.ini") $outDir -Force
+$targetConfig = Join-Path $outDir "config.ini"
+if (-not (Test-Path $targetConfig)) {
+    Copy-Item (Join-Path $root "src\config.ini") $targetConfig -Force
+    Write-Host "Создан начальный config.ini по умолчанию в $outDir"
+} else {
+    Write-Host "Сохранён существующий config.ini в $outDir (повторная сборка не перезаписывает рабочий конфиг)"
+}
 Copy-Item (Join-Path $root "LICENSE")        $outDir -Force
 # В архиве два описания: короткое github\README.md — то же, что на
 # странице проекта, и подробная инструкция из корня репозитория. Без
@@ -138,7 +145,10 @@ Copy-Item (Join-Path $root "README.md")        (Join-Path $outDir "SETUP.md")  -
 
 $zip = Join-Path $root "dist\Drawer-$Version.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }
-Compress-Archive -Path (Join-Path $outDir "*") -DestinationPath $zip
+# При упаковке архива исключаем файлы логов (например drawer-debug.log),
+# если релизная папка уже запускалась на тестовом стенде.
+$archiveItems = @(Get-ChildItem -LiteralPath $outDir | Where-Object { $_.Extension -ne ".log" })
+Compress-Archive -Path $archiveItems.FullName -DestinationPath $zip
 
 Write-Host "`nГотово: $outDir"
 Get-ChildItem $outDir | Format-Table Name, Length

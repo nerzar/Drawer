@@ -27,7 +27,7 @@ export type SlotDraft = {
   name: string
   executable: string
   windowClass: string
-  focusHotkey: string
+  hotkey: string
   widthPercent: string
   monitorKind: MonitorKind
   monitorNumber: string
@@ -65,7 +65,7 @@ function draftFromSlot(slot: SlotState): SlotDraft {
     name: named.name,
     executable: named.executable,
     windowClass: named.windowClass,
-    focusHotkey: named.focusHotkey,
+    hotkey: slot.kind === 'permanent' ? named.hotkey : slot.hotkey,
     ...behaviorFields(behavior),
   }
 }
@@ -94,7 +94,7 @@ export function draftPermanentValue(d: SlotDraft): PermanentSlotValue {
     name: d.name,
     executable: d.executable,
     windowClass: d.windowClass,
-    focusHotkey: d.focusHotkey,
+    hotkey: d.hotkey,
   }
 }
 
@@ -126,10 +126,10 @@ export function slotEditsToWire(drafts: SlotDrafts, state: SettingsState): SlotE
         edits.push({ number: slot.number, kind: 'permanent', value })
       continue
     }
-    const value = draftBehavior(draft)
+    const value = { ...draftBehavior(draft), hotkey: draft.hotkey }
     // effective уже включает надстройку [dynamicSlotN], если она есть, —
     // значит расхождение с ним и есть незаписанная правка надстройки.
-    if (slot.kind !== 'dynamic' || !same(value, slot.effective))
+    if (slot.kind !== 'dynamic' || !same(value, { ...slot.effective, hotkey: slot.hotkey }))
       edits.push({ number: slot.number, kind: 'dynamic', value })
   }
   return edits

@@ -15,6 +15,7 @@
 ; WebView вправе только Destroy(), после того как решение о закрытии
 ; принято, — иначе несохранённый черновик исчезал бы молча.
 
+
 class SettingsWebViewAdapter {
     ; WebDir и LoaderPath приходят снаружи готовыми: где лежат файлы —
     ; вопрос упаковки (SettingsWebAssets.ahk), а не транспорта. В
@@ -36,8 +37,11 @@ class SettingsWebViewAdapter {
                       DefaultWidth: 1060,
                       DefaultHeight: 700 }
         this.Window := WebViewGui("+Resize", Title, , settings)
+        ApplyDwmTitlebarTheme(this.Window.Hwnd)
         this._messageHandler := ObjBindMethod(this, "_HandleWebMessage")
         this._messageToken := this.Window.WebMessageReceived(this._messageHandler)
+        this._newWindowHandler := ObjBindMethod(this, "_HandleNewWindow")
+        this._newWindowToken := this.Window.NewWindowRequested(this._newWindowHandler)
         this._closeHandler := ObjBindMethod(this, "_HandleNativeClose")
         this.Window.OnEvent("Close", this._closeHandler)
         this.Window.Control.BrowseFolder(WebDir)
@@ -45,6 +49,7 @@ class SettingsWebViewAdapter {
     }
 
     Show(Options := "w1060 h700 Center") {
+        ApplyDwmTitlebarTheme(this.Window.Hwnd)
         this.Window.Show(Options)
     }
 
@@ -64,6 +69,11 @@ class SettingsWebViewAdapter {
         this._onJson.Call(this, Args.WebMessageAsJson)
     }
 
+    _HandleNewWindow(Sender, Args) {
+        Args.Handled := 1
+        try Run(Args.Uri)
+    }
+
     _HandleNativeClose(*) {
         if !this._closed
             this._onCloseRequested.Call(this)
@@ -78,6 +88,7 @@ class SettingsWebViewAdapter {
         window := this.Window
         control := window.Control
         try control.wv.remove_WebMessageReceived(this._messageToken)
+        try control.wv.remove_NewWindowRequested(this._newWindowToken)
         try control.wvc.Close()
         try WebViewCtrl.ActiveHwnds.Delete(control.Hwnd)
         try window.Destroy()

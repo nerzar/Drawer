@@ -75,6 +75,10 @@
     el.value = String(v)
     el.dispatchEvent(new Event('input', { bubbles: true }))
   }
+  const captureHotkey = (id, key, init = {}) => {
+    const el = q(id)
+    el.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, ...init }))
+  }
   const setPick = (id, v) => {
     const el = q(id)
     el.value = String(v)
@@ -137,7 +141,13 @@
       if (!text('slot-9').includes('Динамический')) throw new Error('row-pill-dyn')
       if (!q('slot-1').querySelector('.dot')) throw new Error('row-status-dot')
       eq('edit-name', 'Smoke permanent')
-      eq('edit-focusHotkey', 'Ctrl+Alt+Win+1')
+      if (q('edit-name').readOnly) throw new Error('permanent-name-readonly')
+      eq('edit-hotkey', 'Ctrl+Alt+Win+1')
+      const hotkey = q('edit-hotkey')
+      const beforeTab = hotkey.value
+      const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+      if (!hotkey.dispatchEvent(tab) || tab.defaultPrevented) throw new Error('hotkey-tab-prevented')
+      if (hotkey.value !== beforeTab) throw new Error('hotkey-tab-captured')
       eq('edit-widthPercent', '61')
       if (!q('make-dynamic') || q('make-dynamic').disabled) throw new Error('conversion-perm')
       q('slot-5').click()
@@ -150,7 +160,7 @@
       // Подпись говорит, что у слота своё, а что он берёт из General.
       if (!text('dyn-source').includes('своё в [dynamicSlot5]')) throw new Error('dyn-source-own')
       if (!text('dyn-source').includes('монитор')) throw new Error('dyn-source-monitor')
-      if (!text('slot-detail').includes('Ctrl + Alt + 5')) throw new Error('dyn-hotkey')
+      if (!q('edit-hotkey')) throw new Error('dyn-hotkey')
       q('slot-1').click()
       await wait(() => q('edit-name'), 5000)
       setText('edit-name', 'Unsaved slot')
@@ -194,7 +204,7 @@
       await wait(() => watching && q('slot-4'), 5000)
       q('slot-4').click()
       await wait(() => q('slot-detail'), 5000)
-      if (q('bind-slot') || q('release-slot')) throw new Error('invented-bind-ui')
+      if (q('bind-slot') || q('release-slot')) throw new Error('release-on-empty')
 
       const badBind = await rpc('slot.bind', { slot: 0 })
       if (badBind.ok || badBind.error?.code !== 'invalid_request') throw new Error('bind-invalid-slot')
@@ -290,20 +300,20 @@
       // синтаксисом AutoHotkey: canonical хранит "^!#1", форма — "Ctrl +
       // Alt + Win + 1". Конвертер один, на стороне AHK (HotkeyAhkToHuman);
       // Vue его не дублирует.
-      eq('edit-focusHotkey', 'Ctrl+Alt+Win+1')
+      eq('edit-hotkey', 'Ctrl+Alt+Win+1')
 
       // "Bla" не название клавиши AutoHotkey. Модификаторы форма понимает
       // сама (HotkeyHumanToAhk), а само название клавиши — нет: его
       // проверяет тот же Hotkey(), которым идёт настоящая регистрация.
-      setText('edit-focusHotkey', 'Ctrl + Alt + Bla')
+      captureHotkey('edit-hotkey', 'Bla', { ctrlKey: true, altKey: true })
       await apply(() => /не сочетание клавиш AutoHotkey/.test(text('status')))
-      if (/slots\.1\.focusHotkey/.test(text('status'))) throw new Error('machine-path-hotkey')
+      if (/slots\.1\.hotkey/.test(text('status'))) throw new Error('machine-path-hotkey')
       await wait(() => q('slot-1').getAttribute('aria-pressed') === 'true', 5000)
-      if (!q('edit-focusHotkey').className.includes('field-bad')) throw new Error('hotkey-field-error')
+      if (!q('edit-hotkey').className.includes('field-bad')) throw new Error('hotkey-field-error')
       post('smoke.hotkey-rejected')
       // Неудачный Save черновика не трогает: набранное осталось на месте,
       // и заново вводить остальные поля не приходится.
-      eq('edit-focusHotkey', 'Ctrl + Alt + Bla')
+      eq('edit-hotkey', 'Ctrl + Alt + Bla')
       eq('edit-widthPercent', '62')
       post('smoke.hotkey-applied-intact')
 
@@ -311,13 +321,13 @@
       // уже основной хоткей слота 2 (Ctrl+Alt+2 в таблице «Горячие
       // клавиши»): конфликт, а не ошибка синтаксиса, и сообщение должно
       // называть то, с чем совпало.
-      setText('edit-focusHotkey', 'Ctrl + Alt + 2')
+      captureHotkey('edit-hotkey', '2', { ctrlKey: true, altKey: true })
       await apply(() => /уже занято/.test(text('status')))
       if (!/показать\/убрать слот 2/.test(text('status'))) throw new Error('conflict-not-named')
-      if (!q('edit-focusHotkey').className.includes('field-bad')) throw new Error('conflict-field-error')
+      if (!q('edit-hotkey').className.includes('field-bad')) throw new Error('conflict-field-error')
       post('smoke.hotkey-conflict')
 
-      setText('edit-focusHotkey', 'Ctrl + Alt + F2')
+      captureHotkey('edit-hotkey', 'F2', { ctrlKey: true, altKey: true })
       setPick('edit-monitorKind', 'cursor')
       setPick('edit-edge', 'top')
       setCheck('edit-activateOnShow', true)
@@ -366,7 +376,7 @@
       eq('edit-edge', 'top')
       // Сохранённый хоткей вернулся каноническим ответом AHK, а не остался
       // висеть черновиком формы.
-      eq('edit-focusHotkey', 'Ctrl+Alt+F2')
+      eq('edit-hotkey', 'Ctrl + Alt + F2')
       post('smoke.hotkey-saved')
       if (!text('restart').includes('1')) throw new Error('slot-restart-hint')
       await apply(() => /Менять нечего/.test(text('status')))
@@ -378,10 +388,10 @@
       // проверяют дальше.
       setText('edit-widthPercent', '63')
       await apply(() => /Сохранено/.test(text('status')))
-      eq('edit-focusHotkey', 'Ctrl+Alt+F2')
+      eq('edit-hotkey', 'Ctrl + Alt + F2')
       setText('edit-widthPercent', '62')
       await apply(() => /Сохранено/.test(text('status')))
-      eq('edit-focusHotkey', 'Ctrl+Alt+F2')
+      eq('edit-hotkey', 'Ctrl + Alt + F2')
       post('smoke.hotkey-kept')
       q('slot-9').click()
       await wait(() => val('edit-widthPercent') === '80', 5000)

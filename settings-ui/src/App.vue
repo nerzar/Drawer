@@ -2,7 +2,6 @@
 import { computed, onMounted, watch } from 'vue'
 import { settings, loadSettings } from './bridge/settings'
 import { fieldTarget } from './bridge/fieldError'
-import TitleBar from './components/TitleBar.vue'
 import Sidebar from './components/Sidebar.vue'
 import FooterBar from './components/FooterBar.vue'
 import GeneralView from './views/GeneralView.vue'
@@ -42,7 +41,6 @@ const accent = computed(() => '#' + (settings.draft?.accent ?? '2A2E35'))
 
 <template>
   <div class="app" :style="{ '--accent': accent }">
-    <TitleBar />
     <div class="body-row">
       <Sidebar v-model:active="activeTab" />
       <component :is="currentView" />

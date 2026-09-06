@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { settings } from '../bridge/settings'
 import {
   ACCENT_PALETTE,
@@ -27,6 +27,7 @@ const preset = computed({
 const customAnim = computed(() => preset.value === 'custom')
 
 const accentCss = computed(() => '#' + (settings.draft?.accent ?? '2A2E35'))
+const customColorInput = ref(null)
 
 function pickAccent(hex) {
   if (settings.draft) settings.draft.accent = hex
@@ -34,6 +35,10 @@ function pickAccent(hex) {
 
 function pickCustomAccent(event) {
   if (settings.draft) settings.draft.accent = event.target.value.slice(1).toUpperCase()
+}
+
+function triggerCustomColor() {
+  customColorInput.value?.click()
 }
 </script>
 
@@ -98,22 +103,22 @@ function pickCustomAccent(event) {
             />
           </div>
         </div>
-        <div class="check-row">
+        <label class="check-row">
           <input type="checkbox" data-testid="activateOnShow" v-model="d.activateOnShow" />
           <span>Активировать окно при открытии</span>
-        </div>
-        <div class="check-row">
+        </label>
+        <label class="check-row">
           <input type="checkbox" data-testid="hideOnBlur" v-model="d.hideOnBlur" />
           <span>Убирать окно, когда фокус ушёл в другое</span>
-        </div>
+        </label>
       </div>
 
       <div class="card">
         <h3>Внешний вид</h3>
-        <div class="check-row" style="margin-bottom: 14px">
+        <label class="check-row" style="margin-bottom: 14px">
           <input type="checkbox" data-testid="handlesEnabled" v-model="d.handlesEnabled" />
           <span>Кромки у края экрана</span>
-        </div>
+        </label>
 
         <div class="divider"></div>
 
@@ -139,7 +144,8 @@ function pickCustomAccent(event) {
               type="button"
               :data-testid="'swatch-' + hex"
               :style="{ background: '#' + hex }"
-              :aria-label="hex"
+              :aria-label="'Цвет #' + hex"
+              :aria-pressed="hex.toLowerCase() === d.accent.toLowerCase()"
               @click="pickAccent(hex)"
             >
               <svg
@@ -156,15 +162,29 @@ function pickCustomAccent(event) {
                 <polyline points="20 6 9 17 4 12" />
               </svg>
             </button>
-            <label class="swatch-add" title="Свой цвет">
+            <label
+              class="swatch-add"
+              title="Свой цвет"
+              aria-label="Свой цвет"
+              tabindex="0"
+              @keydown.enter.prevent="triggerCustomColor"
+              @keydown.space.prevent="triggerCustomColor"
+            >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                 <line x1="12" y1="5" x2="12" y2="19" />
                 <line x1="5" y1="12" x2="19" y2="12" />
               </svg>
-              <input type="color" :value="accentCss" @input="pickCustomAccent" hidden />
+              <input
+                ref="customColorInput"
+                type="color"
+                :value="accentCss"
+                @input="pickCustomAccent"
+                class="visually-hidden-color"
+                aria-label="Выбрать свой цвет"
+              />
             </label>
           </div>
-          <div class="preview-box">
+          <div class="preview-box" aria-hidden="true">
             <div class="preview-handle" :style="{ background: accentCss }">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#D6DAE2" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="9 6 15 12 9 18" />
@@ -197,6 +217,7 @@ function pickCustomAccent(event) {
               data-testid="animMs"
               :disabled="!customAnim"
               v-model="d.animMs"
+              @input="d.animCustom = true"
             />
           </div>
         </div>
@@ -210,6 +231,7 @@ function pickCustomAccent(event) {
               data-testid="animSteps"
               :disabled="!customAnim"
               v-model="d.animSteps"
+              @input="d.animCustom = true"
             />
           </div>
         </div>
@@ -328,6 +350,10 @@ select.dd {
   background-position: right 10px center;
   background-size: 15px 15px;
 }
+select.dd option {
+  background-color: #1e2025;
+  color: #ededef;
+}
 select.dd.narrow {
   width: 128px;
 }
@@ -348,6 +374,8 @@ select.dd.narrow {
   align-items: center;
   gap: 10px;
   margin-bottom: 10px;
+  cursor: pointer;
+  user-select: none;
 }
 .check-row:last-child {
   margin-bottom: 0;
@@ -356,6 +384,7 @@ select.dd.narrow {
   width: 16px;
   height: 16px;
   accent-color: var(--accent-fg);
+  cursor: pointer;
 }
 .check-row span {
   font-size: 13px;
@@ -374,7 +403,17 @@ select.dd.narrow {
   align-items: center;
   justify-content: center;
   padding: 0;
-  cursor: default;
+  cursor: pointer;
+  outline: none;
+  transition: transform 0.1s ease, border-color 0.15s ease;
+}
+.swatch:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: scale(1.08);
+}
+.swatch:focus-visible {
+  outline: 2px solid var(--accent-fg);
+  outline-offset: 2px;
 }
 .swatch-add {
   width: 27px;
@@ -385,8 +424,35 @@ select.dd.narrow {
   align-items: center;
   justify-content: center;
   color: var(--text-3);
-  cursor: default;
+  cursor: pointer;
   position: relative;
+  outline: none;
+  transition: border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+.swatch-add:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+  color: var(--text-2);
+  transform: scale(1.08);
+}
+.swatch-add:focus-visible,
+.swatch-add:focus-within {
+  outline: 2px solid var(--accent-fg);
+  outline-offset: 2px;
+  border-color: var(--accent-fg);
+  color: var(--text-2);
+}
+.visually-hidden-color {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 .preview-box {
   width: 88px;

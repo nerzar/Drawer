@@ -58,21 +58,22 @@ Blackboard между архитектором ChatGPT и coding agents.
 - Wave 1: `dev/integration/slots-settings-wave1@ac63ead`.
 - C02: `dev/fix/settings-general-override-atomic@f75dcc6`.
 - B01: `dev/fix/integration-production-build@1bd8f6e`.
-- **I02 architect-reviewed:** `dev/integration/slots-settings-wave2@4cc0d77`.
-- I02 содержит Wave 1 + C02 + B01. `SettingsDynamicFinal` присутствует; duplicate `ApplyDwmTitlebarTheme` удалён; production build fixes присутствуют.
-- I02 gates: AHK validate green, settings-seam green, frontend 25/25, typecheck/build green, production build green, fresh/rebuild config safety green, embedded assets green.
-- `webview-slice` больше не блокируется compile duplicate, но остаётся CDP `inject-timeout` после успешных boot/getInitialState/dirty-Apply/dispose; считать environment blocker, пока не доказано обратное.
-- G04: `dev/fix/settings-custom-animation-preset@37cb31d`, frontend-only, tests 33/33, typecheck/build green.
-- `wip/slots-parity` пока orchestration branch; кодовую base не двигать до I03 + architect review + P01.
+- I02: `dev/integration/slots-settings-wave2@4cc0d77`.
+- G04: `dev/fix/settings-custom-animation-preset@37cb31d`.
+- **I03 architect-reviewed and accepted:** `dev/integration/slots-settings-wave3@395c2a0`.
+- I03 объединяет Wave 2 (`4cc0d77`) + G04 (`37cb31d`) + correction note для I02 report + актуальные orchestration docs.
+- Candidate-base `395c2a0` успешно промотирована задачей P01 в `dev/wip/slots-parity`.
+- Локальный checkout `C:\Users\nerza\Projects\drawer-settings-integration` синхронизирован с `dev/wip/slots-parity` на ветке `wip/slots-parity`.
+- База полностью подготовлена к TASK A01 (короткая ручная приёмка).
 
-## Проверка I02 архитектором
+## Проверка I03 архитектором
 
 Проверено на remote:
-- branch HEAD `4cc0d77`;
-- B01 merge `07c7d10`, C02 входит в историю;
-- `src/drawer.ahk` содержит `SettingsDynamicFinal(...)` и одну полную `ApplyDwmTitlebarTheme(...)`;
-- `src/webview/SettingsWebView.ahk` вызывает helper, но duplicate не объявляет;
-- `build/build.ps1` содержит `/silent`, PS5.1-compatible ISO-8859-1 check и сохраняет существующий `config.ini`.
+- branch HEAD `395c2a0`;
+- содержит Wave 2 (`4cc0d77`) + cherry-pick G04 (`c9867f6`) + docs/correction commits;
+- wire contract не затронут (`animCustom` чисто UI/draft состояние);
+- AHK validate, settings-seam, frontend 33/33, typecheck, build, production build — green;
+- чистая кандидатная база готова к приёмке A01.
 
 ---
 
@@ -105,34 +106,17 @@ Metadata note: self-report ошибочно записал Gemini 3.8 Flash из
 
 ## TASK I03 — интегрировать G04 в Wave 2 и подготовить базу к ручной приёмке
 
-**Status:** ACTIVE  
-**Executor:** Antigravity  
-**MODEL: Claude Sonnet 4.6 (Thinking) — фактически выбрать в UI**  
+**Status:** DONE_ARCH_REVIEWED  
 **Run ID:** `RUN-20260906-ANTIGRAVITY-I03-01`  
-**Base:** `dev/integration/slots-settings-wave2@4cc0d77`  
-**Input:** `dev/fix/settings-custom-animation-preset@37cb31d`  
-**Branch:** `integration/slots-settings-wave3`  
-**Worktree:** `C:\Users\nerza\Projects\drawer-agent-worktrees\I03`
+**Client:** Antigravity  
+**Actual model:** `Claude Sonnet 4.6 (Thinking)`  
+**Chat/session ID:** `f792183a-e298-4f38-a97a-155c097f3f87`  
+**Branch:** `dev/integration/slots-settings-wave3`  
+**Reviewed HEAD:** `395c2a0`
 
-### Цель
+---
 
-Получить clean candidate-base для A01: Wave 2 + проверенный frontend-fix G04 + актуальные orchestration docs. Это integration/review task, не новая feature-wave.
-
-### Обязательно
-
-1. Новый sibling-worktree I03 от exact base `4cc0d77`; не работать в I02/G04/shared checkout.
-2. Интегрировать G04 по смыслу, не переписывать без причины.
-3. Проверить, что `animCustom` остаётся только draft/UI состоянием; wire по-прежнему `durationMs/steps`.
-4. Подтянуть актуальные `AGENT_BOARD.md` и `REPORT_FORMAT.md` из `dev/wip/slots-parity`.
-5. В `docs/agent-reports/2026-09-06-opencode-i02.md` добавить correction note: оператор подтверждает фактически выбранную модель `GPT 5.6 Luna` через APInex UI; старая строка Gemini была stale metadata.
-6. Не брать G02/G03/C03 и не менять slot/runtime semantics.
-7. Diff должен содержать только I02 + G04 + docs/correction.
-
-### Проверки
-
-AHK validate; settings-seam; frontend tests >=33; typecheck; frontend build; production build; quick fresh-config + rebuild-preserves-config. WebView slice максимум один раз; повтор того же CDP timeout зафиксировать и не ретраить бесконечно. VM/full suite не запускать.
-
-Перед завершением: factual report, commit, push `dev/integration/slots-settings-wave3`, verify remote HEAD = local HEAD, clean tree. `wip/slots-parity` не двигать.
+# ACTIVE — параллельные отдельные worktree
 
 ## TASK G02 — stale windowClass + picker identity
 
@@ -192,13 +176,15 @@ I03 интегрирует только G04 (`GeneralView.vue`, `general.ts`, an
 
 ## TASK P01 — promotion после architect review I03
 
-**Status:** BLOCKED_ON_I03_ARCH_REVIEW
-
-После проверки I03 архитектор даст агенту короткую promotion-задачу: безопасно привести `dev/wip/slots-parity` и локальный checkout `C:\Users\nerza\Projects\drawer-settings-integration` к принятой candidate-base без потери чужой работы. Пользователь Git руками не делает.
+**Status:** DONE  
+**Run ID:** `RUN-20260906-ANTIGRAVITY-P01-01`  
+**Client:** Antigravity  
+**Actual model:** Gemini 3.8 Flash High  
+Candidate Wave 3 (`395c2a0`) успешно промотирована в `dev/wip/slots-parity`, локальный checkout согласован, проверки пройдены, база готова к ручной приёмке A01.
 
 ## TASK A01 — короткая ручная приёмка
 
-**Status:** BLOCKED_ON_P01  
+**Status:** READY  
 **Executor:** пользователь
 
 Человеческий checklist:
@@ -318,12 +304,11 @@ Fresh build, rebuild preserving config, compiled Settings, clean package/version
 
 # Ближайший порядок
 
-1. Параллельно сейчас: I03 в Antigravity/Sonnet и G02 в OpenCode/Qwen, каждый в своём sibling-worktree.
-2. Архитектор проверяет I03 remote; затем P01.
-3. A01 — короткая ручная приёмка candidate-base **без G02**.
-4. Архитектор отдельно проверяет G02; после A01 — controlled integration G02, если результат принят.
-5. Затем C03 + G03 по доступным пулам.
-6. UX cleanup.
-7. Modular architecture.
-8. Test/release debt.
-9. Future product отдельно.
+1. I03 проверен архитектором, P01 выполнен: candidate-base Wave 3 промотирована в `dev/wip/slots-parity`.
+2. A01 — короткая ручная приёмка candidate-base **без G02**.
+3. Архитектор отдельно проверяет G02; после A01 — controlled integration G02, если результат принят.
+4. Затем C03 + G03 по доступным пулам.
+5. UX cleanup.
+6. Modular architecture.
+7. Test/release debt.
+8. Future product отдельно.

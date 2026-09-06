@@ -432,10 +432,13 @@ bridge, после него выполняется C6 native picker parity fix.
 
 ## Ближайшие задачи
 
-1. Settings реализован целиком: C1–C6, упаковка, General, Slots с live
+1. Integration Wave 1 объединяет C01 (persisted show/hide hotkey с runtime
+   rebind) и G01 (Settings shell и безопасная упаковка). Имя permanent-слота
+   редактируется; Tab у WebView capture оставляет обычную навигацию формы.
+2. Settings реализован целиком: C1–C6, упаковка, General, Slots с live
    status, permanent `slotEdits`, production picker, bind/release и
    conversion. Приёмка S4 целевыми сценариями в VM не проводилась.
-2. Центральная модель слота выполнена (Р22). Дальше — вынести из
+3. Центральная модель слота выполнена (Р22). Дальше — вынести из
    `src/drawer.ahk` оконную модель и кромки, каждую отдельным seam.
 3. После этого — произвольные слоты и новые UI-команды (этап 3
    `docs/05-план-работ.md`).

@@ -31,8 +31,35 @@ OnDrawerException(err, mode) {
 }
 OnError(OnDrawerException)
 
+; ==================== SettingsDwmTheme ====================
+; Приведение системного Windows titlebar к визуальному стилю Drawer
+; через DwmSetWindowAttribute (без создания custom window chrome).
+; Нативные кнопки сворачивания/закрытия, системный drag, resize,
+; snap layouts и accessibility остаются штатными средствами ОС.
+; Если атрибуты не поддерживаются (Windows 10 или старые сборки),
+; они молча игнорируются и остаётся системный fallback.
+ApplyDwmTitlebarTheme(hwnd) {
+    if !hwnd
+        return
+    ; DWMWA_USE_IMMERSIVE_DARK_MODE: 20 (Win11 / Win10 20H1+), 19 (Win10 1809)
+    hr := -1
+    try hr := DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", hwnd, "Int", 20, "Int*", 1, "Int", 4, "Int")
+    if (hr != 0) {
+        try DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", hwnd, "Int", 19, "Int*", 1, "Int", 4, "Int")
+    }
+
+    ; DWMWA_CAPTION_COLOR (35): #17181C (COLORREF 0x001C1817, matching --bg-app)
+    try DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", hwnd, "Int", 35, "UInt*", 0x001C1817, "Int", 4)
+
+    ; DWMWA_TEXT_COLOR (36): #EDEDEF (COLORREF 0x00EFEDED, matching --text)
+    try DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", hwnd, "Int", 36, "UInt*", 0x00EFEDED, "Int", 4)
+
+    ; DWMWA_BORDER_COLOR (34): #2A2E35 (COLORREF 0x00352E2A, matching Drawer accent/border)
+    try DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", hwnd, "Int", 34, "UInt*", 0x00352E2A, "Int", 4)
+}
+
 ; =========================== НАСТРОЙКИ ===========================
-; Слот — номер от 1 до 9. Хоткеи слота заданы номером и не настраиваются:
+; У каждого слота один настраиваемый show/hide hotkey; Ctrl+Alt+N — его default.
 ;   Ctrl+Alt+N        — выдвинуть / убрать окно слота
 ;   Ctrl+Alt+Shift+N  — запомнить в слоте текущее активное окно
 ;   Ctrl+Alt+0        — очистить все динамические слоты
@@ -121,13 +148,19 @@ LoadConfig(path, &diags) {
             name: IniRead(path, section, "name", "Слот " n),
             exe: exe,
             cls: IniRead(path, section, "cls", ""),
-            focusHotkey: IniRead(path, section, "focusHotkey", ""),
             monitor: IniRead(path, section, "monitor", "cursor"),
             edge: IniRead(path, section, "edge", "right"),
             width: IniRead(path, section, "width", 60),
             activateOnShow: IniBool(path, section, "activateOnShow", true, &diags),
             hideOnBlur: IniBool(path, section, "hideOnBlur", true, &diags)
         }
+    }
+
+    hotkeys := Map()
+    Loop 9 {
+        n := A_Index
+        ; Старый дополнительный hotkey намеренно не мигрируем: это была другая команда.
+        hotkeys[n] := IniRead(path, "hotkeys", "slot" n, "^!" n)
     }
 
     dynamic := {
@@ -162,7 +195,7 @@ LoadConfig(path, &diags) {
     DebugLog("[CONFIG] LoadConfig done: " perm.Count " permanent slot(s), " overrides.Count " override(s)")
     return { animMs: animMs, animSteps: animSteps, blurMs: blurMs,
              handlesOn: handlesOn, accent: handleBg,
-             perm: perm, dynamic: dynamic, overrides: overrides }
+             perm: perm, dynamic: dynamic, overrides: overrides, hotkeys: hotkeys }
 }
 
 ; "true"/"false" — единственный ожидаемый формат. Непустая строка "false"
@@ -222,12 +255,14 @@ lastFore  := 0                 ; окно, которое было активн�
 ; Номер слота — секция config.ini (slot1…slot9), поэтому дубликат или
 ; выход за 1…9 структурно невозможен, в отличие от прежних литералов.
 live := 0
+slotRegistered := Map()
 Loop 9 {
     n := A_Index
     try {
-        Hotkey(Hooked("^!" n), OnSlot.Bind(n))
+        Hotkey(Hooked(SlotHotkey(n)), OnSlot.Bind(n))
+        slotRegistered[n] := SlotHotkey(n)
         live++
-        DebugLog("[HOTKEY] Registered " Hooked("^!" n) " for Slot " n " (Toggle)")
+        DebugLog("[HOTKEY] Registered " Hooked(SlotHotkey(n)) " for Slot " n " (Show/Hide)")
     } catch as e {
         DebugLog("[HOTKEY] Failed to register ^!" n ": " e.Message)
         MsgBox("Хоткей слота " n " не назначен:`n" e.Message, "Ящик")
@@ -241,16 +276,23 @@ Loop 9 {
         MsgBox("Хоткей назначения слота " n " не назначен:`n" e.Message, "Ящик")
     }
 }
-for a in SlotPermList() {
-    if (Opt(a, "focusHotkey", "") = "")
-        continue
-    try {
-        Hotkey(Hooked(a.focusHotkey), OnFocusHotkey.Bind(a.slot))
-        live++
-        DebugLog("[HOTKEY] Registered " Hooked(a.focusHotkey) " for Slot " a.slot " (Focus, " a.name ")")
-    } catch as e {
-        DebugLog("[HOTKEY] Failed to register focusHotkey '" a.focusHotkey "' (Slot " a.slot "): " e.Message)
-        MsgBox("Хоткей фокуса " a.focusHotkey " (" a.name ") не назначен:`n" e.Message, "Ящик")
+
+RebindSlotHotkeys() {
+    global slotRegistered
+    Loop 9 {
+        n := A_Index, now := SlotHotkey(n)
+        old := slotRegistered.Has(n) ? slotRegistered[n] : ""
+        if (old = now)
+            continue
+        if (old != "")
+            try Hotkey(Hooked(old), "Off")
+        try {
+            Hotkey(Hooked(now), OnSlot.Bind(n))
+            slotRegistered[n] := now
+            DebugLog("[HOTKEY] Re-registered " Hooked(now) " for Slot " n " (Show/Hide)")
+        } catch as e {
+            DebugLog("[HOTKEY] Failed to re-register '" now "' for Slot " n ": " e.Message)
+        }
     }
 }
 try {
@@ -544,7 +586,21 @@ ForegroundWork() {
     global foreWnd, lastFore, state
     Critical()
     hwnd := foreWnd, prev := lastFore
-    if (!hwnd || !state.Has(hwnd) || !WinExist("ahk_id " hwnd))
+    if (!hwnd || !WinExist("ahk_id " hwnd))
+        return
+    ; EVENT_SYSTEM_FOREGROUND даёт lifecycle без polling: запущенное после
+    ; Drawer permanent-приложение подхватывается при первом foreground.
+    if !state.Has(hwnd) {
+        for a in SlotPermList() {
+            if (FindWindow(a) != hwnd)
+                continue
+            SlotCapture(a.slot)
+            SlotsSeedManaged()
+            SetTimer(HandlesSync, -1)
+            break
+        }
+    }
+    if !state.Has(hwnd)
         return
     if !(cfg := SlotOf(hwnd))               ; окно не наше — не трогаем
         return
@@ -580,18 +636,6 @@ Vanished(hwnd) {
 ; прежнее число, попадая в чужой слот. Реестр спрашивается в момент
 ; нажатия: слот, переставший быть постоянным, просто ничего не делает.
 ;
-; Сама клавиша остаётся той, что была назначена при старте:
-; перерегистрации нет, и правка focusHotkey по-прежнему вступает в силу
-; после перезапуска — ровно так, как подписано в форме настроек.
-OnFocusHotkey(n, *) {
-    DebugLog("[HOTKEY] Pressed focusHotkey for Slot " n)
-    try
-        SlotFocus(n)
-    catch as e {
-        DebugLog("[EXCEPTION] OnFocusHotkey(" n "): " e.Message)
-        Notify("Сбой: " e.Message, "Ящик", 3)
-    }
-}
 
 ; Назначение слота по хоткею Ctrl+Alt+Shift+N. Показывает уведомление.
 BindSlot(n) {
@@ -1779,6 +1823,7 @@ BugReportShow(*) {
     capturedActiveForBug := activeHwnd
 
     g := Gui("+AlwaysOnTop", "Нашёл баг — Ящик")
+    ApplyDwmTitlebarTheme(g.Hwnd)
     g.MarginX := 12, g.MarginY := 12
     g.SetFont("s9", "Segoe UI")
 
@@ -1837,13 +1882,12 @@ BugReportRecord(comment, activeHwnd) {
         exe := (wnd && WinExist("ahk_id " wnd)) ? WinGetProcessName("ahk_id " wnd) : ""
 
         if s.perm {
-            hk := "^!" n
-            fhk := s.perm.focusHotkey != "" ? s.perm.focusHotkey : "(none)"
-            info := Format("  Slot {} [perm]: HWND={} ({}) status='{}' hotkey='{}' focusHotkey='{}' exe='{}' name='{}' title='{}'",
-                           n, wndHex, wnd, statusName, hk, fhk, s.perm.exe, s.perm.name, title)
+            hk := SlotHotkey(n)
+            info := Format("  Slot {} [perm]: HWND={} ({}) status='{}' showHideHotkey='{}' exe='{}' name='{}' title='{}'",
+                           n, wndHex, wnd, statusName, hk, s.perm.exe, s.perm.name, title)
         } else {
-            hk := "^!" n
-            info := Format("  Slot {} [dyn]:  HWND={} ({}) status='{}' hotkey='{}' title='{}' override={}",
+            hk := SlotHotkey(n)
+            info := Format("  Slot {} [dyn]:  HWND={} ({}) status='{}' showHideHotkey='{}' title='{}' override={}",
                            n, wndHex, wnd, statusName, hk, title, (s.override ? "yes" : "no"))
         }
         lines.Push(info)
@@ -1870,7 +1914,7 @@ SettingsShow() {
 ; Поля слота — в том же порядке, в каком они описаны в config.ini.
 SettingsFields() {
     return ["name", "exe", "cls", "monitor", "edge", "width",
-            "activateOnShow", "hideOnBlur", "focusHotkey"]
+            "activateOnShow", "hideOnBlur", "hotkey"]
 }
 
 SettingsIsBool(key) {
@@ -1887,7 +1931,7 @@ SettingsFieldLabel(key) {
         "width", "Ширина (%)",
         "activateOnShow", "Активация",
         "hideOnBlur", "Автоскрытие",
-        "focusHotkey", "Хоткей фокуса")
+        "hotkey", "Горячая клавиша")
     return labels[key]
 }
 
@@ -1896,7 +1940,7 @@ SettingsFieldLabel(key) {
 ; нельзя тронуть, не сделав слот постоянным.
 SettingsReadOnlyFields() {
     return ["name", "exe", "monitor", "edge", "width",
-            "activateOnShow", "focusHotkey"]
+            "activateOnShow", "hotkey"]
 }
 
 ; Человеческое значение поля для панели «только чтение» — то же самое,
@@ -1914,8 +1958,8 @@ SettingsDisplayVal(cfg, key, n) {
     }
     if (key = "exe" && !cfg.HasOwnProp("exe"))
         return "(пусто)"
-    if (key = "focusHotkey" && !cfg.HasOwnProp("focusHotkey"))
-        return "Ctrl + Alt + " n
+    if (key = "hotkey")
+        return HotkeyAhkToHuman(Opt(cfg, "hotkey", SlotHotkey(n)))
     return SettingsVal(cfg, key)
 }
 
@@ -1953,7 +1997,7 @@ SettingsSrc(sections, key, live, isBool) {
 }
 
 ; Значение поля для показа. Поля может не быть вовсе: у динамического
-; слота нет ни exe, ни cls, ни focusHotkey. Подставить туда пустую
+; слота нет ни exe, ни cls, ни отдельного hotkey. Подставить туда пустую
 ; строку значило бы выдумать отсутствующую настройку.
 SettingsVal(cfg, key) {
     if !cfg.HasOwnProp(key)
@@ -2046,7 +2090,7 @@ SettingsPickWindow(owner) {
 
     g := Gui("+Owner" owner.Hwnd " -MinimizeBox", "Ящик — выбор окна")
     g.BackColor := "17181C"
-    try DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", g.Hwnd, "Int", 20, "Int*", 1, "Int", 4)
+    ApplyDwmTitlebarTheme(g.Hwnd)
     g.SetFont("s9 cEDEDEF", "Segoe UI")
     g.Add("Text", "x12 y10 w460 h20 cEDEDEF",
           cands.Length ? "Окно, которое сейчас открыто:" : "Подходящих окон не найдено.")
@@ -2206,7 +2250,7 @@ SettingsEffective(ui, r) {
         return r
     e := ui.edits[r.n]
     if (e.kind = "dyn")
-        return { n: r.n, kind: "dyn", cfg: SlotCfg(r.n),
+        return { n: r.n, kind: "dyn", cfg: SettingsEditSeed(r.n),
                  sections: SlotOverride(r.n) ? ["dynamicSlot" r.n, "dynamic"] : ["dynamic"],
                  pending: true }
     return { n: r.n, kind: "perm", cfg: e, sections: ["slot" r.n], pending: true }
@@ -2220,13 +2264,13 @@ SettingsEditSeed(n) {
         return { kind: "perm", name: a.name, exe: a.exe, cls: a.cls,
                  monitor: a.monitor, edge: a.edge, width: a.width,
                  activateOnShow: a.activateOnShow, hideOnBlur: a.hideOnBlur,
-                 focusHotkey: a.focusHotkey }
+                 hotkey: SlotHotkey(n) }
     }
     d := SlotCfg(n)
     return { kind: "perm", name: "Слот " n, exe: "", cls: "",
              monitor: d.monitor, edge: d.edge, width: d.width,
              activateOnShow: d.activateOnShow, hideOnBlur: d.hideOnBlur,
-             focusHotkey: "" }
+             hotkey: SlotHotkey(n) }
 }
 
 ; Буфер правки вернулся к тому же, с чего начался SettingsEditSeed(n), —
@@ -2252,8 +2296,13 @@ SettingsSlotEdited(ui, key, val) {
     n := ui.editingSlot
     if !n
         return
-    if !ui.edits.Has(n)
+    if !ui.edits.Has(n) {
         ui.edits[n] := SettingsEditSeed(n)
+        ; Редактирование dynamic не должно неявно превращать его в perm:
+        ; род меняет только отдельная команда conversion.
+        if !SlotIsPermanent(n)
+            ui.edits[n].kind := "dyn"
+    }
     ui.edits[n].%key% := val
     if SettingsSlotUnchanged(ui.edits[n], n)
         ui.edits.Delete(n)
@@ -2412,7 +2461,7 @@ SettingsFill(box, valc, srcc, r) {
         srcc[i].Text := r.cfg.HasOwnProp(key)
                       ? SettingsSrc(r.sections, key, r.cfg.%key%,
                                     SettingsIsBool(key))
-                      : (key = "focusHotkey" ? "по номеру" : "по умолчанию")
+                      : "по умолчанию"
     }
 }
 
@@ -2431,8 +2480,8 @@ SettingsFillEditable(ui, ef) {
     ui.eWidth.Value := String(Opt(cfg, "width", 60))
     ui.eAct.Value   := Opt(cfg, "activateOnShow", true) ? 1 : 0
     ui.eBlur.Value  := Opt(cfg, "hideOnBlur", true) ? 1 : 0
-    ui.eFocus.Value := HotkeyAhkToHuman(Opt(cfg, "focusHotkey", ""))
-    ui.primaryHotkey.Text := "Основной: Ctrl + Alt + " ef.n " (не настраивается)"
+    ; Native Hotkey control сам захватывает сочетание, не принимает AHK-текст.
+    ui.eFocus.Value := Opt(cfg, "hotkey", SlotHotkey(ef.n))
     ui.editingSlot  := ef.n
     ui.box.Text := "Слот " ef.n . (ef.HasOwnProp("pending") ? "  ·  не сохранено" : "")
     ui.populating := false
@@ -2444,7 +2493,7 @@ SettingsFillEditable(ui, ef) {
 SettingsFillRow(ui, idx) {
     r  := ui.slotsRows[idx]
     ef := SettingsEffective(ui, r)
-    editable := r.n && (ef.kind = "perm")
+    editable := r.n
 
     for c in ui.roCtl
         c.Visible := !editable
@@ -2468,9 +2517,36 @@ SettingsFillRow(ui, idx) {
 
     if r.n {
         ui.convert.Visible := true
-        ui.convert.Text := editable ? "Сделать динамическим…" : "Сделать постоянным…"
+        ui.convert.Text := ef.kind = "perm" ? "Сделать динамическим…" : "Сделать постоянным…"
+        ui.release.Visible := ef.kind = "dyn" && SlotWindow(r.n)
+        ui.resetDyn.Visible := ef.kind = "dyn"
     } else
-        ui.convert.Visible := false
+        ui.convert.Visible := ui.release.Visible := ui.resetDyn.Visible := false
+}
+
+SettingsDynamicReleaseClick(ui) {
+    n := ui.editingSlot
+    if (!n || SlotIsPermanent(n))
+        return
+    res := SlotRelease(n)
+    if res.ok
+        Notify(res.message, "Ящик")
+    else
+        Notify(res.message, "Ящик", 2)
+    SettingsSlotsRefreshAll(ui)
+    SettingsFillRow(ui, ui.selectedSlot)
+}
+
+SettingsDynamicResetClick(ui) {
+    n := ui.editingSlot
+    if (!n || SlotIsPermanent(n))
+        return
+    d := SlotDefaults()
+    ui.edits[n] := { kind: "dyn", width: d.width, edge: d.edge, monitor: d.monitor,
+                     activateOnShow: d.activateOnShow, hideOnBlur: d.hideOnBlur,
+                     hotkey: SlotHotkey(n) }
+    SettingsFillRow(ui, ui.selectedSlot)
+    SettingsSlotRowPaint(ui, ui.selectedSlot)
 }
 
 ; Кнопка смены типа слота. Само переключение только готовит буфер правок
@@ -2495,7 +2571,8 @@ SettingsConvertClick(ui) {
         ; [dynamicSlotN], если оно есть, без пяти пустых полей.
         d := SlotCfg(r.n)
         ui.edits[r.n] := { kind: "dyn", width: d.width, edge: d.edge, monitor: d.monitor,
-                            activateOnShow: d.activateOnShow, hideOnBlur: d.hideOnBlur }
+                            activateOnShow: d.activateOnShow, hideOnBlur: d.hideOnBlur,
+                            hotkey: SlotHotkey(r.n) }
     } else
         ui.edits[r.n] := SettingsEditSeed(r.n)
     SettingsFillRow(ui, idx)
@@ -2845,7 +2922,7 @@ SettingsOpen() {
     ; WebView2.
     g := Gui("-MaximizeBox", "Drawer — Settings")
     g.BackColor := "17181C"
-    try DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", g.Hwnd, "Int", 20, "Int*", 1, "Int", 4)
+    ApplyDwmTitlebarTheme(g.Hwnd)
     g.SetFont("s9 cEDEDEF", "Segoe UI")
 
     ui := {}
@@ -3055,6 +3132,12 @@ SettingsOpen() {
     ui.convert := SettingsMk(panelSlots,
         g.Add("Button", "+0x8000 x" (detailX + detailW - 190 - 14) " y" (detailY + 8) " w190 h26", "Сделать постоянным…"))
     ui.convert.OnEvent("Click", (*) => SettingsConvertClick(ui))
+    ui.release := SettingsMk(panelSlots,
+        g.Add("Button", "+0x8000 x" (detailX + detailW - 190 - 14) " y" (detailY + 42) " w190 h26", "Освободить слот"))
+    ui.release.OnEvent("Click", (*) => SettingsDynamicReleaseClick(ui))
+    ui.resetDyn := SettingsMk(panelSlots,
+        g.Add("Button", "+0x8000 x" (detailX + detailW - 190 - 14) " y" (detailY + 76) " w190 h26", "Сбросить к General"))
+    ui.resetDyn.OnEvent("Click", (*) => SettingsDynamicResetClick(ui))
     panelSlots.Push(g.Add("Text", "x" (detailX + pad) " y" (detailY + 38) " w" (detailW - 2 * pad) " h1 Background2A2C33", ""))
 
     fx := detailX + pad, fLabelW := 130, fValX := fx + fLabelW + 8
@@ -3077,9 +3160,9 @@ SettingsOpen() {
         y := detailY + 44 + (i - 1) * 30
         ; У динамического слота эта строка — не "хоткей фокуса" (такого
         ; поля у него нет вовсе), а основной Ctrl+Alt+N, который ящик
-        ; назначает по номеру. SettingsFieldLabel() называет focusHotkey
+        ; назначает по номеру. SettingsFieldLabel() называет hotkey
         ; для ПОСТОЯННОГО слота — здесь нужна отдельная, более общая подпись.
-        label := (key = "focusHotkey") ? "Хоткей" : SettingsFieldLabel(key)
+        label := (key = "hotkey") ? "Хоткей" : SettingsFieldLabel(key)
         roLabels.Push(SettingsMk(panelSlots, g.Add("Text", "x" fx " y" y " w" fLabelW " h18", label)))
         valc.Push(SettingsMk(panelSlots, g.Add("Text", "x" fValX " y" y " w100 h18", "")))
         g.SetFont("c9A9CA3")
@@ -3108,7 +3191,7 @@ SettingsOpen() {
 
     ; Те же девять полей, редактируемые — поверх valc/srcc, видны только
     ; когда выбранный слот постоянный (или готовится им стать). yExe,
-    ; yCls и yFocus — те же y, что и у полей exe/cls/focusHotkey в цикле
+    ; yCls и yFocus — те же y, что и у полей exe/cls/hotkey в цикле
     ; выше (i=2,3,9), чтобы кнопки и пояснение встали в свои строки.
     yExe := detailY + 44 + (2 - 1) * 30
     yCls := detailY + 44 + (3 - 1) * 30
@@ -3127,20 +3210,14 @@ SettingsOpen() {
     ui.eWidth := SettingsMk(panelSlots, g.Add("Edit", "-E0x200 Background252A31 x" fValX " y" (detailY + 44 + 5 * 30) " w60 h26 Number Limit3"))
     ui.eAct   := SettingsMk(panelSlots, g.Add("CheckBox", "x" fValX " y" (detailY + 44 + 6 * 30 + 3) " w226 h20", "Активировать окно при выезде"))
     ui.eBlur  := SettingsMk(panelSlots, g.Add("CheckBox", "x" fValX " y" (detailY + 44 + 7 * 30 + 3) " w226 h20", "Убирать окно, когда фокус ушёл"))
-    ui.eFocus := SettingsMk(panelSlots, g.Add("Edit", "-E0x200 Background252A31 x" fValX " y" yFocus " w160 h26"))
+    ui.eFocus := SettingsMk(panelSlots, g.Add("Hotkey", "x" fValX " y" yFocus " w160 h26"))
     g.SetFont("s8 c9A9CA3")
-    focusCaption := SettingsMk(panelSlots, g.Add("Text", "x" fValX " y" (yFocus + 27) " w220 h16", "дополнительный, после перезапуска"))
-    ; Основной хоткей слота — Ctrl+Alt+N — ящик назначает сам номером
-    ; слота и не даёт настраивать; без этой подписи рядом единственное
-    ; видимое поле "Хоткей фокуса" читалось бы как единственный хоткей
-    ; слота вообще. Текст выставляется в SettingsFillEditable() по номеру
-    ; текущего слота.
-    ui.primaryHotkey := SettingsMk(panelSlots, g.Add("Text", "x" (fValX + 172) " y" (yFocus + 5) " w260 h32", ""))
+    focusCaption := SettingsMk(panelSlots, g.Add("Text", "x" fValX " y" (yFocus + 27) " w220 h16", "show/hide, применяется сразу"))
     g.SetFont("s9 cEDEDEF")
 
     ui.editCtl := [ui.eName, ui.eExe, ui.eExeBrowse, ui.eExeWindow, ui.eCls, clsInfo,
                    ui.eMon, ui.eEdge, ui.eWidth, ui.eAct, ui.eBlur, ui.eFocus, focusCaption,
-                   ui.primaryHotkey, editLabels*]
+                   editLabels*]
 
     ui.eName.OnEvent("Change",  (*) => SettingsSlotEdited(ui, "name", ui.eName.Value))
     ui.eExe.OnEvent("Change",   (*) => SettingsSlotEdited(ui, "exe", ui.eExe.Value))
@@ -3150,7 +3227,7 @@ SettingsOpen() {
     ui.eWidth.OnEvent("Change", (*) => SettingsSlotEdited(ui, "width", ui.eWidth.Value))
     ui.eAct.OnEvent("Click",    (*) => SettingsSlotEdited(ui, "activateOnShow", ui.eAct.Value))
     ui.eBlur.OnEvent("Click",   (*) => SettingsSlotEdited(ui, "hideOnBlur", ui.eBlur.Value))
-    ui.eFocus.OnEvent("Change", (*) => SettingsSlotEdited(ui, "focusHotkey", ui.eFocus.Value))
+    ui.eFocus.OnEvent("Change", (*) => SettingsSlotEdited(ui, "hotkey", ui.eFocus.Value))
     ui.eExeBrowse.OnEvent("Click", (*) => SettingsSlotExePick(ui))
     ui.eExeWindow.OnEvent("Click", (*) => SettingsSlotWindowPick(ui))
 
@@ -3459,8 +3536,8 @@ HotkeyAhkToHuman(ahk) {
 SettingsHotkeyConflict(ahk, n) {
     want := Hooked(ahk)
     Loop 9 {
-        if (Hooked("^!" A_Index) = want)
-            return "Ctrl+Alt+" A_Index " — показать/убрать слот " A_Index
+        if (A_Index != n && Hooked(SlotHotkey(A_Index)) = want)
+            return "show/hide hotkey слота " A_Index
         if (Hooked("^!+" A_Index) = want)
             return "Ctrl+Alt+Shift+" A_Index " — назначить слот " A_Index
     }
@@ -3468,14 +3545,15 @@ SettingsHotkeyConflict(ahk, n) {
         return "Ctrl+Alt+0 — очистить динамические слоты"
     if (Hooked("^!+0") = want)
         return "Ctrl+Alt+Shift+0 — выход"
-    for a in SlotPermList() {
-        if (a.slot = n)
-            continue
-        hk := Opt(a, "focusHotkey", "")
-        if (hk != "" && Hooked(hk) = want)
-            return "слот " a.slot " (" a.name ")"
-    }
     return ""
+}
+
+SettingsLiveHotkey(n) {
+    return SlotHotkey(n)
+}
+
+SettingsHotkeyWrites(n, hotkey) {
+    return SettingsLiveHotkey(n) = hotkey ? [] : [{ sec: "hotkeys", key: "slot" n, val: hotkey }]
 }
 
 ; Дополнительный хоткей постоянного слота (не путать с основным
@@ -3611,6 +3689,19 @@ SettingsGeneralPlan(input, &err) {
     return out
 }
 
+; Итоговые общие значения для одного Save. План слотов строится до записи
+; на диск, поэтому SlotDefaults() здесь ещё содержит старый General.
+; Наложение уже вычисленных General writes даёт dynamic overrides ровно
+; относительно draft, который этот же Save сохранит.
+SettingsDynamicFinal(generalWrites) {
+    dynamic := SettingsBehaviorCopy(SlotDefaults())
+    for w in generalWrites {
+        if (w.sec = "dynamic")
+            dynamic.%w.key% := w.val
+    }
+    return dynamic
+}
+
 ; UI-adapter: только читает setUI и переводит DropDownList в смысловые
 ; значения. Валидацию и сравнение с runtime делает SettingsGeneralPlan —
 ; backend-seam controls/GUI не видит.
@@ -3678,7 +3769,7 @@ SettingsSlotFieldLabel(n, key := "") {
         "name",           "имя",
         "executable",     "файл (exe)",
         "windowClass",    "класс окна",
-        "focusHotkey",    "хоткей фокуса",
+        "hotkey",         "горячая клавиша",
         "widthPercent",   "размер окна",
         "edge",           "край",
         "monitor",        "монитор",
@@ -3699,6 +3790,16 @@ SettingsSlotValidate(n, e, &err, &field?) {
     if (err != "")
         return
     field := ""
+    ; При conversion живой dynamic становится permanent из того же окна.
+    if (Trim(e.exe) = "" && !SlotIsPermanent(n) && (hwnd := SlotWindow(n))) {
+        try {
+            SplitPath(WinGetProcessPath("ahk_id " hwnd), &file)
+            e.exe := file
+            e.cls := WinGetClass("ahk_id " hwnd)
+            if (Trim(e.name) = "" || Trim(e.name) = "Слот " n)
+                e.name := WinGetTitle("ahk_id " hwnd)
+        }
+    }
     if (Trim(e.exe) = "") {
         err := "Слот " n ": exe обязателен для постоянного слота"
         field := "slots." n ".executable"
@@ -3724,9 +3825,9 @@ SettingsSlotWrites(n, e, &err, &field?) {
     name := SettingsTextIn(e.name, lbl "имя", &err)
     exe  := SettingsTextIn(e.exe, lbl "файл (exe)", &err)
     cls  := SettingsTextIn(e.cls, lbl "класс окна", &err)
-    hk   := SettingsHotkeyIn(e.focusHotkey, SettingsLiveSlot(n, "focusHotkey"), lbl "хоткей фокуса", n, &err)
+    hk   := SettingsHotkeyIn(e.hotkey, SettingsLiveHotkey(n), lbl "горячая клавиша", n, &err)
     if (err != "" && field = "")
-        field := "slots." n ".focusHotkey"
+        field := "slots." n ".hotkey"
     mon  := SettingsMonitorIn(String(e.monitor), lbl "монитор", true, &err)
     edge := SettingsEdgeIn(e.edge, lbl "край", true, &err)
     act  := SettingsBoolIn(e.activateOnShow, lbl "активация", &err)
@@ -3740,14 +3841,15 @@ SettingsSlotWrites(n, e, &err, &field?) {
              { key: "edge", val: edge },
              { key: "width", val: String(w) },
              { key: "activateOnShow", val: act ? "true" : "false" },
-             { key: "hideOnBlur", val: blur ? "true" : "false" },
-             { key: "focusHotkey", val: hk }]
+             { key: "hideOnBlur", val: blur ? "true" : "false" }]
     out := []
     for c in cand {
         if (SettingsLiveSlot(n, c.key) = c.val)
             continue
         out.Push({ sec: "slot" n, key: c.key, val: c.val })
     }
+    for w in SettingsHotkeyWrites(n, hk)
+        out.Push(w)
     return out
 }
 
@@ -3756,11 +3858,14 @@ SettingsSlotWrites(n, e, &err, &field?) {
 ; отличается от общего. Совпал с общим — ключ уходит из секции, и слот
 ; снова следует за General; ушли все — секция удаляется целиком. Иначе
 ; правка одного поля молча пришпилила бы к слоту и остальные четыре.
-SettingsDynSlotWrites(n, e, &err, &field?) {
+SettingsDynSlotWrites(n, e, dynamic, &err, &field?) {
     if (err != "")
         return { writes: [], keyDeletes: [], empty: true }
     field := ""
     lbl := "Слот " n ": "
+    hk   := SettingsHotkeyIn(e.hotkey, SettingsLiveHotkey(n), lbl "горячая клавиша", n, &err)
+    if (err != "" && field = "")
+        field := "slots." n ".hotkey"
     w    := SettingsNum(String(e.width), 5, 100, lbl "размер окна", &err)
     if (err != "")
         field := "slots." n ".widthPercent"
@@ -3772,7 +3877,6 @@ SettingsDynSlotWrites(n, e, &err, &field?) {
         return { writes: [], keyDeletes: [], empty: true }
     sec := "dynamicSlot" n
     own := SlotOverride(n)
-    dynamic := SlotDefaults()
     cand := [{ key: "monitor", val: mon, shared: String(Opt(dynamic, "monitor", "cursor")) },
              { key: "edge", val: edge, shared: String(Opt(dynamic, "edge", "right")) },
              { key: "width", val: String(w), shared: String(Opt(dynamic, "width", 60)) },
@@ -3795,6 +3899,8 @@ SettingsDynSlotWrites(n, e, &err, &field?) {
         if (live != c.val)
             writes.Push({ sec: sec, key: c.key, val: c.val })
     }
+    for hotkeyWrite in SettingsHotkeyWrites(n, hk)
+        writes.Push(hotkeyWrite)
     return { writes: writes, keyDeletes: keyDeletes, empty: kept = 0 }
 }
 
@@ -3805,7 +3911,7 @@ SettingsDynSlotWrites(n, e, &err, &field?) {
 ; SettingsGeneralPlan(): первая ошибка отменяет весь план, наполовину не
 ; пишем. Плюс read-only снимок текущих identity/bindings — он нужен
 ; SettingsReconcileRuntime() уже ПОСЛЕ диска, а не для записи здесь.
-SettingsSlotsPlan(edits, &err) {
+SettingsSlotsPlan(edits, &err, dynamic := 0) {
     err := ""
     ; Адрес поля, на котором план остановился: форме по нему выбирать
     ; слот и подсвечивать контрол. Пустым остаётся только там, где
@@ -3816,6 +3922,7 @@ SettingsSlotsPlan(edits, &err) {
     ; или его надстройка опустела); keyDeletes — отдельные ключи
     ; надстройки, вернувшиеся к общему значению.
     writes := [], deletes := [], dynDeletes := [], keyDeletes := []
+    dynamic := dynamic ? dynamic : SlotDefaults()
     if edits {
         for n, e in edits {
             ; Номер и тип слота native задаёт сам строкой списка, поэтому
@@ -3837,7 +3944,7 @@ SettingsSlotsPlan(edits, &err) {
                 ; надстройки уже динамического слота секцию не трогает.
                 if SlotPerm(n)
                     deletes.Push(n)
-                got := SettingsDynSlotWrites(n, e, &err, &field)
+                got := SettingsDynSlotWrites(n, e, dynamic, &err, &field)
                 if (err != "") {
                     if (field = "")
                         field := "slots." n
@@ -3880,10 +3987,11 @@ SettingsSlotsPlanFail(field) {
 }
 
 ; UI-adapter: тонкая обёртка над буфером setUI.edits.
-SettingsSlotsCollect(&err) {
+SettingsSlotsCollect(generalWrites, &err) {
     global setUI
     err := ""
-    return SettingsSlotsPlan(setUI ? setUI.edits : 0, &err)
+    return SettingsSlotsPlan(setUI ? setUI.edits : 0, &err,
+                            SettingsDynamicFinal(generalWrites))
 }
 
 ; -------- ОБЩИЙ SEAM: persistence+verify -> runtime reconciliation --------
@@ -4115,6 +4223,7 @@ SettingsReconcileRuntime(slotPlan, &diags) {
     HandleRepaintAll()
 
     Slots.Apply(cfg, slotPlan.prevPerm)
+    RebindSlotHotkeys()
     SlotsSeedManaged()
 
     SetTimer(HandlesSync, -1)
@@ -4154,10 +4263,12 @@ SettingsStateSnapshot() {
                                 width: a.width,
                                 activateOnShow: a.activateOnShow,
                                 hideOnBlur: a.hideOnBlur,
-                                focusHotkey: Opt(a, "focusHotkey", "") } })
+                                hotkey: SlotHotkey(n) } })
         else
             slots.Push({ n: n, kind: "dyn", status: SlotStatus(n),
-                         cfg: SettingsBehaviorCopy(SlotCfg(n)) })
+                         cfg: { monitor: SlotCfg(n).monitor, edge: SlotCfg(n).edge,
+                                width: SlotCfg(n).width, activateOnShow: SlotCfg(n).activateOnShow,
+                                hideOnBlur: SlotCfg(n).hideOnBlur, hotkey: SlotHotkey(n) } })
     }
     return { general: { dynamicDefaults: SettingsBehaviorCopy(SlotDefaults()),
                         handlesEnabled: handlesOn, animMs: animMs,
@@ -4194,17 +4305,10 @@ SettingsSectionSlot(sec) {
     return Integer(RegExReplace(sec, "^\D+"))
 }
 
-; Слоты, у которых изменился focusHotkey. Хоткеи регистрируются один раз
-; при старте (см. цикл по SlotPermList() в начале файла), и Save их не
-; переставляет — это принятое поведение C1, а не недоделка. Контракт
-; называет этот список restartRequiredFields; текст native статус-строки
-; C4 не меняет, поле нужно клиенту порта.
+; Show/hide hotkey применяется Runtime без restart; поле сохранено в
+; outcome только для совместимости протокола Settings.
 SettingsRestartRequired(slotPlan) {
-    out := []
-    for w in slotPlan.writes
-        if (w.key = "focusHotkey")
-            out.Push(SettingsSectionSlot(w.sec))
-    return out
+    return []
 }
 
 ; Строгая последовательность validate/plan (уже выполнен вызывающей
@@ -4310,7 +4414,7 @@ SettingsSnapshot() {
         s .= "|s" n ":" e.kind
         if (e.kind = "perm")
             s .= "," e.name "," e.exe "," e.cls "," e.monitor "," e.edge ","
-               . e.width "," e.activateOnShow "," e.hideOnBlur "," e.focusHotkey
+               . e.width "," e.activateOnShow "," e.hideOnBlur "," e.hotkey
     }
     return s
 }
@@ -4353,7 +4457,7 @@ SettingsSave(closeAfter) {
     ; Slots собираются и проверяются тем же проходом, что и General:
     ; одна ошибка в любой вкладке отменяет запись обеих — наполовину не
     ; сохраняем.
-    slotPlan := SettingsSlotsCollect(&err)
+    slotPlan := SettingsSlotsCollect(vals, &err)
     if (err != "") {
         SettingsStatus(err, true)
         return
