@@ -217,6 +217,7 @@ function triggerCustomColor() {
               data-testid="animMs"
               :disabled="!customAnim"
               v-model="d.animMs"
+              @input="d.animCustom = true"
             />
           </div>
         </div>
@@ -230,6 +231,7 @@ function triggerCustomColor() {
               data-testid="animSteps"
               :disabled="!customAnim"
               v-model="d.animSteps"
+              @input="d.animCustom = true"
             />
           </div>
         </div>

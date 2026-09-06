@@ -26,6 +26,7 @@ export type GeneralDraft = {
   handlesEnabled: boolean
   animMs: string
   animSteps: string
+  animCustom?: boolean
   blurCheckMs: string
   accent: string
 }
@@ -55,8 +56,17 @@ export const ACCENT_PALETTE = [
   '2E2E2E',
 ]
 
+export function isCustomAnim(animMs: string, animSteps: string): boolean {
+  if (animSteps.trim() === '0') return false
+  for (const p of ANIM_PRESETS)
+    if (num(animMs) === p.ms && num(animSteps) === p.steps) return false
+  return true
+}
+
 export function draftFromState(g: GeneralSettings): GeneralDraft {
   const m = g.dynamicDefaults.monitor
+  const animMs = String(g.animation.durationMs)
+  const animSteps = String(g.animation.steps)
   return {
     widthPercent: String(g.dynamicDefaults.widthPercent),
     edge: g.dynamicDefaults.edge,
@@ -66,8 +76,9 @@ export function draftFromState(g: GeneralSettings): GeneralDraft {
     activateOnShow: g.dynamicDefaults.activateOnShow,
     hideOnBlur: g.dynamicDefaults.hideOnBlur,
     handlesEnabled: g.handlesEnabled,
-    animMs: String(g.animation.durationMs),
-    animSteps: String(g.animation.steps),
+    animMs,
+    animSteps,
+    animCustom: isCustomAnim(animMs, animSteps),
     blurCheckMs: String(g.blurCheckMs),
     accent: g.accent,
   }
@@ -106,7 +117,10 @@ export function num(s: string): number {
 // Какой пункт списка «Плавность» соответствует паре чисел. Пара, не
 // совпавшая ни с одним пресетом, показывается как «Своя» вместе с
 // настоящими числами: молча округлять чужие значения нельзя.
+// Во время сеанса редактирования явный выбор «Своя» фиксируется в черновике,
+// чтобы поля открывались для ввода даже при исходно совпадающей паре чисел.
 export function animPreset(d: GeneralDraft): string {
+  if (d.animCustom) return 'custom'
   if (d.animSteps.trim() === '0') return 'none'
   for (const p of ANIM_PRESETS)
     if (num(d.animMs) === p.ms && num(d.animSteps) === p.steps) return p.id
@@ -114,7 +128,11 @@ export function animPreset(d: GeneralDraft): string {
 }
 
 export function applyAnimPreset(d: GeneralDraft, id: string): void {
-  if (id === 'custom') return
+  if (id === 'custom') {
+    d.animCustom = true
+    return
+  }
+  d.animCustom = false
   if (id === 'none') {
     d.animSteps = '0'
     return
