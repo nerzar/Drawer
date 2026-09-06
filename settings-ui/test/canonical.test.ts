@@ -23,7 +23,7 @@ const behavior: SlotBehavior = {
 }
 
 function permValue(name: string, exe: string): PermanentSlotValue {
-  return { ...behavior, name, executable: exe, windowClass: '', focusHotkey: '' }
+  return { ...behavior, name, executable: exe, windowClass: '', hotkey: 'Ctrl + Alt + F2' }
 }
 
 function perm(number: 1 | 2 | 3, name = 'Steam', exe = 'steam.exe'): SlotState {
@@ -36,6 +36,7 @@ function dyn(number: 1 | 2 | 3): SlotState {
     kind: 'dynamic',
     label: `Слот ${number}`,
     effective: behavior,
+    hotkey: 'Ctrl + Alt + F2',
     permanentDefaults: permValue(`Слот ${number}`, ''),
     status: { state: 'empty' },
   }
@@ -191,7 +192,7 @@ test('«сделать динамическим» уезжает правкой 
   assert.equal(edits.length, 1)
   assert.equal(edits[0].number, 1)
   assert.equal(edits[0].kind, 'dynamic')
-  assert.deepEqual(edits[0].kind === 'dynamic' && edits[0].value, behavior)
+  assert.deepEqual(edits[0].kind === 'dynamic' && edits[0].value, { ...behavior, hotkey: 'Ctrl + Alt + F2' })
 })
 
 test('«сделать постоянным» уезжает полным значением из засева', () => {
@@ -205,7 +206,7 @@ test('«сделать постоянным» уезжает полным зна
   assert.equal(edits[0].kind === 'permanent' && edits[0].value.name, 'Слот 2')
 })
 
-test('правка надстройки динамического слота уезжает пятью ключами поведения', () => {
+test('правка dynamic слота сохраняет поведение и hotkey номера', () => {
   const canonical = state(perm(1), dyn(2))
   const drafts = slotDraftsFromState(canonical)
   drafts[2]!.widthPercent = '35'
@@ -215,7 +216,8 @@ test('правка надстройки динамического слота у
   assert.equal(edits[0].kind, 'dynamic')
   const value = edits[0].kind === 'dynamic' ? edits[0].value : null
   assert.equal(value!.widthPercent, 35)
-  assert.equal(Object.keys(value!).length, 5, 'имени и exe у динамического слота нет')
+  assert.equal(value!.hotkey, 'Ctrl + Alt + F2')
+  assert.equal(Object.keys(value!).length, 6, 'имени и exe у dynamic слота нет')
 })
 
 test('динамический слот без правок в Save не едет', () => {

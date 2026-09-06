@@ -51,7 +51,7 @@ export type PermanentSlotValue = SlotBehavior & {
   name: string
   executable: string
   windowClass: string
-  focusHotkey: string
+  hotkey: string
 }
 
 // application — как называется приложение окна: описание из ресурсов exe
@@ -74,6 +74,7 @@ export type SlotState =
       kind: 'dynamic'
       label: string
       effective: SlotBehavior
+      hotkey: string
       permanentDefaults: PermanentSlotValue
       status: SlotStatus
     }
@@ -96,12 +97,12 @@ export type SettingsState = {
 // снести опустевшую надстройку, убрать вернувшийся к общему ключ —
 // решает план в AHK: он один знает, чем слот был.
 export type SlotEdit =
-  | { number: SlotNumber; kind: 'dynamic'; value: SlotBehavior }
+  | { number: SlotNumber; kind: 'dynamic'; value: SlotBehavior & { hotkey: string } }
   | { number: SlotNumber; kind: 'permanent'; value: PermanentSlotValue }
 
 export type SettingsDraft = { general: GeneralSettings; slotEdits: SlotEdit[] }
 
-export type RestartRequiredField = `slots.${SlotNumber}.focusHotkey`
+export type RestartRequiredField = `slots.${SlotNumber}.hotkey`
 
 export type SaveResult = {
   saved: boolean

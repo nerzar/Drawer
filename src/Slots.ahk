@@ -53,6 +53,7 @@ class Slot {
     override := 0    ; надстройка [dynamicSlotN] или 0
     window   := 0    ; окно слота в этой сессии: кэш у постоянного,
                      ; привязка у динамического
+    hotkey   := ""   ; show/hide hotkey, принадлежит номеру, а не lifecycle
 
     __New(n) {
         this.n := n
@@ -153,6 +154,7 @@ class Slots {
             n := A_Index, s := Slots.Get(n)
             s.perm     := cfg.perm.Has(n)      ? cfg.perm[n]      : 0
             s.override := cfg.overrides.Has(n) ? cfg.overrides[n] : 0
+            s.hotkey   := cfg.hotkeys.Has(n) ? cfg.hotkeys[n] : "^!" n
             s.window   := 0
         }
 
@@ -192,9 +194,9 @@ class Slots {
         Loop Slots.COUNT {
             n := A_Index, s := Slots.Get(n)
             if s.perm
-                DebugLog("[SLOTS] Slot " n " [perm]: name='" s.perm.name "' exe='" s.perm.exe "' cls='" s.perm.cls "' hotkey='^!" n "' focusHotkey='" s.perm.focusHotkey "'")
+                DebugLog("[SLOTS] Slot " n " [perm]: name='" s.perm.name "' exe='" s.perm.exe "' cls='" s.perm.cls "' showHideHotkey='" s.hotkey "'")
             else
-                DebugLog("[SLOTS] Slot " n " [dyn]: hotkey='^!" n "' override=" (s.override ? "yes" : "no") (s.window ? (" window=" s.window) : ""))
+                DebugLog("[SLOTS] Slot " n " [dyn]: showHideHotkey='" s.hotkey "' override=" (s.override ? "yes" : "no") (s.window ? (" window=" s.window) : ""))
         }
         DebugLog("[SLOTS] Slots.Apply completed")
     }
@@ -257,6 +259,10 @@ SlotPermList() {
         if (a := Slots.Get(A_Index).perm)
             out.Push(a)
     return out
+}
+
+SlotHotkey(n) {
+    return Slots.Get(n).hotkey
 }
 
 ; Окно слота прямо сейчас — 0, если его нет. У постоянного слота пустой
@@ -430,6 +436,15 @@ SlotBind(n) {
         Release(s.window)             ; прежнее окно возвращаем на место
     }
     s.window := hwnd
+    ; Dynamic сразу получает ту же оконную геометрию и кромку, что permanent.
+    if !WindowManaged(hwnd) {
+        st := StateOf(hwnd)
+        mi := ResolveMonitorForExisting(SlotCfg(n), hwnd)
+        if !st.orig
+            st.orig := CaptureOrigin(hwnd, mi)
+        st.geom := ComputeGeom(SlotCfg(n), mi)
+    }
+    SetTimer(HandlesSync, -1)
     title := WinGetTitle("ahk_id " hwnd)
     DebugLog("[BIND] Slot " n " bound to hwnd=" hwnd " ('" title "')")
     return { ok: true, code: "", message: "Слот " n " → " title, hwnd: hwnd, title: title }

@@ -321,20 +321,20 @@ function makePermanent() {
               <span>Убирать окно, когда фокус ушёл</span>
             </label>
             <div class="row">
-              <label for="slot-hotkey">Хоткей фокуса</label>
+              <label for="slot-hotkey">Горячая клавиша</label>
               <div class="field">
                 <input
                   id="slot-hotkey"
                   type="text"
                   style="width: 160px"
                   placeholder="Ctrl + Alt + F2"
-                  data-testid="edit-focusHotkey"
-                  :class="{ 'field-bad': bad('focusHotkey') }"
-                  v-model="draft.focusHotkey"
+                  data-testid="edit-hotkey"
+                  :class="{ 'field-bad': bad('hotkey') }"
+                  v-model="draft.hotkey"
                 />
               </div>
             </div>
-            <div class="hotkey-cap">дополнительный, после перезапуска</div>
+            <div class="hotkey-cap">show/hide, применяется сразу</div>
           </fieldset>
         </template>
 
@@ -410,14 +410,16 @@ function makePermanent() {
               <input type="checkbox" data-testid="edit-hideOnBlur" v-model="draft.hideOnBlur" />
               <span>Убирать окно, когда фокус ушёл</span>
             </label>
+            <div class="row">
+              <label for="dyn-hotkey">Горячая клавиша</label>
+              <div class="field">
+                <input id="dyn-hotkey" type="text" style="width: 160px" placeholder="Ctrl + Alt + F2"
+                  data-testid="edit-hotkey" :class="{ 'field-bad': bad('hotkey') }" v-model="draft.hotkey" />
+              </div>
+            </div>
             <div class="hotkey-cap" data-testid="dyn-source">{{ overrideNote }}</div>
           </fieldset>
 
-          <div class="detail-row" style="border-bottom: none">
-            <div class="l">Горячая клавиша</div>
-            <div class="v">Ctrl + Alt + {{ selectedSlot.number }}</div>
-            <div class="s">по номеру</div>
-          </div>
 
           <div class="free-note">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent-fg)" stroke-width="2" stroke-linecap="round" style="flex: 0 0 auto">
