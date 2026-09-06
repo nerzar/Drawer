@@ -60,15 +60,15 @@ Autonomous workers must never self-promote code into `wip/slots-parity`, self-de
 - Shared production identity после P06: `9162d157a3f6b3155519ed6248605b0f432ff832`; текущий `wip/slots-parity` выше docs/task/claim-коммитами.
 - G03 accepted + runtime verified + promoted.
 - G05/G05FIX accepted + runtime verified + promoted.
-- G06 Code SHA `5e9c717f23ee4503c0850a9be5d406892d49bed9`: DEV1 review `ACCEPT_WITH_RUNTIME_CHECK`; Antigravity live acceptance `ACCEPT` with 35/35 live checks + 63/63 frontend tests. Ready for authorized promotion.
-- A02S1 Code SHA `ac71581b98a58e51128a987d20d8b5b1952c1756`: implementation DONE; DEV1 independent review currently CLAIMED; live runtime acceptance queued separately.
+- G06 Code SHA `5e9c717f23ee4503c0850a9be5d406892d49bed9`: DEV1 review `ACCEPT_WITH_RUNTIME_CHECK`; Antigravity live acceptance `ACCEPT` with 35/35 live checks + 63/63 frontend tests. P07 promotion currently claimed by Codex.
+- A02S1 Code SHA `ac71581b98a58e51128a987d20d8b5b1952c1756`: DEV1 independent review DONE with `ACCEPT_WITH_RUNTIME_CHECK`; Antigravity live runtime acceptance currently claimed.
 - A03 analysis DONE with verdict `READY_TO_IMPLEMENT`; implementation remains sequenced behind accepted A02 lineage where required.
 - Model budget is scarce: keep at most one READY task per Codex/Antigravity and prefer high-value work only.
 
 ## AUTONOMOUS READY QUEUE
 
 ### 1. P07 — promote accepted G06 + safe cleanup
-- Status: `READY`
+- Status: `CLAIMED/RUNNING`
 - Eligible: `CODEX`
 - Session: `REUSE_OK`
 - Run ID: `RUN-20260906-AUTO-CODEX-P07-G06-PROMOTE-CLEANUP-01`
@@ -77,7 +77,7 @@ Autonomous workers must never self-promote code into `wip/slots-parity`, self-de
 - Task file: `docs/agent-tasks/RUN-20260906-AUTO-CODEX-P07-G06-PROMOTE-CLEANUP-01.md`
 
 ### 2. A02S1ACCEPT — live watcher-seam acceptance
-- Status: `READY`
+- Status: `CLAIMED/RUNNING`
 - Eligible: `ANTIGRAVITY`
 - Preferred model: `Gemini 3.8 Flash`
 - Session: `NEW`
@@ -87,11 +87,12 @@ Autonomous workers must never self-promote code into `wip/slots-parity`, self-de
 - Task file: `docs/agent-tasks/RUN-20260906-AUTO-ANTIGRAVITY-A02S1-ACCEPT-01.md`
 
 ### 3. A02S1R — independent watcher-seam review
-- Status: `CLAIMED/RUNNING`
+- Status: `DONE`
 - Eligible: `DEV1`
 - Run ID: `RUN-20260906-AUTO-DEV1-A02S1-REVIEW-01`
 - Base: A02S1 Code SHA `ac71581b98a58e51128a987d20d8b5b1952c1756`
 - Branch: `review/a02s1-window-focus-watch-seam`
+- Verdict: `ACCEPT_WITH_RUNTIME_CHECK`
 - Task file: `docs/agent-tasks/RUN-20260906-AUTO-DEV1-A02S1-REVIEW-01.md`
 
 ## COMPLETED AUTONOMOUS RUNS — recent
@@ -100,6 +101,7 @@ Autonomous workers must never self-promote code into `wip/slots-parity`, self-de
 - `RUN-20260906-AUTO-ANTIGRAVITY-G06ACCEPT-01` — DONE, `ACCEPT`.
 - `RUN-20260906-AUTO-CODEX-A02S1-01` — DONE, Code SHA `ac71581b98a58e51128a987d20d8b5b1952c1756`.
 - `RUN-20260906-AUTO-CODEX-A03-ANALYSIS-01` — DONE, `READY_TO_IMPLEMENT`.
+- `RUN-20260906-AUTO-DEV1-A02S1-REVIEW-01` — DONE, `ACCEPT_WITH_RUNTIME_CHECK`.
 
 ## NEXT AFTER ARCHITECT REVIEW
 
