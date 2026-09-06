@@ -217,6 +217,8 @@ class DrawerSettingsPort {
                                         "runtimeReloaded", JsonB(outcome.runtimeReloaded))
             if outcome.runtimeReloaded
                 extra["state"] := this.StateDto(outcome.state)
+            if (outcome.HasOwnProp("diagnostics") && outcome.diagnostics.Length)
+                extra["diagnostics"] := outcome.diagnostics
             return SettingsBridgeError(outcome.code, outcome.err, outcome.retryable, extra)
         }
 

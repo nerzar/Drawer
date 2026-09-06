@@ -22,6 +22,7 @@ import {
   type SlotDrafts,
 } from '../src/bridge/slotDraft'
 import type { PermanentSlotValue, SettingsState, SlotBehavior, SlotState } from '../src/bridge/protocol'
+import { draftFromState } from '../src/bridge/general'
 
 // ---------------------------- фикстуры ----------------------------
 
@@ -498,3 +499,328 @@ test('pickSlot интеграция через bridge: очистка stale clas
 
   delete (globalThis as any).chrome
 })
+
+// ----------------- C03: partial/retryable/diagnostics lifecycle -----------------
+
+test('C03-1: full success shows Сохранено, clears diagnostics and converges draft', async () => {
+  const s1 = state(perm(1), dyn(2))
+  const s2 = state(perm(1, 'Steam', 'steam.exe'), dyn(2))
+  const reqHandler = (action: string, _payload: any): any => {
+    if (action === 'settings.apply') {
+      return {
+        ok: true,
+        result: {
+          saved: true,
+          changedFields: 2,
+          changedSlots: [1],
+          restartRequiredFields: [],
+          diagnostics: [],
+          state: s2,
+        },
+      }
+    }
+    throw new Error('unexpected action ' + action)
+  }
+
+  const listeners: any[] = []
+  ;(globalThis as any).chrome = {
+    webview: {
+      postMessage(msg: any) {
+        if (msg.type === 'request') {
+          Promise.resolve().then(() => {
+            const resp = reqHandler(msg.action, msg.payload)
+            listeners.forEach((l) => l({ data: { type: 'response', id: msg.id, ...resp } }))
+          })
+        }
+      },
+      addEventListener(_t: string, h: any) { listeners.push(h) },
+      removeEventListener(_t: string, h: any) {
+        const idx = listeners.indexOf(h)
+        if (idx >= 0) listeners.splice(idx, 1)
+      },
+    },
+  }
+
+  const { settings, applySettings, _resetClientForTesting } = await import('../src/bridge/settings')
+  _resetClientForTesting()
+
+  settings.canonical = s1
+  settings.draft = draftFromState(s1.general)
+  settings.slotDrafts = slotDraftsFromState(s1)
+  settings.diagnostics = ['stale warning']
+  settings.field = 'slots.1.name'
+
+  // User edits Slot 1
+  settings.slotDrafts[1]!.name = 'NewSteam'
+
+  await applySettings()
+
+  assert.equal(settings.status, 'ready')
+  assert.equal(settings.bad, false)
+  assert.match(settings.message, /Сохранено/)
+  assert.equal(settings.diagnostics.length, 0, 'full success must clear resolved diagnostics')
+  assert.equal(settings.field, '', 'full success must clear field diagnostic')
+  assert.deepEqual(settings.canonical, s2)
+  // Draft converged to canonical:
+  assert.deepEqual(slotEditsToWire(settings.slotDrafts, settings.canonical), [])
+
+  _resetClientForTesting()
+  delete (globalThis as any).chrome
+})
+
+test('C03-2: partial/retryable result does not become false success and exposes diagnostics', async () => {
+  const s1 = state(perm(1), dyn(2))
+  const partialState = state(perm(1, 'SavedSlot', 'saved.exe'), dyn(2))
+
+  const reqHandler = (action: string, _payload: any): any => {
+    if (action === 'settings.apply') {
+      return {
+        ok: false,
+        error: {
+          code: 'write_failed',
+          message: 'Не записалось: [slot2] exe',
+          field: 'slots.2.executable',
+          retryable: true,
+          partial: { mayHavePersisted: true, runtimeReloaded: true },
+          state: partialState,
+          diagnostics: ['config.ini: [general] accent — неверный формат'],
+        },
+      }
+    }
+    throw new Error('unexpected action ' + action)
+  }
+
+  const listeners: any[] = []
+  ;(globalThis as any).chrome = {
+    webview: {
+      postMessage(msg: any) {
+        if (msg.type === 'request') {
+          Promise.resolve().then(() => {
+            const resp = reqHandler(msg.action, msg.payload)
+            listeners.forEach((l) => l({ data: { type: 'response', id: msg.id, ...resp } }))
+          })
+        }
+      },
+      addEventListener(_t: string, h: any) { listeners.push(h) },
+      removeEventListener(_t: string, h: any) {
+        const idx = listeners.indexOf(h)
+        if (idx >= 0) listeners.splice(idx, 1)
+      },
+    },
+  }
+
+  const { settings, applySettings, diagnosticsHint, _resetClientForTesting } = await import('../src/bridge/settings')
+  _resetClientForTesting()
+
+  settings.canonical = s1
+  settings.draft = draftFromState(s1.general)
+  settings.slotDrafts = slotDraftsFromState(s1)
+  settings.slotDrafts[2]!.widthPercent = '80' // unpersisted retryable edit
+
+  await applySettings()
+
+  assert.equal(settings.status, 'error')
+  assert.equal(settings.bad, true, 'partial save must remain visibly non-successful')
+  assert.doesNotMatch(settings.message, /Сохранено/, 'partial failure must NEVER show Сохранено')
+  assert.match(settings.message, /Не записалось: \[slot2\] exe/)
+  assert.equal(settings.field, 'slots.2.executable', 'field diagnostic must be exposed')
+  assert.deepEqual(settings.diagnostics, ['config.ini: [general] accent — неверный формат'])
+  assert.match(diagnosticsHint(), /accent/)
+  // Canonical was updated to partial reloaded state:
+  assert.deepEqual(settings.canonical, partialState)
+  // Retryable draft edit on slot 2 was NOT discarded:
+  assert.equal(settings.slotDrafts[2]!.widthPercent, '80')
+
+  _resetClientForTesting()
+  delete (globalThis as any).chrome
+})
+
+test('C03-3: retryable draft and field diagnostic survive reload/reconcile', async () => {
+  const s1 = state(perm(1), dyn(2))
+  const reconciledState = state(perm(1), dyn(2))
+  reconciledState.slots[0].status = { state: 'shown', windowTitle: 'Win', application: 'app' }
+
+  const reqHandler = (action: string, _payload: any): any => {
+    if (action === 'slot.bind') {
+      return {
+        ok: true,
+        result: {
+          slot: 1,
+          status: { state: 'shown', windowTitle: 'Win', application: 'app' },
+          state: reconciledState,
+        },
+      }
+    }
+    throw new Error('unexpected action ' + action)
+  }
+
+  const listeners: any[] = []
+  ;(globalThis as any).chrome = {
+    webview: {
+      postMessage(msg: any) {
+        if (msg.type === 'request') {
+          Promise.resolve().then(() => {
+            const resp = reqHandler(msg.action, msg.payload)
+            listeners.forEach((l) => l({ data: { type: 'response', id: msg.id, ...resp } }))
+          })
+        }
+      },
+      addEventListener(_t: string, h: any) { listeners.push(h) },
+      removeEventListener(_t: string, h: any) {
+        const idx = listeners.indexOf(h)
+        if (idx >= 0) listeners.splice(idx, 1)
+      },
+    },
+  }
+
+  const { settings, bindSlot, _resetClientForTesting } = await import('../src/bridge/settings')
+  _resetClientForTesting()
+
+  settings.canonical = s1
+  settings.draft = draftFromState(s1.general)
+  settings.slotDrafts = slotDraftsFromState(s1)
+  settings.slotDrafts[2]!.widthPercent = '85' // retryable draft edit
+  settings.field = 'slots.2.widthPercent'
+  settings.diagnostics = ['warning from earlier']
+
+  await bindSlot(1)
+
+  assert.deepEqual(settings.canonical, reconciledState)
+  assert.equal(settings.slotDrafts[2]!.widthPercent, '85', 'retryable draft must not be discarded by side reconcile')
+  assert.equal(settings.field, 'slots.2.widthPercent', 'field diagnostic must survive side reconcile')
+  assert.deepEqual(settings.diagnostics, ['warning from earlier'], 'warning must survive side reconcile')
+
+  _resetClientForTesting()
+  delete (globalThis as any).chrome
+})
+
+test('C03-4: unresolved warning and field diagnostic survive no-op/reconcile', async () => {
+  const currentCanonical = state(perm(1), dyn(2))
+
+  const reqHandler = (action: string, _payload: any): any => {
+    if (action === 'settings.apply') {
+      return {
+        ok: true,
+        result: {
+          saved: false,
+          changedFields: 0,
+          changedSlots: [],
+          restartRequiredFields: [],
+          diagnostics: [], // AHK returns empty diagnostics on no-op
+          state: currentCanonical,
+        },
+      }
+    }
+    throw new Error('unexpected action ' + action)
+  }
+
+  const listeners: any[] = []
+  ;(globalThis as any).chrome = {
+    webview: {
+      postMessage(msg: any) {
+        if (msg.type === 'request') {
+          Promise.resolve().then(() => {
+            const resp = reqHandler(msg.action, msg.payload)
+            listeners.forEach((l) => l({ data: { type: 'response', id: msg.id, ...resp } }))
+          })
+        }
+      },
+      addEventListener(_t: string, h: any) { listeners.push(h) },
+      removeEventListener(_t: string, h: any) {
+        const idx = listeners.indexOf(h)
+        if (idx >= 0) listeners.splice(idx, 1)
+      },
+    },
+  }
+
+  const { settings, applySettings, diagnosticsHint, _resetClientForTesting } = await import('../src/bridge/settings')
+  _resetClientForTesting()
+
+  settings.canonical = currentCanonical
+  settings.draft = draftFromState(currentCanonical.general)
+  settings.slotDrafts = slotDraftsFromState(currentCanonical)
+  settings.slotDrafts[2]!.widthPercent = '90' // retryable draft edit
+  settings.field = 'slots.2.widthPercent'
+  settings.diagnostics = ['unresolved warning in config.ini']
+
+  await applySettings()
+
+  assert.equal(settings.status, 'ready')
+  assert.match(settings.message, /Менять нечего/)
+  assert.doesNotMatch(settings.message, /Сохранено/)
+  assert.deepEqual(settings.diagnostics, ['unresolved warning in config.ini'], 'unresolved warning must survive no-op')
+  assert.match(diagnosticsHint(), /unresolved warning/)
+  assert.equal(settings.field, 'slots.2.widthPercent', 'unresolved field diagnostic must survive no-op')
+  assert.equal(settings.slotDrafts[2]!.widthPercent, '90', 'retryable draft must survive no-op')
+
+  _resetClientForTesting()
+  delete (globalThis as any).chrome
+})
+
+test('C03-5: successful retry clears resolved diagnostic, field, and converges state', async () => {
+  const currentCanonical = state(perm(1), dyn(2))
+  const fixedCanonical = state(perm(1), dyn(2))
+  fixedCanonical.slots[1].effective.widthPercent = 90
+
+  const reqHandler = (action: string, _payload: any): any => {
+    if (action === 'settings.apply') {
+      return {
+        ok: true,
+        result: {
+          saved: true,
+          changedFields: 1,
+          changedSlots: [2],
+          restartRequiredFields: [],
+          diagnostics: [], // resolved!
+          state: fixedCanonical,
+        },
+      }
+    }
+    throw new Error('unexpected action ' + action)
+  }
+
+  const listeners: any[] = []
+  ;(globalThis as any).chrome = {
+    webview: {
+      postMessage(msg: any) {
+        if (msg.type === 'request') {
+          Promise.resolve().then(() => {
+            const resp = reqHandler(msg.action, msg.payload)
+            listeners.forEach((l) => l({ data: { type: 'response', id: msg.id, ...resp } }))
+          })
+        }
+      },
+      addEventListener(_t: string, h: any) { listeners.push(h) },
+      removeEventListener(_t: string, h: any) {
+        const idx = listeners.indexOf(h)
+        if (idx >= 0) listeners.splice(idx, 1)
+      },
+    },
+  }
+
+  const { settings, applySettings, diagnosticsHint, _resetClientForTesting } = await import('../src/bridge/settings')
+  _resetClientForTesting()
+
+  settings.canonical = currentCanonical
+  settings.draft = draftFromState(currentCanonical.general)
+  settings.slotDrafts = slotDraftsFromState(currentCanonical)
+  settings.slotDrafts[2]!.widthPercent = '90'
+  settings.field = 'slots.2.widthPercent'
+  settings.diagnostics = ['unresolved warning in config.ini']
+
+  await applySettings()
+
+  assert.equal(settings.status, 'ready')
+  assert.equal(settings.bad, false)
+  assert.match(settings.message, /Сохранено/)
+  assert.deepEqual(settings.diagnostics, [], 'successful retry clears resolved diagnostic')
+  assert.equal(diagnosticsHint(), '')
+  assert.equal(settings.field, '', 'successful retry clears field diagnostic')
+  assert.deepEqual(settings.canonical, fixedCanonical)
+  // State converged:
+  assert.deepEqual(slotEditsToWire(settings.slotDrafts, settings.canonical), [])
+
+  _resetClientForTesting()
+  delete (globalThis as any).chrome
+})
+

@@ -17,6 +17,7 @@ export class ProtocolError extends Error {
   readonly retryable: boolean
   readonly partial?: ProtocolErrorBody['partial']
   readonly state?: ProtocolErrorBody['state']
+  readonly diagnostics?: string[]
 
   constructor(body: ProtocolErrorBody) {
     super(body.message)
@@ -26,6 +27,7 @@ export class ProtocolError extends Error {
     this.retryable = body.retryable
     this.partial = body.partial
     this.state = body.state
+    this.diagnostics = body.diagnostics
   }
 }
 
