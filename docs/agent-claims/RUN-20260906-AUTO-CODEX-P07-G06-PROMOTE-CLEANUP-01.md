@@ -7,4 +7,17 @@
 - Base SHA: `7f1ff10c4edf82cea3eccd7f208160672d3d9341`
 - Observed shared SHA: `7f1ff10c4edf82cea3eccd7f208160672d3d9341`
 - Branch: `wip/slots-parity`
-- Status: `CLAIMED`
+- Status: `DONE`
+- Code SHA: `886e68663a0f487f3ad00c248a4aed87e02861c7`
+- Report tip SHA: `59ddca48c20093259e5f95d72ce797f9bf6856c9`
+- Checks:
+  - DEV1 review `ACCEPT_WITH_RUNTIME_CHECK` + Antigravity runtime `ACCEPT` — PASS
+  - G03/G05/shared production/G06 ancestry — PASS
+  - promoted `settings-ui` tree equals accepted G06 — PASS
+  - `src/config.ini` untouched — PASS
+  - frontend tests 63/63, typecheck, build — PASS
+  - AutoHotkey validate — PASS
+  - settings seam — INCONCLUSIVE, timed out after 20 seconds without diagnostic
+  - remote shared branch contains Code SHA — PASS
+  - branch count before/after cleanup evaluation: `29 / 29`
+  - deleted refs: `NONE` (no completed G06 branch tip was fully reachable; live acceptance worktree also retained)
