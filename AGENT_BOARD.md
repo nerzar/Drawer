@@ -1,170 +1,121 @@
 # AGENT_BOARD — Drawer autonomous work queue
 
-Этот файл — blackboard между архитектором ChatGPT и coding agents.
+Blackboard между архитектором ChatGPT и coding agents.
 
-**Владелец файла:** архитектор ChatGPT. Coding agents **не редактируют этот файл** и не меняют приоритеты задач сами.
+**Владелец файла:** архитектор ChatGPT. Coding agents этот файл **не редактируют** и приоритеты сами не меняют.
 
-## Как агент начинает работу
+## Общий протокол агента
 
 1. `git fetch dev`.
 2. Прочитать актуальный `AGENT_BOARD.md` из `dev/wip/slots-parity`.
-3. Найти задачу, назначенную своей модели/чату.
-4. Проверить фактический Git и создать отдельную feature-ветку + worktree от указанного `base`.
-5. Выполнить задачу целиком. Не расширять scope без необходимости.
-6. Только разумные целевые проверки; VM/full suite не запускать, если задача прямо этого не требует.
-7. Перед завершением: commit, push своей feature-ветки в `dev`, clean tree, factual report в `docs/agent-reports/<date>-<agent>-<task>.md`.
-8. **Не merge/cherry-pick/rebase обратно в `wip/slots-parity`.** Интеграцию решает архитектор.
+3. Найти задачу для своей модели/чата.
+4. Проверить фактический Git. Продолжать указанную feature-ветку либо создать отдельную от указанного base.
+5. Выполнить задачу целиком, не расширяя scope.
+6. Разумные целевые проверки; VM/full suite — только если задача требует.
+7. Перед завершением: commit, push feature-ветки в `dev`, clean tree, factual report в `docs/agent-reports/<date>-<agent>-<task>.md`.
+8. **Не merge/cherry-pick/rebase в `wip/slots-parity`** без отдельной integration-задачи.
 9. `docs/ARCHITECT_STATE.md` не редактировать.
 
-Если возник блокер, неоднозначное продуктовое решение, конфликт с параллельной задачей или риск потери данных: не импровизировать. Записать `BLOCKED` в factual report, commit/push ветку и остановиться. Архитектор увидит это в Git.
+Если есть блокер, неоднозначное продуктовое решение, конфликт с параллельной задачей или риск потери данных: записать `BLOCKED` в factual report, commit/push текущее состояние и остановиться.
 
 ## Общие правила
 
 - Private repo: `nerzar/Drawer.Dev`, remote `dev`.
 - Публичный `origin` не трогать.
-- Git CLI/remote — источник истины, UI вторичен.
-- Не плодить новые слои, harnesses, документы, worktrees и абстракции без необходимости.
-- `drawer-debug.log` и tray action `Нашёл баг…` сохранять и использовать при runtime-диагностике.
-- Claude держим в резерве. Astra без отдельного разрешения архитектора не использовать.
-- Gemini — основной дешёвый worker. Codex — для сложной логики/многослойных задач.
+- Git CLI/remote — источник истины.
+- Не плодить сущности/слои/harnesses/docs/worktrees без необходимости.
+- `drawer-debug.log` и `Нашёл баг…` сохранять и использовать для runtime-диагностики.
+- Claude — резерв. Astra без отдельного решения архитектора не использовать.
+- Gemini — основной дешёвый worker; Codex — сложная логика/многослойные задачи.
 
-## Текущая кодовая база
+## Текущая база
 
 - orchestration branch: `dev/wip/slots-parity`
-- code base для параллельной волны: `b2ec249`
-- dev diagnostics на `b2ec249` вручную приняты пользователем.
-- продуктовый hotkey contract: `docs/03-решения.md`, Р24.
+- общая code base параллельной волны: `b2ec249`
+- diagnostics на `b2ec249` вручную приняты пользователем.
+- hotkey product contract: `docs/03-решения.md`, Р24.
 
 ---
 
-## TASK C01 — привести Slots к утверждённому продуктовому контракту
+## TASK C01 — Slots product contract
 
-**Status:** READY  
+**Status:** NEEDS_FIX_AFTER_REVIEW  
 **Executor:** Codex, GPT-5.6 Terra, reasoning High  
 **Base:** `b2ec249`  
-**Suggested branch:** `feat/slots-product-contract`
+**Current branch:** `codex/slots-user-contract`  
+**Reviewed remote HEAD:** `8708b06`
 
-### Цель
+### Что уже есть в ветке
 
-Привести runtime + Settings + config contract + tests к утверждённой модели слотов.
+Ветка запушена и на 2 commits впереди `b2ec249`. Есть новая persisted show/hide hotkey-модель, runtime rebind, immediate dynamic handle seed, late permanent discovery через foreground lifecycle и часть conversion/runtime изменений.
 
-### Обязательное поведение
+### Review: задача пока НЕ завершена
 
-- У слота ровно один настраиваемый hotkey: show/hide toggle.
-- `Ctrl+Alt+N` — только default для slot N, а не жёстко вшитое действие.
-- Hotkey настраивается и у permanent, и у dynamic.
-- Отдельного `focusHotkey` в целевой модели нет: удалить концепцию из runtime, Settings, persisted contract и тестов. Старый `focusHotkey` из существующего config не регистрировать и не превращать молча в новый toggle-hotkey.
-- Поле hotkey — реальный keyboard capture. UI показывает человеческую комбинацию, пользователь не вводит AHK syntax.
-- После `Применить` новый hotkey начинает работать сразу, старый перестаёт; restart не нужен.
-- Конфликты проверяются против всех hotkeys Drawer и других slot hotkeys; сообщение человеку должно объяснять конфликт.
-- Настроенный hotkey принадлежит номеру слота и переживает restart, пустой dynamic и conversion permanent↔dynamic.
-- `Ctrl+Alt+Shift+N` пока остаётся отдельным действием bind active window → dynamic slot N.
+Исправить в ЭТОЙ ЖЕ ветке, не начинать заново:
 
-### Dynamic
+1. **WebView hotkey capture не реализован.** Сейчас permanent и dynamic всё ещё используют обычный `<input type="text" v-model="draft.hotkey">`. Требование — настоящий keyboard capture: клик/фокус в поле → пользователь нажимает комбинацию → UI показывает человеческое значение. Ручной ввод AHK/text syntax не является целевым UX.
 
-- хранит конкретный HWND только текущей сессии;
-- после bind слот сразу считается занятым, сразу имеет кромку и сразу управляется своим hotkey;
-- exe живого окна можно показывать как информацию, но не использовать для восстановления dynamic после restart;
-- UI должен давать `Освободить слот`;
-- UI должен давать сброс индивидуальных dynamic-настроек к General;
-- после restart HWND исчезает, но настройки слота и пользовательский hotkey сохраняются.
+2. **В permanent UI остался противоречащий контракту старый блок:** `Основной хоткей Ctrl + Alt + N / не настраивается`. Его не должно быть: единственный show/hide hotkey ниже — настраиваемый, а `Ctrl+Alt+N` лишь default.
 
-### Conversion
+3. **Dynamic UI не получил обязательные действия:**
+   - `Освободить слот` для занятого dynamic;
+   - `Сбросить настройки слота` / reset индивидуальных dynamic behavior overrides обратно к General.
+   Backend release уже существует; не заводить вторую реализацию.
 
-Dynamic → Permanent:
-- если есть живое окно, автоматически подхватить exe, разумное имя и class при необходимости;
-- после Apply то же окно остаётся в том же слоте;
-- после restart permanent сам ищет приложение;
-- пустой dynamic нельзя сохранить permanent без приложения/окна.
+4. После этих правок проверить, что WebView и native fallback не расходятся по смыслу одного hotkey и lifecycle.
 
-Permanent → Dynamic:
-- если есть живое окно, после Apply оно остаётся привязанным как dynamic;
-- hotkey и кромка не пропадают;
-- после restart dynamic пуст;
-- если приложение не запущено, conversion даёт пустой dynamic.
+5. Добавить factual report для C01 в `docs/agent-reports/`; предыдущий push его не содержит.
 
-### Permanent lifecycle / handles
+### Полный контракт, который всё ещё обязателен
 
-- если приложение запущено при старте Drawer, кромка появляется сразу;
-- если permanent-приложение запускается уже после Drawer, оно должно быть обнаружено и кромка должна появиться без предварительного нажатия hotkey;
-- использовать подходящий Windows event lifecycle; не добавлять грубый частый polling без необходимости;
-- если у слота есть живое назначенное окно, кромка должна быть видна независимо от permanent/dynamic.
-
-### Диагностика
-
-Сохранить `drawer-debug.log` и `Нашёл баг…`; обновить лог/snapshot под новую hotkey-модель. В конечном snapshot нет `focusHotkey`, есть реально зарегистрированный show/hide hotkey каждого слота.
-
-### Границы
-
-Не начинать следующую архитектурную фазу windows/focus/parking и не исправлять остальные пункты аудита.
+- один настраиваемый show/hide hotkey на slot;
+- `Ctrl+Alt+N` только default;
+- permanent + dynamic оба настраиваются;
+- `focusHotkey` отсутствует в целевой runtime/UI/persisted модели и не регистрируется;
+- hotkey применяется сразу после Apply, старый отключается;
+- конфликты с hotkeys Drawer и других slots объясняются человеку;
+- hotkey принадлежит номеру slot и переживает restart / пустой dynamic / conversion;
+- `Ctrl+Alt+Shift+N` остаётся bind active window → dynamic N;
+- dynamic bind сразу даёт occupied state + handle + управление;
+- dynamic HWND не переживает restart, настройки/hotkey переживают;
+- Dynamic→Permanent подхватывает live window exe/name/class при необходимости и не теряет окно;
+- Permanent→Dynamic сохраняет live window до restart;
+- permanent app уже запущен при Drawer start → handle сразу;
+- permanent app запущен позже → handle появляется без предварительного hotkey;
+- живое назначенное окно → handle виден независимо от lifecycle;
+- bug log/snapshot отражает реальный show/hide hotkey, без `focusHotkey`.
 
 ### Проверки
 
-`/validate`, settings seam, WebView slice, frontend tests/typecheck/build и целевые regression tests. VM/full suite не нужен. Production build не нужен.
+`/validate`, settings seam, WebView slice, frontend tests/typecheck/build и целевые regression tests. VM/full suite и production build не нужны.
+
+После исправления: commit + push в `dev/codex/slots-user-contract`, clean tree, factual report. Не merge в `wip/slots-parity`.
 
 ---
 
-## TASK G01 — независимый Settings/build cleanup по аудиту
+## TASK G01 — Settings/build cleanup по аудиту
 
-**Status:** READY  
+**Status:** IN_PROGRESS_OBSERVED  
 **Executor:** Gemini, strongest available Gemini mode; NOT Astra  
 **Base:** `b2ec249`  
-**Suggested branch:** `feat/settings-audit-cleanup-1`
+**Current branch:** `feat/settings-ui-build-cleanup`  
+**Latest observed remote HEAD:** `8d01da3`
 
-### Граница параллельной работы
+Параллельно другой агент меняет Slots/hotkeys. Поэтому **не трогать** `src/Slots.ahk`, slot hotkeys/conversion semantics, `settings-ui/src/views/SlotsView.vue` и diagnostics runtime.
 
-Другой агент меняет Slots/hotkeys. Поэтому **не трогать**:
+### Scope
 
-- `src/Slots.ahk`;
-- slot hotkeys / conversion semantics;
-- `settings-ui/src/views/SlotsView.vue`;
-- `drawer-debug.log` / `Нашёл баг…`, кроме безопасной build-интеграции.
+1. Убрать внутренний дублирующий WebView header; оставить native Windows titlebar, без custom chrome. Если DWM поддерживается — приблизить caption background/text/border/dark mode к существующей теме Drawer, сохранив native fallback и системные controls.
+2. Build/config safety: fresh package получает default config, rebuild существующей package-папки не затирает пользовательский/acceptance `config.ini`.
+3. About/mock: настоящий GitHub action, убрать/оживить fake actions, не показывать ложный config path.
+4. Небольшой UI cleanup вне Slots: readable select/options dark theme, labels/checkbox targets, keyboard accessibility color controls, убрать очевидные fake controls.
 
-### Задача
+Не брать сейчас General+override correctness, partial/retryable/reconcile, hideOnBlur/blurMs correctness, redesign или Slots.
 
-1. **Двойная шапка Settings**
-   - оставить native Windows titlebar;
-   - убрать внутренний WebView header/titlebar с дублирующими logo/title/minimize/close;
-   - custom chrome не делать;
-   - через DWM, если поддерживается текущей Windows, привести системный titlebar к текущей теме Drawer: caption background/text/border/dark mode из существующей палитры; системные drag/resize/min/max/close и fallback сохранить.
-
-2. **Build/config safety**
-   - fresh package получает default `config.ini`;
-   - rebuild существующей package-папки не должен молча затирать пользовательский/acceptance `config.ini`;
-   - не вводить новую систему конфигурации.
-
-3. **About / mock элементы**
-   - GitHub action должна вести на настоящий проект;
-   - fake/mock действия убрать или сделать рабочими;
-   - не показывать ложный путь к config;
-   - если реальный runtime path нельзя получить без пересечения с параллельной backend-задачей — корректно скрыть/переименовать и отметить в отчёте.
-
-4. **Небольшой UI cleanup вне Slots**
-   - читаемость option/select в dark theme;
-   - нормальные label/checkbox click targets;
-   - keyboard accessibility интерактивных color controls;
-   - убрать очевидные декоративные controls, выглядящие рабочими, но ничего не делающие.
-
-### Не делать сейчас
-
-- General+override correctness;
-- partial/retryable/reconcile;
-- hideOnBlur/blurMs correctness;
-- redesign;
-- Slots changes.
-
-### Проверки
-
-Frontend tests/typecheck/build + необходимые build/narrow checks. VM/full suite не нужен.
+Frontend tests/typecheck/build + необходимые build/narrow checks. VM/full suite не нужен. Перед завершением — commit/push/clean/factual report, без merge.
 
 ---
 
 ## После C01 + G01
 
-Архитектор проверяет remote branches и diff, затем создаёт отдельную integration-задачу. Coding agents сами ветки не сливают.
-
-Следующая плановая волна после принятой интеграции:
-
-- Settings correctness: General+override same Save, stale windowClass, partial/retryable/diagnostics, hideOnBlur/blurMs, General save-lock, custom animation, build/config follow-up;
-- UX cleanup leftovers;
-- только затем продолжение архитектуры windows/focus/parking.
+Архитектор проверяет remote branches/diff и выдаёт отдельную integration-задачу. После принятой интеграции следующая волна: Settings correctness (General+override same Save, stale windowClass, partial/retryable/diagnostics, hideOnBlur/blurMs, General save-lock, custom animation), затем UX leftovers, и только после этого windows/focus/parking architecture.
