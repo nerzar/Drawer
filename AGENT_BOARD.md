@@ -42,8 +42,8 @@ Blackboard между архитектором ChatGPT и coding agents.
 - Codex GPT quota исчерпана после C02. **Новые задачи Codex не назначать до сообщения оператора о восстановлении лимита.**
 - OpenCode подключён и даёт доступ к `Gemini 3.8 Flash`; I02 используется как первый реальный qualification run этого harness.
 - Если OpenCode + Gemini 3.8 Flash нормально делает Git/worktree/tool use/tests/report, дальше использовать его как основной Gemini-worker.
-- Antigravity после успешной квалификации OpenCode можно освободить под Claude Sonnet/Opus или другой сильный резерв, а не тратить его только на Gemini.
-- Claude/Opus держим для сложных correctness/runtime/architecture задач, не для дешёвых cleanup.
+- Antigravity используем как отдельный сильный пул; текущий qualification — Claude Sonnet 4.6 Thinking на изолированной frontend-задаче G04.
+- Claude Opus держим для сложных correctness/runtime/architecture задач, не для дешёвых cleanup.
 - Старые/отдельно лимитируемые модели в Codex не использовать автоматически.
 - Astra не использовать без отдельного решения.
 
@@ -68,6 +68,7 @@ Blackboard между архитектором ChatGPT и coding agents.
 - C02 и B01 обе основаны непосредственно на `ac63ead`, поэтому следующая задача — одна контролируемая интеграция I02.
 - B01 доказала причину `Ahk2Exe exit 17`: duplicate `ApplyDwmTitlebarTheme`; production build теперь проходит, config preservation и embedded assets проверены.
 - `wip/slots-parity` пока не передвигаем на code integration до проверки I02 архитектором.
+- G04 можно делать параллельно с I02 только в frontend-границе: I02 не меняет `settings-ui/src/views/GeneralView.vue` и `settings-ui/src/bridge/general.ts`. Если для G04 окажется нужен backend/persistence, агент останавливается как `BLOCKED`, а не расширяет scope.
 
 ---
 
@@ -112,7 +113,7 @@ Factual report: `docs/agent-reports/2026-09-06-gemini-b01.md` в ветке B01.
 
 ---
 
-# ACTIVE
+# ACTIVE — параллельные отдельные worktree
 
 ## TASK I02 — интегрировать C02 + B01 + orchestration docs
 
@@ -135,7 +136,7 @@ Factual report: `docs/agent-reports/2026-09-06-gemini-b01.md` в ветке B01.
 
 ### Обязательно
 
-1. Создать **новый отдельный sibling worktree I02**, не работать в B01/C02 worktrees и не использовать общий checkout.
+1. Создать **новый отдельный sibling worktree I02**, не работать в B01/C02/G04 worktrees и не использовать общий checkout.
 2. Интегрировать C02 и B01 по смыслу. Обе ветки меняют `src/drawer.ahk` и `test/narrow/settings-seam.ahk`; не разрешать конфликт простым выбором одной стороны.
 3. Сохранить одновременно:
    - `SettingsDynamicFinal` / final-General override semantics из C02;
@@ -143,8 +144,9 @@ Factual report: `docs/agent-reports/2026-09-06-gemini-b01.md` в ветке B01.
    - B01 build fixes (`/silent`, PS5.1-compatible encoding, config safety);
    - C01/G01 slot/hotkey/settings behavior из Wave 1.
 4. Подтянуть `AGENT_BOARD.md` и `docs/agent-reports/REPORT_FORMAT.md` из актуального `dev/wip/slots-parity` **без движения самого `wip/slots-parity` ref**.
-5. Не менять slot product contract, persistence beyond C02 fix, или следующие backlog-задачи.
-6. В factual report отдельно коротко отметить качество работы harness: смог ли OpenCode сам корректно создать worktree, выполнить Git operations, запускать PowerShell/AHK/npm и push без ручной помощи.
+5. Не интегрировать G04 в рамках I02: G04 идёт параллельно отдельной веткой и будет рассмотрена после I02.
+6. Не менять slot product contract, persistence beyond C02 fix, или следующие backlog-задачи.
+7. В factual report отдельно коротко отметить качество работы harness: смог ли OpenCode сам корректно создать worktree, выполнить Git operations, запускать PowerShell/AHK/npm и push без ручной помощи.
 
 ### Проверки
 
@@ -159,6 +161,41 @@ Factual report: `docs/agent-reports/2026-09-06-gemini-b01.md` в ветке B01.
 - VM/full suite не запускать.
 
 Перед завершением: factual report по REPORT_FORMAT, commit, push `dev/integration/slots-settings-wave2`, verify remote HEAD = local HEAD, clean tree. **Не двигать `wip/slots-parity` самостоятельно.**
+
+## TASK G04 — custom animation preset `Своя`
+
+**Status:** READY_PARALLEL_WITH_I02  
+**Executor:** Antigravity, `Claude Sonnet 4.6 (Thinking)`  
+**Run ID:** `RUN-20260906-ANTIGRAVITY-G04-01`  
+**Base:** `dev/integration/slots-settings-wave1@ac63ead`  
+**Branch:** `fix/settings-custom-animation-preset`  
+**Worktree:** `C:\Users\nerza\Projects\drawer-agent-worktrees\G04`
+
+### Цель
+
+Исправить UX/состояние пресета анимации `Своя` без изменения backend/persistence semantics.
+
+### Что проверить
+
+На текущем frontend `preset` вычисляется из пары `animMs/animSteps`, а `applyAnimPreset(..., 'custom')` ничего не меняет. Подтвердить фактический пользовательский дефект: при выборе `Своя` из уже совпадающего preset поля `Длительность`/`Шагов` могут остаться disabled или выбор немедленно визуально откатывается назад. Не принимать это описание за доказательство — воспроизвести тестом/кодом.
+
+### Требование
+
+- Пользователь выбирает `Своя` → поля custom animation становятся редактируемыми сразу.
+- Текущие числовые значения при самом переключении на `Своя` не должны самопроизвольно меняться.
+- После ручной правки значения остаются в draft, уходят обычным существующим Save path и после canonical response отображаются корректно.
+- Если сохранённая пара случайно совпадает с известным preset, canonical state после reload может закономерно отображаться как этот preset; но **во время текущего unsaved edit-session явный выбор `Своя` не должен сам себя отменять до ввода**.
+- Добавить узкий frontend regression.
+
+### Жёсткая граница параллельности
+
+Предпочтительно трогать только `settings-ui/src/views/GeneralView.vue`, `settings-ui/src/bridge/general.ts` и frontend tests. **Не трогать** `src/drawer.ahk`, `src/webview/SettingsPort.ahk`, `build/build.ps1`, `test/narrow/settings-seam.ahk`, Slots/runtime/hotkeys. Если выяснится, что корректный фикс реально требует backend/persistence — не расширять scope: factual report `BLOCKED` с причиной и push безопасное состояние.
+
+### Проверки
+
+`npm --prefix settings-ui test`, `npm --prefix settings-ui run typecheck`, `npm --prefix settings-ui run build`. VM/full suite и production build не нужны.
+
+Перед завершением: factual report по REPORT_FORMAT, commit, push `dev/fix/settings-custom-animation-preset`, verify remote HEAD = local HEAD, clean tree. Не merge.
 
 ---
 
@@ -183,21 +220,15 @@ Structured partial-save/reload/reconcile должен доходить до UI; 
 
 ## TASK G02 — stale windowClass + picker identity
 **Status:** BLOCKED_ON_I02
-**Preferred executor:** Gemini
+**Preferred executor:** OpenCode/Gemini либо Antigravity/Sonnet по доступности
 
 Смена exe не оставляет class старого app; picker согласованно обновляет exe/class/name seed; dynamic→permanent получает чистые identity data.
 
 ## TASK G03 — live hideOnBlur/blurMs + save lock
 **Status:** BLOCKED_ON_I02
-**Preferred executor:** Gemini
+**Preferred executor:** OpenCode/Gemini либо Antigravity/Sonnet по доступности
 
 После Apply runtime-настройки реально влияют на уже показанное окно; blur timer не stale; General inputs защищены во время Save.
-
-## TASK G04 — custom animation preset `Своя`
-**Status:** BLOCKED_ON_I02
-**Preferred executor:** Gemini
-
-Custom animation duration/steps сохраняются, корректно отображаются и не сбрасываются preset/canonical.
 
 ---
 
@@ -273,11 +304,11 @@ Custom animation duration/steps сохраняются, корректно от�
 
 # Ближайший порядок
 
-1. Сейчас: `RUN-20260906-OPENCODE-I02-01` — I02 через OpenCode + Gemini 3.8 Flash High в отдельном sibling worktree.
-2. Архитектор проверяет remote `integration/slots-settings-wave2` и отдельно оценивает пригодность OpenCode harness.
-3. A01 короткая ручная приёмка.
-4. Если OpenCode прошёл qualification, следующие Gemini-задачи по умолчанию идут туда; Antigravity освобождаем для Claude/другого сильного резерва.
-5. Затем G02/G03/G04 и C03 по доступности сильной модели.
+1. Сейчас параллельно: `RUN-20260906-OPENCODE-I02-01` (OpenCode + Gemini 3.8 Flash High) и `RUN-20260906-ANTIGRAVITY-G04-01` (Antigravity + Claude Sonnet 4.6 Thinking), каждый в своём sibling worktree.
+2. Архитектор проверяет remote `integration/slots-settings-wave2` и `fix/settings-custom-animation-preset`, отдельно оценивает пригодность обоих harness/model pools.
+3. После I02 — A01 короткая ручная приёмка; G04 интегрируется только после проверки diff и отсутствия пересечений.
+4. Если OpenCode прошёл qualification, следующие Gemini-задачи по умолчанию идут туда; Antigravity используем для Sonnet/Opus там, где нужна более сильная reasoning-модель.
+5. Затем G02/G03 и C03 по доступности сильной модели.
 6. UX cleanup.
 7. Modular architecture.
 8. Test/release debt.
