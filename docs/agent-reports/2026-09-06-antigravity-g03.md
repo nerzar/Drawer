@@ -12,7 +12,7 @@
 - Worktree: `C:\Users\nerza\Projects\drawer-agent-worktrees\G03`
 - Branch: `fix/settings-live-blur-save-lock`
 - Base SHA: `389914e44fff78ccd6362cfbb9b43a8534ff9e54`
-- Final SHA: `PENDING_FINAL_COMMIT`
+- Final SHA: `9f5c3df` (code commit: `be028a0`)
 - Remote: `dev`
 
 ## 1. Goal
