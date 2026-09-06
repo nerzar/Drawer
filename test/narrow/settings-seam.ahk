@@ -553,8 +553,10 @@ Assert("9h: saved не бывает без успешного reload",
 ; --- changedSlots / restartRequired: чистые функции, копии из src ---
 ChangedSlotsCopy(writes, deletes) {
     seen := Map()
-    for w in writes
-        seen[Integer(SubStr(w.sec, 5))] := true
+    for w in writes {
+        target := (w.sec = "hotkeys") ? w.key : w.sec
+        seen[Integer(RegExReplace(target, "^\D+"))] := true
+    }
     for n in deletes
         seen[n] := true
     out := []
@@ -1602,7 +1604,7 @@ if !FileExist(drawerPath) || !FileExist(slotsPath) {
     ; на обе поверхности (native Edit и WebView DTO) — источник истины один.
     portPath18 := A_ScriptDir "\..\..\src\webview\SettingsPort.ahk"
     Assert("18ab2: native захватывает hotkey специальным control",
-        InStr(src18, "g.Add(`"Hotkey`") > 0)
+        InStr(src18, 'g.Add("Hotkey"') > 0)
     if FileExist(portPath18) {
         srcPort18 := FileRead(portPath18, "UTF-8")
         Assert("18ac2: WebView DTO тоже переводит хоткей в человеческую запись, вторым конвертером не заводится",
@@ -1676,5 +1678,5 @@ for r in results {
     out .= (ok ? "OK   " : "FAIL ") r[1] "`n"
 }
 out .= allOk ? "`nВСЕ ПРОВЕРКИ ПРОШЛИ`n" : "`nЕСТЬ ПРОВАЛЫ`n"
-FileAppend(out, "*")   ; stdout
+try FileAppend(out, "*")   ; stdout
 ExitApp(allOk ? 0 : 1)
