@@ -94,6 +94,8 @@ function makePermanent() {
 }
 
 function captureHotkey(event) {
+  // Tab оставляем браузеру: это навигация к следующему контролу, а не hotkey.
+  if (event.key === 'Tab') return
   if (event.key === 'Control' || event.key === 'Alt' || event.key === 'Shift' || event.key === 'Meta') return
   event.preventDefault()
   const key = event.key === ' ' ? 'Space' : event.key.length === 1 ? event.key.toUpperCase() : event.key
@@ -248,7 +250,6 @@ function resetDynamic() {
                   id="slot-name"
                   class="in-name"
                   type="text"
-                  readonly
                   data-testid="edit-name"
                   :class="{ 'field-bad': bad('name') }"
                   :aria-invalid="bad('name')"

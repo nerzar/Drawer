@@ -31,6 +31,15 @@ OnDrawerException(err, mode) {
 }
 OnError(OnDrawerException)
 
+; Тёмная системная рамка доступна с разных версий Windows под разными
+; атрибутами; отсутствие DWM не должно мешать обычным диалогам.
+ApplyDwmTitlebarTheme(hwnd) {
+    dark := 1
+    try DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", hwnd, "Int", 20, "Int*", dark, "Int", 4)
+    catch
+        try DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", hwnd, "Int", 19, "Int*", dark, "Int", 4)
+}
+
 ; =========================== НАСТРОЙКИ ===========================
 ; У каждого слота один настраиваемый show/hide hotkey; Ctrl+Alt+N — его default.
 ;   Ctrl+Alt+N        — выдвинуть / убрать окно слота

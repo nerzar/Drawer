@@ -141,7 +141,13 @@
       if (!text('slot-9').includes('Динамический')) throw new Error('row-pill-dyn')
       if (!q('slot-1').querySelector('.dot')) throw new Error('row-status-dot')
       eq('edit-name', 'Smoke permanent')
+      if (q('edit-name').readOnly) throw new Error('permanent-name-readonly')
       eq('edit-hotkey', 'Ctrl+Alt+Win+1')
+      const hotkey = q('edit-hotkey')
+      const beforeTab = hotkey.value
+      const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+      if (!hotkey.dispatchEvent(tab) || tab.defaultPrevented) throw new Error('hotkey-tab-prevented')
+      if (hotkey.value !== beforeTab) throw new Error('hotkey-tab-captured')
       eq('edit-widthPercent', '61')
       if (!q('make-dynamic') || q('make-dynamic').disabled) throw new Error('conversion-perm')
       q('slot-5').click()
