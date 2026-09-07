@@ -52,73 +52,46 @@ On blocker/conflict/product ambiguity/data-loss risk: preserve safe state, push 
 
 ## Текущий статус
 
-- Shared production identity after P08: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`; higher shared commits may be docs/tasks/claims/reports.
+- Shared accepted production identity remains `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`; higher shared commits are docs/tasks/claims/reports only unless explicitly promoted.
 - G03, G05/G05FIX, G06 accepted + runtime verified + promoted.
 - A02S1 accepted, runtime verified and promoted by P08.
-- A02S2 is DONE by Antigravity at Code SHA `c482ad3ae9c499ea32eb3c0cdd590e495a919e30`; architect acceptance/promotion pending; Claude 5 independent review is in progress separately.
-- A04A handles seam analysis is DONE by Antigravity, verdict `READY_TO_IMPLEMENT`, report tip `8259df1ae67dfec09703ec0e3860bb43770ce660`. First slice A04S1 is now READY.
-- A03 analysis verdict `READY_TO_IMPLEMENT`; A03S1 remains reserved for OPENCODE-DEEPSEEK and must not depend on unaccepted A02S2.
+- A02S2 implementation is DONE at Code SHA `c482ad3ae9c499ea32eb3c0cdd590e495a919e30`, but independent Claude Opus 5 review verdict is `NEEDS_FIX`; do NOT promote that SHA.
+- A02S2 blockers: F1 duplicate focus function declarations make `src/drawer.ahk` `/Validate` fail; F2/P17 `Hide()` clears previous-focus history before `RestoreFocus()` consumes it. Fix run is currently CLAIMED by OpenCode Claude 4.8.
+- A04 analysis DONE, verdict `READY_TO_IMPLEMENT`.
+- A04S1 DONE at Code SHA `851f47566dd074538f412b9d258193dbde65195b`; repo-only diff review found expected narrow scope (WindowHandles + drawer adapter + direct seam test), not accepted/promoted.
+- A04S2 DONE at Code SHA `e862c4f7b71f0aced86dc2b19843b47b4b23a0f2`, exact parent A04S1 Code SHA; repo-only diff review found expected continuation scope and reported validate + 24/24 handle seam + settings seam pass. Not accepted/promoted.
+- A03S1 is CLAIMED by OpenCode DeepSeek from accepted shared base and must not depend on unaccepted A02S2.
 - T01 DeepSeek settings-seam determinism is DONE at Code SHA `34efdb62d8fb1dcaa55119f47794c3b269772e9c`; architect repo-only diff review found no scope issue; promotion pending.
-- DeepSeek A03S2 remains dependency-gated on A03S1 and must not be claimed early.
-- CODEX quota exhausted.
+- CODEX quota exhausted. Do not spend Codex.
 
 ## AUTONOMOUS QUEUE — ANTIGRAVITY
 
-### A02S2 — focus history + foreground state extraction
-- Status: `DONE`
-- Eligible: `ANTIGRAVITY`
-- Run ID: `RUN-20260906-AUTO-ANTIGRAVITY-A02S2-IMPLEMENT-01`
-- Base: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
-- Branch: `refactor/window-focus-history-foreground`
-- Code SHA: `c482ad3ae9c499ea32eb3c0cdd590e495a919e30`
-- Task file: `docs/agent-tasks/RUN-20260906-AUTO-ANTIGRAVITY-A02S2-IMPLEMENT-01.md`
-- Do not self-promote; architect review/acceptance remains pending.
-
-### A04A — handles seam analysis
-- Status: `DONE`
-- Eligible: `ANTIGRAVITY`
-- Model used: `Gemini 3.8 Flash (Medium)`
-- Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-A04-ANALYSIS-01`
-- Base: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
-- Report tip SHA: `8259df1ae67dfec09703ec0e3860bb43770ce660`
-- Verdict: `READY_TO_IMPLEMENT`
-- Report: `docs/agent-reports/2026-09-07-antigravity-a04-analysis.md`
-
-### A04S1 — pure handle geometry & color seam
+### A04S3 — handle runtime synchronization and click seam
 - Status: `READY`
 - Eligible: `ANTIGRAVITY`
-- Preferred model: `Gemini 3.8 Flash (Medium)`; Claude allowed if Gemini unavailable
+- Preferred model: `Gemini 3.8 Flash (Medium)`; Claude allowed only if Gemini unavailable
 - Session: `NEW`
-- Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-A04S1-IMPLEMENT-01`
-- Base/source rule: accepted shared production identity `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`; docs-only higher shared commits allowed if production/test tree unchanged
-- Branch: `refactor/window-handles-pure-seam`
-- Task file: `docs/agent-tasks/RUN-20260907-AUTO-ANTIGRAVITY-A04S1-IMPLEMENT-01.md`
+- Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-A04S3-IMPLEMENT-01`
+- Base: `e862c4f7b71f0aced86dc2b19843b47b4b23a0f2`
+- Branch: `refactor/window-handles-runtime-sync`
+- Task file: `docs/agent-tasks/RUN-20260907-AUTO-ANTIGRAVITY-A04S3-IMPLEMENT-01.md`
 
-After A04S1 DONE/BLOCKED, fresh-fetch and stop unless architect has published another Antigravity READY task.
+After A04S3 DONE/BLOCKED, fresh-fetch and stop unless architect has published another Antigravity READY task.
 
 ## AUTONOMOUS QUEUE — OPENCODE / DEEPSEEK
 
-### 1. T01 — settings-seam determinism / timeout
-- Status: `DONE`
-- Eligible: `OPENCODE-DEEPSEEK`
-- Run ID: `RUN-20260907-OPENCODE-DEEPSEEK-T01-SETTINGS-SEAM-01`
-- Code SHA: `34efdb62d8fb1dcaa55119f47794c3b269772e9c`
-- Report tip SHA: `0c184d0d10a6e1e75d6e4b6e5a56e712ed162412`
-- Branch: `test/settings-seam-determinism`
-- Architect repo-only review: no issue found; promotion still pending.
-
-### 2. A03S1 — pure geometry plan seam
-- Status: `READY`
+### A03S1 — pure geometry plan seam
+- Status: `CLAIMED/RUNNING`
 - Eligible: `OPENCODE-DEEPSEEK`
 - Required model: `deepseek-v4-flash`
 - Session: `NEW`
 - Run ID: `RUN-20260906-AUTO-ANTIGRAVITY-A03S1-IMPLEMENT-01`
-- Base/source rule: accepted shared lineage at or above P08; must not depend on unaccepted A02S2
+- Base: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
 - Branch: `refactor/window-geometry-plan-seam`
+- Claim: `docs/agent-claims/RUN-20260906-AUTO-ANTIGRAVITY-A03S1-IMPLEMENT-01.md`
 - Task file: `docs/agent-tasks/RUN-20260906-AUTO-ANTIGRAVITY-A03S1-IMPLEMENT-01.md`
-- Reserved for DeepSeek.
 
-### 3. A05A — Settings service / tray seam analysis
+### A05A — Settings service / tray seam analysis
 - Status: `WAITING_QUEUE`
 - Eligible: `OPENCODE-DEEPSEEK`
 - Required model: `deepseek-v4-flash`
@@ -128,7 +101,7 @@ After A04S1 DONE/BLOCKED, fresh-fetch and stop unless architect has published an
 - Branch: `analysis/a05-settings-tray-seam-deepseek`
 - Task file: `docs/agent-tasks/RUN-20260907-OPENCODE-DEEPSEEK-A05-ANALYSIS-01.md`
 
-### 4. T02A — narrow test debt / production-seam coverage audit
+### T02A — narrow test debt / production-seam coverage audit
 - Status: `WAITING_QUEUE`
 - Eligible: `OPENCODE-DEEPSEEK`
 - Required model: `deepseek-v4-flash`
@@ -138,7 +111,7 @@ After A04S1 DONE/BLOCKED, fresh-fetch and stop unless architect has published an
 - Branch: `analysis/test-debt-production-seams-deepseek`
 - Task file: `docs/agent-tasks/RUN-20260907-OPENCODE-DEEPSEEK-T02-TEST-DEBT-ANALYSIS-01.md`
 
-### 5. A03S2 — monitor / origin selection seam
+### A03S2 — monitor / origin selection seam
 - Status: `WAITING_DEPENDENCY`
 - Eligible: `OPENCODE-DEEPSEEK`
 - Required model: `deepseek-v4-flash`
@@ -148,20 +121,38 @@ After A04S1 DONE/BLOCKED, fresh-fetch and stop unless architect has published an
 - Branch: `refactor/window-geometry-monitor-origin-seam`
 - Task file: `docs/agent-tasks/RUN-20260907-OPENCODE-DEEPSEEK-A03S2-IMPLEMENT-01.md`
 
-DeepSeek must fresh-fetch after A03S1 DONE/BLOCKED and stop unless architect has advanced another task to READY.
+After A03S1 DONE/BLOCKED, DeepSeek must fresh-fetch. Architect will advance at most one next DeepSeek task to READY.
+
+## AUTONOMOUS QUEUE — OPENCODE / CLAUDE 4.8
+
+### A02S2 FIX — promotion blockers
+- Status: `CLAIMED/RUNNING`
+- Eligible: `OPENCODE-CLAUDE48`
+- Required model: `agentrouter/claude-opus-4-8`
+- Session: `NEW`
+- Run ID: `RUN-20260907-OPENCODE-CLAUDE48-A02S2-FIX-01`
+- Base: `c482ad3ae9c499ea32eb3c0cdd590e495a919e30`
+- Branch: `fix/a02s2-focus-history-blockers`
+- Claim: `docs/agent-claims/RUN-20260907-OPENCODE-CLAUDE48-A02S2-FIX-01.md`
+- Task file: `docs/agent-tasks/RUN-20260907-OPENCODE-CLAUDE48-A02S2-FIX-01.md`
+- Do not self-promote.
+
+No second Claude 4.8 READY task while this run is active.
 
 ## COMPLETED AUTONOMOUS RUNS — recent
 
-- `RUN-20260907-AUTO-ANTIGRAVITY-A04-ANALYSIS-01` — DONE, READY_TO_IMPLEMENT.
-- `RUN-20260906-AUTO-ANTIGRAVITY-A02S2-IMPLEMENT-01` — DONE, Code SHA `c482ad3ae9c499ea32eb3c0cdd590e495a919e30`; acceptance pending.
+- `RUN-20260907-AUTO-ANTIGRAVITY-A04S2-IMPLEMENT-01` — DONE, Code SHA `e862c4f7b71f0aced86dc2b19843b47b4b23a0f2`; repo-only architect scope review clean, acceptance pending.
+- `RUN-20260907-AUTO-ANTIGRAVITY-A04S1-IMPLEMENT-01` — DONE, Code SHA `851f47566dd074538f412b9d258193dbde65195b`; acceptance pending.
+- `RUN-20260907-AUTO-ANTIGRAVITY-A04-ANALYSIS-01` — DONE, `READY_TO_IMPLEMENT`.
+- `RUN-20260906-AUTO-ANTIGRAVITY-A02S2-IMPLEMENT-01` — DONE, Code SHA `c482ad3ae9c499ea32eb3c0cdd590e495a919e30`; independent review `NEEDS_FIX`, no promotion.
 - `RUN-20260907-OPENCODE-DEEPSEEK-T01-SETTINGS-SEAM-01` — DONE, Code SHA `34efdb62d8fb1dcaa55119f47794c3b269772e9c`; repo-only architect review clean.
 - `RUN-20260906-AUTO-ANTIGRAVITY-P08-A02S1-PROMOTE-01` — DONE, shared production Code SHA `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`.
-- `RUN-20260906-AUTO-CODEX-P07-G06-PROMOTE-CLEANUP-01` — DONE.
-- `RUN-20260906-AUTO-ANTIGRAVITY-A02S1-ACCEPT-01` — DONE, ACCEPT.
-- `RUN-20260906-AUTO-DEV1-A02S1-REVIEW-01` — DONE.
-- `RUN-20260906-AUTO-CODEX-A02S1-01` — DONE, Code SHA `ac71581b98a58e51128a987d20d8b5b1952c1756`.
-- `RUN-20260906-AUTO-CODEX-A03-ANALYSIS-01` — DONE, READY_TO_IMPLEMENT.
 
 ## NEXT AFTER THIS WAVE
 
-Architect reviews A02S2/A03S1/DeepSeek outputs before promotion. T01 promotion is pending. A03S3 waits for accepted A02S2. A04S2/A04S3 remain architect-gated after A04S1 review. A05 implementation is not autonomous until architect explicitly publishes it.
+- Review A02S2 FIX before any acceptance/promotion.
+- Review A03S1 output; only then unlock A03S2.
+- Review A04S3 output before deciding whether the handles line is promotable or needs runtime/manual verification.
+- T01 promotion remains pending.
+- A03S3 remains blocked on accepted A02S2.
+- A05 implementation is not autonomous until architect explicitly publishes it.
