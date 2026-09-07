@@ -11,6 +11,8 @@
 - Code SHA: `NONE`
 - Branch: `analysis/multimon-fix-boundary-03-muse13`
 - Worktree: `C:\Users\nerza\Projects\drawer-settings-integration`
-- Status: `CLAIMED`
-- Report tip SHA: `PENDING`
+- Status: `DONE`
+- Report tip SHA: `c4e8010c0cb93a84c82ed1be731a3765df807511`
+- Checks: `9-commit lineage diffed; 5ed8b9a brace bug confirmed fixed-in-lineage by 26b1133; Show staging/Slide/HandlesSync/HandleTick/focus ordering verified identical accepted-vs-candidate; 073a9e6 pinning confirmed rejected; no src/test edits`
+- Verdict: `WAIT_FOR_RUNTIME_EVIDENCE`
 - Report: `docs/agent-reports/2026-09-07-opencode-muse13-multimon-fix-boundary-03.md`
