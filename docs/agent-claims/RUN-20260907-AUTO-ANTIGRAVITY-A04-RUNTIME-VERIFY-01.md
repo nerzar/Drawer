@@ -8,4 +8,16 @@
 - Base SHA: `4d1a3106c3e3f64f8caa5b26bceacf9fafdf5873`
 - Branch: `verify/window-handles-runtime`
 - Worktree: `C:\Users\nerza\Projects\drawer-agent-worktrees\A04VERIFY`
-- Status: `CLAIMED`
+- Status: `DONE`
+- Verdict: `PASS_WITH_GAPS`
+- Base SHA: `4d1a3106c3e3f64f8caa5b26bceacf9fafdf5873`
+- Report: `docs/agent-reports/2026-09-07-antigravity-a04-runtime-verify.md`
+- Remote ref: `dev/verify/window-handles-runtime`
+- Checks:
+  - `AutoHotkey64.exe /Validate src\drawer.ahk`: EXIT 0
+  - `AutoHotkey64.exe /Validate src\WindowHandles.ahk`: EXIT 0
+  - `AutoHotkey64.exe /Validate test\narrow\window-handles-seam.ahk`: EXIT 0
+  - `test\narrow\window-handles-seam.ahk`: 39/39 PASS, EXIT 0
+  - `test\narrow\settings-seam.ahk`: PASS, EXIT 0
+  - `test\narrow\window-focus-seam.ahk`: PASS, EXIT 0
+  - `src/config.ini`: unmodified
