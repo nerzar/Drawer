@@ -1,10 +1,10 @@
 # A03S1 — pure geometry plan seam
 
 - Run ID: `RUN-20260906-AUTO-ANTIGRAVITY-A03S1-IMPLEMENT-01`
-- Eligible: `ANTIGRAVITY`, `OPENCODE-DEEPSEEK`
-- Preferred model: `Claude` if available; Gemini 3.8 Flash or `deepseek-v4-flash` allowed
+- Eligible: `OPENCODE-DEEPSEEK`
+- Required model for OpenCode: `deepseek-v4-flash`
 - Session: `NEW`
-- Claim race rule: first valid claim on the shared branch owns this Run ID and output branch; any other eligible worker must skip immediately after fresh fetch.
+- Ownership: reserved for DeepSeek while Antigravity continues its already-claimed A02S2 run. Do not duplicate this Run ID from Antigravity.
 - Base source rule: current accepted shared lineage after P08; must contain shared production SHA `886e68663a0f487f3ad00c248a4aed87e02861c7` and accepted A02S1 `ac71581b98a58e51128a987d20d8b5b1952c1756` as ancestors. This slice must not depend on unaccepted A02S2.
 - Analysis input: `analysis/a03-parking-geometry-seam` report `2026-09-06-codex-a03-analysis.md`
 - Output branch: `refactor/window-geometry-plan-seam`
