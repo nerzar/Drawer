@@ -9,6 +9,7 @@
 - Base SHA: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
 - Branch: `refactor/window-focus-history-foreground`
 - Code SHA: `c482ad3ae9c499ea32eb3c0cdd590e495a919e30`
+- Report tip SHA: `e6c14b54ccd25ad474e10ae7f0b6596f161b83a7`
 - Report: `docs/agent-reports/2026-09-06-antigravity-a02s2.md`
 - Checks:
   - AutoHotkey v2 `/Validate`: pass across `drawer.ahk`, `WindowFocus.ahk`, `window-focus-seam.ahk`, `settings-seam.ahk`
