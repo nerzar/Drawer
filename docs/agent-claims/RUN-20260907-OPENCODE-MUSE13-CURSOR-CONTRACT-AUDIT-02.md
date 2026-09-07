@@ -11,6 +11,8 @@
 - Code SHA: `NONE`
 - Branch: `analysis/cursor-contract-audit-02-muse13`
 - Worktree: `C:\Users\nerza\Projects\drawer-settings-integration`
-- Status: `CLAIMED`
-- Report tip SHA: `PENDING`
+- Status: `DONE`
+- Report tip SHA: `6431475c5202c44cdab3afc65c1284bffeefad66`
+- Checks: `contract proven at 6bfa010 via git grep both paths; 9-commit lineage diffed; Show/Hide/HandlesSync/geometry/handles/click verified identical; brace-bug window 5ed8b9a->26b1133 confirmed fixed-in-lineage; no prod/test edits`
+- Verdict: `NEEDS_RUNTIME_BISECT`
 - Report: `docs/agent-reports/2026-09-07-opencode-muse13-cursor-contract-audit-02.md`
