@@ -11,6 +11,8 @@
 - Code SHA: `NONE`
 - Branch: `analysis/multimon-retest-preflight-muse13`
 - Worktree: `C:\Users\nerza\Projects\drawer-settings-integration`
-- Status: `CLAIMED`
-- Report tip SHA: `PENDING`
+- Status: `DONE`
+- Report tip SHA: `9198d7daac1ed30a7177c976a3146b4c98ba37ef`
+- Checks: `lineage cd6dc00->073a9e6 single-commit + fast-forward; diff 3 files +207/-6; diff --check clean; config.ini untouched; Base naked resolves vs FIX pinned verified via git grep; caller census no stray cursor resolve; 073a9e6..dc19494 docs-only; no prod/test edits in report branch`
+- Verdict: `READY_FOR_MANUAL_RETEST_IF_VERIFY_PASSES`
 - Report: `docs/agent-reports/2026-09-07-opencode-muse13-multimon-retest-preflight.md`
