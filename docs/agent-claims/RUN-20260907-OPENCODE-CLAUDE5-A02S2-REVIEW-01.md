@@ -4,13 +4,20 @@
 - Agent/client: `OpenCode`
 - Model: `claude-opus-5` (exact model ID `agentrouter/claude-opus-5`)
 - Claimed timestamp: `2026-09-07T03:45:40+03:00`
-- Observed shared SHA: `cb6e2e55775acd164b6b580ae5d039d2b61cb4fa`
+- Completed timestamp: `2026-09-07T04:16:00+03:00`
+- Observed shared SHA: `cb6e2e55775acd164b6b580ae5d039d2b61cb4fa` (claim), `d30cf70516c108c05a82f31dee8690c7082290df` (report base)
 - Reviewed Code SHA: `c482ad3ae9c499ea32eb3c0cdd590e495a919e30`
+- Compared against base: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
 - Source branch: `refactor/window-focus-history-foreground`
 - Branch: `review/a02s2-claude5`
 - Worktree: `C:\Users\nerza\Projects\drawer-agent-worktrees\A02S2R-CLAUDE5`
-- Status: `CLAIMED`
-- Code SHA: `NONE` (review-only; no production change)
-- Report tip SHA: `PENDING_FINAL_COMMIT`
-- Verdict: `PENDING`
-- Checks: `PENDING`
+- Status: `DONE`
+- Code SHA: `NONE` (review-only; no production or test code modified)
+- Report: `docs/agent-reports/2026-09-07-opencode-claude5-a02s2-review.md`
+- Report tip SHA: `d9cc518b234156f32e31b542af1c90f8772b0652`
+- Verdict: `NEEDS_FIX`
+- Blockers:
+  - `src/drawer.ahk` @ `c482ad3` fails AutoHotkey v2 `/Validate` with EXIT 2 — `RestoreFocus`, `RedirectFocus`, `PrevActive`, `FocusCandidate`, `StillFocused` are defined in both `src/WindowFocus.ahk` and `src/drawer.ahk` while `drawer.ahk:238` includes the module. Application cannot load. Base `6bfa010` validates EXIT 0.
+  - Р17 focus-return is broken independently: `Hide()` calls `WatchForget(hwnd)` at `drawer.ahk:867`, which now also deletes `prevFocus[hwnd]`, so `RestoreFocus` at `drawer.ahk:879` always reads `0` and falls through to `RedirectFocus`. Reproduced with real windows against production `src/WindowFocus.ahk` at the Code SHA.
+- Checks: `AHK v2.0.27 /Validate drawer.ahk @ c482ad3 EXIT 2 (x64 and x86); /Validate drawer.ahk @ 6bfa010 EXIT 0; /Validate WindowFocus.ahk, window-focus-seam.ahk, settings-seam.ahk @ c482ad3 EXIT 0; window-focus-seam.ahk run EXIT 0 with 21/21 OK while the app cannot load; settings-seam.ahk run NOT OBTAINED (no output, killed at 90 s — consistent with open T01 determinism item); minimal-fix experiment on out-of-repo copy (delete drawer.ahk 883-973) restores /Validate EXIT 0; reviewed worktree blob verified equal to committed blob 9f71a61; src/config.ini untouched; output branch remote HEAD verified at d9cc518; no repository production or test file modified.`
+- Evidence note: A02S2 claim/report state `/Validate` pass for `src/drawer.ahk`; that statement is false at Code SHA `c482ad3`.
