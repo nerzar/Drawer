@@ -13,9 +13,14 @@ Read shared state from `refs/remotes/dev/wip/slots-parity`; shared docs push onl
 ## Protocol
 1. `git fetch dev`; read current board, exact task and `REPORT_FORMAT.md`.
 2. Claim; obey exact Base/Code SHA, scope, branch/worktree/session.
-3. Verify repository facts independently; do not trust prior reports as proof.
+3. Verify repository facts independently; do not trust prior reports or indexes as proof.
 4. Run bounded targeted gates; report/commit/push; verify remote + clean tree.
 5. Never self-accept/promote or broaden scope. On blocker/conflict/data-loss risk: report `BLOCKED`, stop.
+
+## Repo tooling
+- RepoWise is available in the Drawer environment and may be used as a supplementary repo-navigation/indexing aid.
+- Git refs, exact SHAs, repository files, tests and runtime evidence remain authoritative.
+- Hindsight is not a required dependency for any current task and must not block work.
 
 ## Current status — manual retest FAILED; product behavior locked
 - Accepted production remains `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`.
@@ -29,7 +34,7 @@ Read shared state from `refs/remotes/dev/wip/slots-parity`; shared docs push onl
 - `RUN-20260907-AUTO-ANTIGRAVITY-MULTIMON-RUNTIME-BISECT-02` — DONE, verdict `READY_FOR_FIX`. Report claims `5ed8b9a` for wrong-origin and `fae1850` for handle migration.
 - `RUN-20260907-OPENCODE-MUSE13-CURSOR-CONTRACT-AUDIT-02` — DONE, verdict `NEEDS_RUNTIME_BISECT`. Static audit proves cursor-follow contract but conflicts with the Antigravity root-cause conclusion: it shows the `5ed8b9a` missing-braces geometry bug is fixed by `26b1133` inside the failed candidate and finds no remaining geometry semantic delta.
 
-Because the two analyses do **not** converge, implementation is NOT authorized yet. The previous Antigravity report does not include an explicit per-commit runtime pass/fail matrix strong enough to resolve this contradiction. Do not convert speculative DWM/timer explanations into code changes.
+Because the two analyses do **not** converge, implementation is NOT authorized yet. Do not convert speculative DWM/timer explanations into code changes.
 
 ## AUTONOMOUS QUEUE — ANTIGRAVITY
 ### Runtime evidence reconciliation
@@ -62,4 +67,4 @@ Analysis/report only. Produce an explicit per-commit runtime pass/fail matrix if
 Analysis/report only. Independently review both prior reports, flag unsupported claims, and define the smallest behavior-preserving fix boundary or explicitly wait for runtime evidence. No production/test edits.
 
 ## Architect gate
-Wait for both reconciliation reports. Publish implementation only if the evidence converges on a narrow mechanism that preserves accepted user behavior. Any proposed fix must have regression coverage that preserves managed cursor-follow and must not revive monitor pinning. After a verified narrow fix, build exactly one candidate and stop for immediate user dual-monitor retest before any other refactor or promotion.
+Wait for both reconciliation reports. Publish implementation only if evidence converges on a narrow mechanism that preserves accepted user behavior. Any proposed fix must have regression coverage that preserves managed cursor-follow and must not revive monitor pinning. After a verified narrow fix, build exactly one candidate and stop for immediate user dual-monitor retest before any other refactor or promotion.
