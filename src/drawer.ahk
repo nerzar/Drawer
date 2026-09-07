@@ -1333,7 +1333,6 @@ HandlesSync() {
         }
         hd := handles[n]
         hd.mi := k.mi, hd.edge := k.edge, hd.base := k.base
-        hd.thick := HANDLE_REST, hd.from := HANDLE_REST, hd.to := HANDLE_REST
         HandleApply(hd)
     }
     HandleTimer()

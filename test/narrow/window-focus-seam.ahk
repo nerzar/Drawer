@@ -38,8 +38,8 @@ prior := Map()
 period := -1
 desired := Reconcile(prior,
     [{ hwnd: 101, cfg: { hideOnBlur: true, activateOnShow: false } }], 250, &period)
-Assert("non-activating Show не получает watcher при reconcile",
-    !desired.Has(101) && period = 0)
+Assert("hideOnBlur получает watcher независимо от activateOnShow",
+    desired.Has(101) && period = 250)
 
 focusedCfg := { hideOnBlur: true, activateOnShow: false, marker: "updated" }
 prior := Map(101, { hideOnBlur: true, activateOnShow: false })

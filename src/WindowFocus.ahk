@@ -20,7 +20,6 @@ WindowFocusShouldActivate(cfg, forceActivate := false) {
 
 WindowWatchEligible(cfg, alreadyWatched := false) {
     return WindowFocusOpt(cfg, "hideOnBlur", true)
-        && (alreadyWatched || WindowFocusOpt(cfg, "activateOnShow", true))
 }
 
 ; candidates уже содержат по одной authoritative cfg для каждого живого
