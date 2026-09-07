@@ -23,19 +23,11 @@ Read shared state from `refs/remotes/dev/wip/slots-parity`; shared docs push onl
 - User manual PASS: basic handles; Settings lifecycle.
 - User manual FAIL: monitor-2 deployment visibly starts/animates from monitor 1 / neighboring monitor; target/cursor monitor and deployment origin disagree; an edge handle disappeared completely once; multi-monitor behavior materially regressed.
 - Green narrow/validate gates did not predict this runtime failure. New refactors A03S2/A03S3/A05 remain frozen.
+- Antigravity diagnosis is DONE with verdict `READY_FOR_FIX`; report: `docs/agent-reports/2026-09-07-antigravity-manual-multimon-failure-analysis.md`.
+- Antigravity is now intentionally STOPPED to preserve remaining model budget. Publish no new Antigravity READY task until architect/user explicitly reopens it.
 
 ## AUTONOMOUS QUEUE — ANTIGRAVITY
-### Independent diagnosis A
-- Status: `READY`
-- Eligible: `ANTIGRAVITY`
-- Preferred model: `Gemini 3.8 Flash (Medium)`
-- Session: `NEW`
-- Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-MANUAL-MULTIMON-FAILURE-ANALYSIS-01`
-- Base/source: failed candidate `cd6dc00b3d58c6abea709687618ea3702432bc45`; compare accepted `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
-- Branch: `analysis/manual-multimon-regression-antigravity`
-- Task: `docs/agent-tasks/RUN-20260907-AUTO-ANTIGRAVITY-MANUAL-MULTIMON-FAILURE-ANALYSIS-01.md`
-
-Analysis only. Localize first bad lineage/root cause and propose smallest fix/test. STOP after report unless a later board task explicitly authorizes implementation.
+No current READY tasks. STOP after fresh fetch.
 
 ## AUTONOMOUS QUEUE — OPENCODE / MUSE 1.3 FREE
 ### Independent diagnosis B
@@ -48,7 +40,9 @@ Analysis only. Localize first bad lineage/root cause and propose smallest fix/te
 - Branch: `analysis/manual-multimon-regression-muse13`
 - Task: `docs/agent-tasks/RUN-20260907-OPENCODE-MUSE13-MANUAL-MULTIMON-INDEPENDENT-ANALYSIS-01.md`
 
-Muse must form its own hypothesis/evidence before reading Antigravity's new failure-analysis report. Analysis only; no fix/promotion.
+Muse must form and record its own hypothesis/evidence BEFORE reading Antigravity's failure-analysis report. After its independent evidence is fixed in the report draft, it may compare with Antigravity's report and explicitly state agreements/disagreements.
 
-## Architect gate after both diagnoses
-Do not let either worker independently implement before both analyses are available unless one is blocked. Architect compares conclusions, then publishes one narrow FIX task and a separate independent VERIFY task. Fix must add evidence covering the observed runtime adapter/monitor-origin failure, not merely keep existing pure seams green. After verification, rebuild ONE candidate and stop for early user dual-monitor re-test before any further refactoring.
+Analysis/report only. No production/test edits, no fix, no promotion, no candidate rebuild. After claim/report/push is DONE, fresh-fetch and STOP. There is intentionally no follow-on READY task tonight.
+
+## Architect gate
+Next architect turn compares both diagnoses and publishes one narrow FIX task plus separate verification. Any fix must add evidence covering the observed runtime monitor-origin/handle-loss failure, not merely preserve current pure seams. Rebuild one candidate and perform early user dual-monitor re-test before any further refactoring.
