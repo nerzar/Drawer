@@ -23,12 +23,9 @@ Read shared state from `refs/remotes/dev/wip/slots-parity`; shared docs push onl
 - User manual PASS: basic handles; Settings lifecycle.
 - User manual FAIL: monitor-2 deployment visibly starts/animates from monitor 1 / neighboring monitor; target/cursor monitor and deployment origin disagree; an edge handle disappeared completely once; multi-monitor behavior materially regressed.
 - Green narrow/validate gates did not predict this runtime failure. New refactors A03S2/A03S3/A05 remain frozen.
-- Antigravity diagnosis DONE, verdict `READY_FOR_FIX`; Antigravity remains intentionally STOPPED to preserve budget.
-- Muse independent diagnosis DONE, verdict `READY_FOR_FIX`.
-- Both independent analyses agree the earlier `5ed8b9a` missing-braces monitor collection bug was real but is already fixed by `26b1133`. Both independently identify the remaining likely runtime defect as unstable `monitor: cursor` identity between `HandlesSync` and `Show`, which can regroup/destroy handles and deploy a managed window against a different monitor after incidental cursor movement.
-
-## AUTONOMOUS QUEUE — ANTIGRAVITY
-No current READY tasks. STOP after fresh fetch. Do not spend remaining Antigravity budget unless architect/user explicitly reopens it.
+- Antigravity diagnosis DONE, verdict `READY_FOR_FIX`; Muse independent diagnosis DONE, verdict `READY_FOR_FIX`.
+- Both analyses agree the old `5ed8b9a` missing-braces monitor collection bug is already fixed by `26b1133`; remaining likely defect is unstable `monitor: cursor` identity between `HandlesSync` and `Show`.
+- Antigravity budget has reset and is available again, but implementation and verification remain separated.
 
 ## AUTONOMOUS QUEUE — OPENCODE / MUSE 1.3 FREE
 ### Narrow FIX — managed-window monitor identity
@@ -42,9 +39,20 @@ No current READY tasks. STOP after fresh fetch. Do not spend remaining Antigravi
 - Branch: `fix/manual-multimon-monitor-identity-muse13`
 - Task: `docs/agent-tasks/RUN-20260907-OPENCODE-MUSE13-MANUAL-MULTIMON-FIX-01.md`
 
-Implement only the smallest monitor-identity stabilization justified by both diagnoses, plus deterministic regression coverage. Preserve first/unmanaged cursor semantics and `26b1133`. Do not broaden into A03S2/A03S3/A05, merge or promote.
+Implement only the smallest monitor-identity stabilization justified by both diagnoses, plus deterministic regression coverage. Preserve first/unmanaged cursor semantics and `26b1133`. Do not broaden into A03S2/A03S3/A05, merge or promote. After DONE/BLOCKED, fresh-fetch and STOP.
 
-After DONE/BLOCKED, fresh-fetch and STOP. There is intentionally no automatic follow-on READY task: architect must inspect Code SHA/report before assigning verification.
+## AUTONOMOUS QUEUE — ANTIGRAVITY
+### Reserved independent verification of Muse FIX
+- Status: `WAITING_DEPENDENCY`
+- Eligible: `ANTIGRAVITY`
+- Preferred model: `Gemini 3.8 Flash (Medium)`
+- Session: `NEW`
+- Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-MULTIMON-FIX-VERIFY-01`
+- Dependency: Muse FIX above must be DONE with `READY_FOR_INDEPENDENT_VERIFY`; architect must pin exact FIX Code SHA and switch this task to READY.
+- Branch: `review/manual-multimon-fix-antigravity`
+- Task: `docs/agent-tasks/RUN-20260907-AUTO-ANTIGRAVITY-MULTIMON-FIX-VERIFY-01.md`
 
-## Architect gate
-Review Muse FIX code/report. If evidence is sufficient, publish a separate verification/review task in a NEW session (prefer non-scarce Muse fresh session if Antigravity budget remains protected), then rebuild one candidate. Stop for early user dual-monitor runtime re-test before any further refactoring or promotion.
+Anti must not start this while dependency is pending. Once activated, review/verification only: no self-fix, promotion or candidate assembly.
+
+## Next gate
+Architect inspects Muse Code SHA/report, activates Antigravity verification against that exact SHA, then—only on `ACCEPT_FOR_MANUAL_RETEST`—builds one candidate and stops for immediate user dual-monitor runtime retest. No A03S2/A03S3/A05 before that manual PASS.
