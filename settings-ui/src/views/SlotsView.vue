@@ -72,6 +72,7 @@ watch(
 // Правится черновик, а не canonical: вернуться в canonical значения
 // могут единственным путём — Применить/ОК.
 const draft = computed(() => settings.slotDrafts[selectedNumber.value])
+const slotKind = (slot) => settings.slotDrafts[slot.number]?.kind ?? slot.kind
 const watchError = useSlotStatus()
 
 // Куда указывает ошибка последнего ответа. Подсвечивается контрол
@@ -212,6 +213,17 @@ function resetDynamic() {
   if (!d || !shared || locked.value) return
   resetToShared(d, shared)
 }
+
+async function resetBoundSlot() {
+  const released = await releaseSlot(selectedNumber.value)
+  if (!released) return
+  const d = draft.value
+  const shared = currentShared.value
+  if (!d || !shared) return
+  d.kind = 'dynamic'
+  resetToShared(d, shared)
+  d.hotkey = `Ctrl + Alt + ${selectedNumber.value}`
+}
 </script>
 
 <template>
@@ -270,11 +282,11 @@ function resetDynamic() {
             <div
               class="pill"
               :style="{
-                background: slot.kind === 'permanent' ? 'var(--accent-tint)' : 'var(--neutral-bg)',
-                color: slot.kind === 'permanent' ? 'var(--accent-fg)' : 'var(--neutral-text)',
+                background: slotKind(slot) === 'permanent' ? 'var(--accent-tint)' : 'var(--neutral-bg)',
+                color: slotKind(slot) === 'permanent' ? 'var(--accent-fg)' : 'var(--neutral-text)',
               }"
             >
-              {{ slot.kind === 'permanent' ? 'Постоянный' : 'Временный' }}
+              {{ slotKind(slot) === 'permanent' ? 'Постоянный' : 'Временный' }}
             </div>
           </div>
         </button>
@@ -286,6 +298,18 @@ function resetDynamic() {
           <div class="detail-actions">
             <!-- Смена рода — правка черновика: панель меняется сразу,
                  config.ini — только по «Применить»/«ОК». -->
+
+                  <button
+              v-if="runtimeDynamicBound"
+              class="btn-danger-hd"
+              type="button"
+              data-testid="release-slot"
+              :disabled="locked"
+                    title="Отвязать окно и вернуть слот к настройкам по умолчанию"
+                    @click="resetBoundSlot()"
+            >
+                    Сбросить слот
+            </button>
             <button
               v-if="kind === 'permanent'"
               class="btn-danger-hd"
@@ -295,27 +319,19 @@ function resetDynamic() {
               title="После «Применить» Drawer перестанет автоматически искать это приложение"
               @click="makeDynamic()"
             >
-              Сделать временным…
+              Сделать временным
             </button>
-            <button
-              v-if="runtimeDynamicBound"
-              class="btn-danger-hd"
-              type="button"
-              data-testid="release-slot"
-              :disabled="locked"
-              @click="releaseSlot(selectedNumber)"
-            >
-              Отвязать окно
-            </button>
+
             <button
               v-if="kind === 'dynamic'"
               class="btn-primary-sm"
               type="button"
               data-testid="make-permanent"
+               title="После привязки слот сохраняется за приложением навсегда"
               :disabled="locked"
               @click="makePermanent()"
             >
-              Закрепить за приложением…
+               Сделать постоянным
             </button>
           </div>
         </div>
@@ -485,7 +501,7 @@ function resetDynamic() {
                 />
               </div>
             </div>
-            <div class="hotkey-cap">Показать / убрать; после «Применить» работает без перезапуска Drawer.</div>
+
           </fieldset>
         </template>
 
@@ -509,8 +525,8 @@ function resetDynamic() {
                 к слоту {{ selectedSlot.number }} до перезапуска Drawer.
               </div>
               <div v-else>
-                Привязка текущего окна живёт до перезапуска Drawer. «Отвязать окно» уберёт
-                только привязку; параметры слота останутся.
+                Привязка текущего окна живёт до перезапуска Drawer. «Сбросить слот» уберёт
+                привязку и вернёт его настройки к значениям по умолчанию.
               </div>
             </template>
             <div v-if="shownHotkey.active">

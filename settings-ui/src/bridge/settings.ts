@@ -29,6 +29,7 @@ import {
   slotEditsToWire,
   type SlotDrafts,
 } from './slotDraft'
+import { devTransport } from './devTransport'
 
 type Status = 'idle' | 'loading' | 'ready' | 'saving' | 'error'
 
@@ -60,8 +61,14 @@ const gate = new CanonicalGate()
 
 export function settingsClient(): SettingsClient | null {
   if (client) return client
-  if (!hasWebViewTransport()) return null
-  client = new SettingsClient(webViewTransport())
+  if (hasWebViewTransport()) {
+    client = new SettingsClient(webViewTransport())
+    return client
+  }
+  if (import.meta.env.DEV) {
+    client = new SettingsClient(devTransport())
+    return client
+  }
   return client
 }
 
@@ -206,8 +213,8 @@ export async function bindSlot(number: SlotNumber): Promise<void> {
   await slotRuntime('slot.bind', number, `Слот ${number} привязан к активному окну`)
 }
 
-export async function releaseSlot(number: SlotNumber): Promise<void> {
-  await slotRuntime('slot.release', number, `Слот ${number} освобождён`)
+export async function releaseSlot(number: SlotNumber): Promise<boolean> {
+  return slotRuntime('slot.release', number, `Слот ${number} освобождён`)
 }
 
 // bind/release меняют рантайм, но не config: они возвращают снимок,
@@ -219,17 +226,19 @@ async function slotRuntime(
   action: 'slot.bind' | 'slot.release',
   number: SlotNumber,
   done: string,
-): Promise<void> {
+): Promise<boolean> {
   const api = settingsClient()
-  if (!api || settings.status === 'saving' || settings.pickerActive || settings.closed) return
+  if (!api || settings.status === 'saving' || settings.pickerActive || settings.closed) return false
   settings.bad = false
   const ticket = gate.issue()
   try {
     const result = await api.request(action, { slot: number })
     if (result.state && gate.acceptSide(ticket)) absorb(result.state)
     settings.message = done
+    return true
   } catch (e) {
     fail(e, ticket)
+    return false
   }
 }
 
