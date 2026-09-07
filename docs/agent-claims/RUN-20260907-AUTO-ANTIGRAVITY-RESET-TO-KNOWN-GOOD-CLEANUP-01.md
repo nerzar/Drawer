@@ -14,6 +14,6 @@
 - Status: `DONE`
 - Verdict: `CLEAN_BASELINE_READY`
 - Starting ref: `recovery/known-good-6bfa010` (`6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`)
-- Report tip SHA: `PENDING_FINAL_COMMIT`
+- Finalization docs commit observed by architect: `3d40a2cb069bbfc28e06346c243d0828ffca86a8`
 - Report: `docs/agent-reports/2026-09-07-antigravity-reset-known-good-cleanup.md`
 - Scope: `Repository and worktree cleanup around known-good baseline 6bfa010; no production or test code changes`
