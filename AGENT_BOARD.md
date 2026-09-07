@@ -55,33 +55,35 @@ On blocker/conflict/product ambiguity/data-loss risk: preserve safe state, push 
 - Shared accepted production identity remains `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`; higher shared commits are docs/tasks/claims/reports only unless explicitly promoted.
 - G03, G05/G05FIX, G06 accepted + runtime verified + promoted. A02S1 accepted, runtime verified and promoted by P08.
 - A02S2 FIX DONE at `313b3af8b6377b2b66e07256f985b1663c5630ee`; acceptance/promotion pending.
-- A03S1 DONE at `700f033cc2700dcdbb6c9fbd387e2e44b8510ef8`; independent pre-promotion review now READY.
+- A03S1 DONE at `700f033cc2700dcdbb6c9fbd387e2e44b8510ef8`; independent pre-promotion review is the active Muse gate.
 - A04S1/S2/S3 DONE in exact linear lineage through `4d1a3106c3e3f64f8caa5b26bceacf9fafdf5873`; independent S1/S2/S3 reviews remain mandatory before acceptance/promotion.
 - T01 settings-seam determinism DONE at `34efdb62d8fb1dcaa55119f47794c3b269772e9c`; promotion pending.
-- T02A Muse audit DONE, verdict `NEEDS_PREREQUISITE`. Key findings: accepted `settings-seam.ahk` is largely copied-model/static-source-shape coverage with no production `#Include`; accepted suite hang is caused by missing `SettingsSectionSlot`/`SettingsChangedSlots`; production-direct coverage is sparse. No DELETE candidates yet. Adopt `/Validate` as mandatory extraction gate.
+- T02A Muse audit DONE, verdict `NEEDS_PREREQUISITE`: accepted settings-seam is largely copied/static coverage and hangs at accepted production; T01 plus mandatory `/Validate` extraction gate are prerequisites for trustworthy settings refactors.
+- A05A analysis DONE, report tip `2aa6eab70a209495ceecef47cac4a8829f3f3250`, verdict `READY_TO_IMPLEMENT`. Proposed A05S1 is a large SettingsService extraction; do not start it yet because T01/settings-seam prerequisite is unresolved and the A02S2 duplicate-declaration failure class requires the new independent pre-promotion gate.
 - CODEX quota exhausted. DeepSeek and Claude limited OpenCode runs stopped. Muse Spark 1.3 Contributor Free is approved for analysis/review only, not implementation/promotion authority yet.
-- Branch/worktree clutter is acknowledged debt. A dedicated cleanup task exists but stays WAITING until a capable local Antigravity slot is free. No ad-hoc ref deletion.
+- Branch/worktree clutter is active maintenance debt; cleanup is now the Antigravity task.
 
 ## AUTONOMOUS QUEUE — ANTIGRAVITY
 
-### A05A — Settings service / tray seam analysis
+### Ref/worktree cleanup
 - Status: `READY`
 - Eligible: `ANTIGRAVITY`
 - Preferred model: `Gemini 3.8 Flash (Medium)`
 - Session: `NEW`
-- Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-A05-ANALYSIS-01`
-- Base/source rule: accepted shared production `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`; unaccepted A02/A03/A04 branches are context only
-- Branch: `analysis/a05-settings-tray-seam-antigravity`
-- Task file: `docs/agent-tasks/RUN-20260907-AUTO-ANTIGRAVITY-A05-ANALYSIS-01.md`
-
-### Deferred ref/worktree cleanup
-- Status: `WAITING_QUEUE`
-- Eligible: `ANTIGRAVITY`
-- Session: `NEW`
 - Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-REF-CLEANUP-01`
+- Base/source rule: fresh current `refs/remotes/dev/wip/slots-parity`; repository-hygiene only
 - Branch: `maintenance/ref-cleanup-20260907`
 - Task file: `docs/agent-tasks/RUN-20260907-AUTO-ANTIGRAVITY-REF-CLEANUP-01.md`
-- Activate only when no higher-value Antigravity task is READY/running. Must inspect `git worktree list --porcelain`, unique commits and exact refs before deletion. Explicitly inspect `tmp/never` and accumulated task/review refs. Public `origin` untouched.
+
+After cleanup DONE/BLOCKED, fresh-fetch and stop unless architect has published another Antigravity READY task. Preserve all refs needed by pending A02/A03/A04/T01 acceptance/review and active Muse review work.
+
+### A05A — Settings service / tray seam analysis
+- Status: `DONE`
+- Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-A05-ANALYSIS-01`
+- Report tip: `2aa6eab70a209495ceecef47cac4a8829f3f3250`
+- Verdict: `READY_TO_IMPLEMENT`
+- Branch: `analysis/a05-settings-tray-seam-antigravity`
+- A05 implementation remains architect-gated pending T01/settings verification strategy.
 
 ## AUTONOMOUS QUEUE — OPENCODE / MUSE 1.3 FREE
 
@@ -135,4 +137,4 @@ Muse authority remains review/analysis only. Advance one review to READY at a ti
 - A03S3 waits for accepted A02S2 FIX lineage.
 - A04 cannot be accepted/promoted until S1/S2/S3 independent review gates are complete.
 - T01 promotion pending; T02 identifies it as prerequisite for trustworthy settings-seam execution.
-- A05 implementation waits for A05A analysis verdict and a new architect task.
+- A05S1 implementation waits for T01/settings-seam prerequisite resolution and a new architect implementation task.
