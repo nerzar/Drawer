@@ -11,86 +11,66 @@ A task is autonomous-ready only with `Status: READY`, eligible agent, Run ID, ex
 Read shared state from `refs/remotes/dev/wip/slots-parity`; shared docs push only to `HEAD:refs/heads/wip/slots-parity`. Never create local `dev/...` refs or use ambiguous `dev/wip/slots-parity`. Inspect worktrees/exact refs/unique commits before cleanup. Public `origin` is untouched.
 
 ### Publish-before-DONE invariant
-Agent work is not considered durable/completed until all of the following exist on private `dev` and are re-fetched successfully:
-1. claim file on shared branch;
-2. task/report branch at the declared remote ref;
-3. report file at the declared report tip;
-4. exact Code SHA when code/test changes exist;
-5. claim updated to `DONE`/`BLOCKED` only after remote verification.
-
-If local work exists but any remote artifact is missing, the agent must recover/publish that exact work before starting a new run. Do not silently redo lost/unpublished work unless recovery is impossible and reported.
+Agent work is not considered durable/completed until claim, remote branch, report tip and exact Code SHA (when code changes exist) are re-fetched from private `dev`. Recover unpublished local work before starting another run.
 
 ## Protocol
 1. `git fetch dev`; read current board, exact task and `REPORT_FORMAT.md`.
 2. Claim; obey exact Base/Code SHA, scope, branch/worktree/session.
-3. Verify repository facts independently; do not trust prior reports or indexes as proof.
-4. Run bounded targeted gates; report/commit/push; verify remote + clean tree.
-5. Never self-accept/promote or broaden scope. On blocker/conflict/data-loss risk: report `BLOCKED`, stop.
+3. Preserve accepted user behavior unless user explicitly changes it.
+4. Do not spend cycles on broad behavioral self-tests when the task says user manual acceptance is the gate.
+5. Report/commit/push; verify remote + clean tree. Never self-promote.
 
 ## Repo tooling
-- RepoWise may be used only as supplementary navigation/indexing aid.
-- Git refs, exact SHAs, repository files, tests and genuine runtime evidence remain authoritative.
-- Hindsight is not a required dependency and must not block current work.
+RepoWise may be used only as supplementary navigation/indexing aid. Git refs/SHAs/files remain authoritative. Hindsight is optional and must not block work.
 
-## Product contract — locked
-- Accepted production remains `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`.
-- Failed integrated candidate `cd6dc00b3d58c6abea709687618ea3702432bc45` remains **DO NOT PROMOTE**.
-- Monitor-pinning fix `073a9e649bb85b4766acec33e49f975d5444a140` remains **REJECTED**.
-- For `monitor: cursor`, managed windows and the active edge handle follow the live cursor monitor; Show/deploy resolves the live cursor monitor. No pinning/sticky bind monitor unless the user explicitly changes this behavior.
-- Unresolved user-visible defects: wrong animation origin / cross-monitor staging and one transient disappearing edge handle.
-- A03S2/A03S3/A05 and promotion remain frozen.
+## Product contract — LOCKED
+- Accepted production: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`.
+- Failed integrated candidate: `cd6dc00b3d58c6abea709687618ea3702432bc45` — **DO NOT PROMOTE**.
+- Rejected monitor-pinning fix: `073a9e649bb85b4766acec33e49f975d5444a140` — **DO NOT USE**.
+- `monitor: cursor` stays dynamic exactly as accepted production: managed window + active edge handle follow the live cursor monitor and Show/deploy resolves the current cursor monitor. No sticky/pinned bind-monitor behavior.
 
-## Acceptance debt — must be resolved before next refactor wave
-The following completed refactor lines remain unpromoted and must not drift indefinitely:
-- window focus extraction;
-- focus-history/foreground extraction + blocker fix;
-- window geometry extraction + monitor-enumeration fix;
-- window handles extraction line (pure/gui/runtime slices).
+## User directive — stop test churn, restore behavior, user will verify
+The user explicitly requested that agents stop spending time trying to prove the bug via self-tests and instead produce a behavior-preserving recovery candidate for manual testing on the real dual-monitor setup.
 
-These changes are intentionally NOT promoted while the combined candidate has unresolved runtime regression. However, after the monitor regression is localized/fixed and user dual-monitor retest passes, architect must immediately perform one acceptance/consolidation checkpoint before any A03S2/A03S3/A05 work. No new refactor wave may start while this acceptance debt remains open.
+Accordingly, prior diagnostic-only READY tasks are superseded and must NOT be picked:
+- `RUN-20260907-OPENCODE-MUSE13-MULTIMON-TRACE-PUBLISH-RECOVERY-05` — superseded;
+- `RUN-20260907-AUTO-ANTIGRAVITY-MULTIMON-VM-CAPTURE-PREP-04` — superseded.
 
-## Branch/worktree debt
-Branch proliferation is now a tracked maintenance risk. A dedicated post-wave cleanup task exists:
-- `RUN-20260907-AUTO-ANTIGRAVITY-POST-WAVE-REF-CLEANUP-02`
-- Status: `WAITING_DEPENDENCY`
-- Task: `docs/agent-tasks/RUN-20260907-AUTO-ANTIGRAVITY-POST-WAVE-REF-CLEANUP-02.md`
-
-It becomes READY only after the current monitor wave reaches a stable checkpoint, so active/recovery refs are not deleted prematurely. Cleanup must preserve unique commits and report before/after ref counts.
-
-## Evidence status
-- Reconciliation reports are complete but do not justify a behavior-preserving implementation yet.
-- Architect published Muse trace-harness task `RUN-20260907-OPENCODE-MUSE13-MULTIMON-RUNTIME-TRACE-HARNESS-04`, but after fresh Git inspection there is currently **no claim, no report, and no remote `diag/multimon-runtime-trace-harness-muse13` branch** visible on `dev` for that Run ID. If the agent completed work locally, it must be recovered/published rather than silently redone or lost.
-- No implementation task is authorized until accepted-vs-failed runtime evidence exists.
-
-## AUTONOMOUS QUEUE — OPENCODE / MUSE 1.3 FREE
-### Recover/publish runtime trace harness
-- Status: `READY`
-- Eligible: `OPENCODE-MUSE13`
-- Required model: `Muse Spark 1.3 Contributor Free`
-- Session: `CONTINUE_IF_LOCAL_STATE_EXISTS_ELSE_NEW`
-- Run ID: `RUN-20260907-OPENCODE-MUSE13-MULTIMON-TRACE-PUBLISH-RECOVERY-05`
-- Base/Code SHA: `cd6dc00b3d58c6abea709687618ea3702432bc45`
-- Accepted comparison: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
-- Branch: `diag/multimon-runtime-trace-harness-muse13`
-- Task: `docs/agent-tasks/RUN-20260907-OPENCODE-MUSE13-MULTIMON-TRACE-PUBLISH-RECOVERY-05.md`
-
-First inspect local worktrees/branches for completed task-04 work. Recover and publish it if present; otherwise execute the trace-harness task now. Test/diagnostic only, no `src/` behavior changes. After DONE/BLOCKED, fresh-fetch and stop unless a new explicit READY task exists.
+No new runtime-harness work is needed before the next user test.
 
 ## AUTONOMOUS QUEUE — ANTIGRAVITY
-### Dual-monitor VM runtime capture
+### Build conservative recovery candidate
 - Status: `READY`
 - Eligible: `ANTIGRAVITY`
 - Preferred model: `Gemini 3.8 Flash (Medium)`
 - Session: `NEW`
-- Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-MULTIMON-VM-CAPTURE-PREP-04`
-- Accepted baseline: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
-- Failed candidate: `cd6dc00b3d58c6abea709687618ea3702432bc45`
-- Branch: `diag/multimon-vm-runtime-capture-antigravity`
-- Task: `docs/agent-tasks/RUN-20260907-AUTO-ANTIGRAVITY-MULTIMON-VM-CAPTURE-PREP-04.md`
+- Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-MULTIMON-RECOVERY-CANDIDATE-06`
+- Base: `cd6dc00b3d58c6abea709687618ea3702432bc45`
+- Accepted behavior reference: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
+- Branch: `fix/manual-recovery-revert-geometry-handles-antigravity`
+- Task: `docs/agent-tasks/RUN-20260907-AUTO-ANTIGRAVITY-MULTIMON-RECOVERY-CANDIDATE-06.md`
 
-Use existing `test/vm`/dual-monitor infrastructure to obtain genuine accepted-vs-failed runtime evidence if possible. If execution is impossible, leave a bounded runnable capture procedure and exact blocker. Test/diagnostic changes only; no product fix.
+Build a conservative manual-test candidate by removing the unaccepted geometry + handles refactor line from the failed candidate while retaining unrelated focus/settings-test work. No redesign. Required machine checks are only syntax validate x64/x86, diff-check, config untouched and lineage/scope audit. User manual test is the behavioral gate.
+
+## AUTONOMOUS QUEUE — OPENCODE / MUSE 1.3 FREE
+### Recovery rollback boundary map
+- Status: `READY`
+- Eligible: `OPENCODE-MUSE13`
+- Required model: `Muse Spark 1.3 Contributor Free`
+- Session: `NEW`
+- Run ID: `RUN-20260907-OPENCODE-MUSE13-MULTIMON-RECOVERY-BOUNDARY-06`
+- Failed candidate: `cd6dc00b3d58c6abea709687618ea3702432bc45`
+- Accepted behavior reference: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
+- Branch: `analysis/multimon-recovery-boundary-muse13`
+- Task: `docs/agent-tasks/RUN-20260907-OPENCODE-MUSE13-MULTIMON-RECOVERY-BOUNDARY-06.md`
+
+Map the exact geometry/handles rollback boundary and dependencies. Analysis only, no src/test edits, no broad tests. Flag only concrete conflicts that could remove unrelated focus/settings work.
+
+## Acceptance debt — after user PASS
+Unpromoted focus/focus-history/geometry/handles refactors remain acceptance debt. If the conservative recovery candidate passes the user's dual-monitor test, immediately consolidate/accept the safe subset, then run post-wave ref cleanup before any new A03S2/A03S3/A05 work.
+
+## Branch/worktree debt
+Post-wave cleanup task remains `WAITING_DEPENDENCY`: `RUN-20260907-AUTO-ANTIGRAVITY-POST-WAVE-REF-CLEANUP-02`.
 
 ## Architect gate
-Wait for both diagnostic outputs. Publish a narrow implementation only if runtime evidence identifies a concrete accepted-vs-failed mechanism while preserving the locked cursor-follow behavior. Then independent verify, build exactly one candidate, and stop for immediate user dual-monitor retest.
-
-If user retest passes: immediately resolve the acceptance debt above, then activate post-wave branch/worktree cleanup, and only after both are complete may any new A03S2/A03S3/A05 refactor task become READY.
+Wait for Antigravity recovery Code SHA and Muse rollback-boundary report. If Antigravity produces `READY_FOR_USER_RETEST` and Muse finds no rollback-boundary blocker, expose that exact Code SHA to the user immediately. No additional behavioral test/review cycle before the user's manual dual-monitor test.
