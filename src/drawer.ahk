@@ -558,6 +558,7 @@ OnClearHotkey(*) {
 OnForeground(hook, event, hwnd, idObject, idChild, thread, time) {
     if WindowFocusOnEvent(hwnd, idObject)
         SetTimer(ForegroundWork, -1)
+    SetTimer(HandlesTopmostAll, -1)
 }
 
 ForegroundWork() {
@@ -873,6 +874,7 @@ Show(hwnd, cfg, st, forceActivate := false, prev := 0) {
         Slide(hwnd, g.hx, g.hy, g.sx, g.sy, g.w, g.h)
     if activate
         Watch(hwnd, cfg)
+    HandlesTopmostAll()
     SetTimer(HandlesSync, -1)    ; окно выехало — кромка остаётся на месте
 }
 
@@ -1337,6 +1339,7 @@ HandlesSync() {
         hd := handles[n]
         hd.mi := k.mi, hd.edge := k.edge, hd.base := k.base
         HandleApply(hd)
+        HandleTopmost(hd)
     }
     HandleTimer()
 }
@@ -1374,6 +1377,7 @@ HandleCreate(n, k) {
     r := hd.rect
     g.Show(Format("NoActivate x{1} y{2} w{3} h{4}", r.x, r.y, r.w, r.h))
     HandleRound(hd)
+    HandleTopmost(hd)
 }
 
 ; Скруглённые углы. Регион задан в координатах окна и при изменении
@@ -1384,6 +1388,26 @@ HandleRound(hd) {
     r := hd.rect
     try WinSetRegion("0-0 w" r.w " h" r.h " R" HANDLE_ROUND "-" HANDLE_ROUND,
                      "ahk_id " hd.gui.Hwnd)
+}
+
+; Гарантировать, что кромка строго поверх всех окон (HWND_TOPMOST).
+; Без активации окна (SWP_NOACTIVATE), чтобы не отбирать фокус у пользователя.
+HandleTopmost(hd) {
+    if !hd || !hd.gui
+        return
+    try {
+        if !(WinGetExStyle("ahk_id " hd.gui.Hwnd) & 0x8)
+            WinSetAlwaysOnTop(true, "ahk_id " hd.gui.Hwnd)
+        ; HWND_TOPMOST = -1, SWP_NOSIZE = 1, SWP_NOMOVE = 2, SWP_NOACTIVATE = 0x10 (0x13)
+        DllCall("SetWindowPos", "Ptr", hd.gui.Hwnd, "Ptr", -1,
+                "Int", 0, "Int", 0, "Int", 0, "Int", 0, "UInt", 0x0013)
+    }
+}
+
+HandlesTopmostAll() {
+    global handles
+    for n, hd in handles
+        HandleTopmost(hd)
 }
 
 ; Куда кромка едет теперь. Переход всегда идёт от текущей толщины, а не
@@ -1404,10 +1428,15 @@ HandleApply(hd) {
         return
     p := hd.rect
     if (!p || r.x != p.x || r.y != p.y || r.w != p.w || r.h != p.h) {
-        try hd.gui.Move(r.x, r.y, r.w, r.h)
+        ; HWND_TOPMOST = -1, SWP_NOACTIVATE = 0x0010, SWP_SHOWWINDOW = 0x0040 (0x0050)
+        try DllCall("SetWindowPos", "Ptr", hd.gui.Hwnd, "Ptr", -1,
+                    "Int", r.x, "Int", r.y, "Int", r.w, "Int", r.h, "UInt", 0x0050)
         hd.rect := r
         if (!p || r.w != p.w || r.h != p.h)
             HandleRound(hd)
+        HandleTopmost(hd)
+    } else {
+        HandleTopmost(hd)
     }
     HandleFace(hd, t)
 }

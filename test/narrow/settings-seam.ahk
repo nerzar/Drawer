@@ -2022,6 +2022,13 @@ if FileExist(drawerPath) {
     Assert("22e: HandleResizeAll пересобирает кромки через HandlesSync",
         InStr(src22, "HandleResizeAll() {`r`n    HandlesSync()`r`n}") > 0
      || InStr(src22, "HandleResizeAll() {`n    HandlesSync()`n}") > 0)
+    Assert("22f: HandleTopmost и HandlesTopmostAll гарантируют HWND_TOPMOST",
+        InStr(src22, "HandleTopmost(hd) {") > 0
+     && InStr(src22, "HandlesTopmostAll() {") > 0
+     && InStr(src22, 'DllCall("SetWindowPos", "Ptr", hd.gui.Hwnd, "Ptr", -1') > 0)
+    Assert("22g: HandlesSync, HandleCreate и HandleApply удерживают кромку поверх всех окон",
+        InStr(src22, "HandleTopmost(hd)") > 0
+     && InStr(src22, "HandlesTopmostAll()") > 0)
 }
 
 out := ""
