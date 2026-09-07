@@ -30,39 +30,38 @@ Read shared state from `refs/remotes/dev/wip/slots-parity`; shared docs push onl
 - Unresolved user-visible defects: wrong animation origin / cross-monitor staging and one transient disappearing edge handle.
 - A03S2/A03S3/A05 and promotion remain frozen.
 
-## Reconciliation wave — COMPLETE, no implementation gate
-### Antigravity `RUN-20260907-AUTO-ANTIGRAVITY-MULTIMON-EVIDENCE-RECONCILE-03`
-- Status: `DONE`
-- Branch: `analysis/multimon-evidence-reconcile-03-antigravity`
-- Report tip: `bff31ea1ee852efea994065604dbdc760773d7ec`
-- Verdict reported: `READY_FOR_NARROW_FIX`.
-- Accepted architect findings from the report: `5ed8b9a` is NOT a live defect in `cd6dc00` because `26b1133` fixed it; candidate geometry and handle lifecycle are statically equivalent to accepted on the implicated paths; prior first-bad attribution is retracted.
-- Architect rejection: the proposed destroy-on-monitor-change and cross-monitor slide suppression change accepted behavior and are not justified by an accepted-vs-candidate failing runtime delta. The supplied matrix is largely static/seam evidence, not sufficient proof of the user's runtime failure mechanism.
-
-### OpenCode/Muse `RUN-20260907-OPENCODE-MUSE13-MULTIMON-FIX-BOUNDARY-03`
-- Status: `DONE`
-- Branch: `analysis/multimon-fix-boundary-03-muse13`
-- Report tip: `c4e8010c0cb93a84c82ed1be731a3765df807511`
-- Verdict: `WAIT_FOR_RUNTIME_EVIDENCE`.
-- Architect agrees: geometry bug is fixed-in-lineage; Show staging, handle lifecycle and relevant focus/monitor code do not expose a proven static accepted-vs-candidate delta. Do not implement speculative DWM/timer/focus fixes.
-
-## AUTONOMOUS QUEUE — ANTIGRAVITY
-No READY task. STOP after fresh fetch. Preserve scarce model budget until a trace harness/runtime capture produces a concrete failing sequence worth independent verification.
+## Evidence status
+- Reconciliation reports are complete but do not justify a behavior-preserving implementation yet.
+- Architect published Muse trace-harness task `RUN-20260907-OPENCODE-MUSE13-MULTIMON-RUNTIME-TRACE-HARNESS-04`, but after fresh Git inspection there is currently **no claim, no report, and no remote `diag/multimon-runtime-trace-harness-muse13` branch** visible on `dev` for that Run ID. If the agent completed work locally, it must be recovered/published rather than silently redone or lost.
+- No implementation task is authorized until accepted-vs-failed runtime evidence exists.
 
 ## AUTONOMOUS QUEUE — OPENCODE / MUSE 1.3 FREE
-### Dual-monitor runtime trace harness
+### Recover/publish runtime trace harness
 - Status: `READY`
 - Eligible: `OPENCODE-MUSE13`
 - Required model: `Muse Spark 1.3 Contributor Free`
-- Session: `NEW`
-- Run ID: `RUN-20260907-OPENCODE-MUSE13-MULTIMON-RUNTIME-TRACE-HARNESS-04`
+- Session: `CONTINUE_IF_LOCAL_STATE_EXISTS_ELSE_NEW`
+- Run ID: `RUN-20260907-OPENCODE-MUSE13-MULTIMON-TRACE-PUBLISH-RECOVERY-05`
 - Base/Code SHA: `cd6dc00b3d58c6abea709687618ea3702432bc45`
 - Accepted comparison: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
-- Rejected semantic fix: `073a9e649bb85b4766acec33e49f975d5444a140`
 - Branch: `diag/multimon-runtime-trace-harness-muse13`
-- Task: `docs/agent-tasks/RUN-20260907-OPENCODE-MUSE13-MULTIMON-RUNTIME-TRACE-HARNESS-04.md`
+- Task: `docs/agent-tasks/RUN-20260907-OPENCODE-MUSE13-MULTIMON-TRACE-PUBLISH-RECOVERY-05.md`
 
-Test/diagnostic tooling only. No `src/` edits, no behavior changes, no fix. Build runtime observability capable of comparing exact accepted and failed SHAs and recording cursor monitor, handle lifecycle/rect, Show geometry/staging, actual window rect and focus ordering. Verdict may only be `READY_FOR_RUNTIME_CAPTURE` or `BLOCKED`.
+First inspect local worktrees/branches for completed task-04 work. Recover and publish it if present; otherwise execute the trace-harness task now. Test/diagnostic only, no `src/` behavior changes. After DONE/BLOCKED, fresh-fetch and stop unless a new explicit READY task exists.
+
+## AUTONOMOUS QUEUE — ANTIGRAVITY
+### Dual-monitor VM runtime capture
+- Status: `READY`
+- Eligible: `ANTIGRAVITY`
+- Preferred model: `Gemini 3.8 Flash (Medium)`
+- Session: `NEW`
+- Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-MULTIMON-VM-CAPTURE-PREP-04`
+- Accepted baseline: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
+- Failed candidate: `cd6dc00b3d58c6abea709687618ea3702432bc45`
+- Branch: `diag/multimon-vm-runtime-capture-antigravity`
+- Task: `docs/agent-tasks/RUN-20260907-AUTO-ANTIGRAVITY-MULTIMON-VM-CAPTURE-PREP-04.md`
+
+Use existing `test/vm`/dual-monitor infrastructure to obtain genuine accepted-vs-failed runtime evidence if possible. If execution is impossible, leave a bounded runnable capture procedure and exact blocker. Test/diagnostic changes only; no product fix.
 
 ## Architect gate
-Do not publish an implementation task until genuine runtime evidence identifies a mechanism that differs materially between accepted `6bfa010` and failed `cd6dc00`, while preserving the locked cursor-follow behavior. Once such evidence exists, use Antigravity only for bounded independent verification of that evidence/fix boundary. After a verified narrow fix, build exactly one candidate and stop for immediate user dual-monitor retest before any other refactor or promotion.
+Wait for both diagnostic outputs. Publish a narrow implementation only if runtime evidence identifies a concrete accepted-vs-failed mechanism while preserving the locked cursor-follow behavior. Then independent verify, build exactly one candidate, and stop for immediate user dual-monitor retest before any other refactor or promotion.
