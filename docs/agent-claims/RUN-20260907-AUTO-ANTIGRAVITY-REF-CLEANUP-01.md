@@ -8,7 +8,7 @@
 - Base: `7c705405500e6d032ee1f08557661de723b8c0d4`
 - Branch: `maintenance/ref-cleanup-20260907`
 - Worktree: `C:\Users\nerza\Projects\drawer-settings-integration`
-- Status: `CLAIMED`
-- Report tip SHA: `PENDING`
+- Status: `DONE`
+- Report tip SHA: `PENDING_FINAL_COMMIT`
 - Code SHA: `NONE`
 - Report: `docs/agent-reports/2026-09-07-antigravity-ref-cleanup.md`
