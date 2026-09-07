@@ -56,7 +56,8 @@ On blocker/conflict/product ambiguity/data-loss risk: preserve safe state, push 
 - G03, G05/G05FIX, G06 accepted + runtime verified + promoted. A02S1 accepted, runtime verified and promoted by P08.
 - A02S2 broken implementation `c482ad3ae9c499ea32eb3c0cdd590e495a919e30` remains non-promotable. FIX is DONE at Code SHA `313b3af8b6377b2b66e07256f985b1663c5630ee`; acceptance/promotion pending.
 - A03S1 DONE at Code SHA `700f033cc2700dcdbb6c9fbd387e2e44b8510ef8`; repo-only scope review clean; not accepted/promoted.
-- A04S1/S2/S3 DONE in exact linear lineage through `4d1a3106c3e3f64f8caa5b26bceacf9fafdf5873`; repo-only scope review clean; line remains unaccepted/unpromoted pending stronger verification/review.
+- A04S1/S2/S3 DONE in exact linear lineage through `4d1a3106c3e3f64f8caa5b26bceacf9fafdf5873`; repo-only scope review clean; line remains unaccepted/unpromoted.
+- Mandatory new pre-promotion gate: A03S1 and each A04 slice S1/S2/S3 must pass an independent review explicitly checking the A02S2 defect class (`#Include` + stale duplicate declarations), bounded x64/x86 `/Validate`, and whether claimed narrow coverage executes production seams rather than copied/static models. No acceptance/promotion before these review verdicts are available.
 - T01 settings-seam determinism DONE at `34efdb62d8fb1dcaa55119f47794c3b269772e9c`; promotion pending.
 - CODEX quota exhausted. DeepSeek and Claude OpenCode paid/limited runs are stopped after completed work.
 - Muse Spark 1.3 Contributor Free passed architect read-only repo/Git/reasoning diagnostic and is approved for low-risk analysis/review work. Do not give it implementation/promotion authority yet.
@@ -88,7 +89,49 @@ After A05A DONE/BLOCKED, fresh-fetch and stop unless architect has published ano
 - Branch: `analysis/test-debt-production-seams-muse13`
 - Task file: `docs/agent-tasks/RUN-20260907-OPENCODE-MUSE13-T02-TEST-DEBT-ANALYSIS-01.md`
 
-Muse authority for this wave is analysis/report only. After T02A DONE/BLOCKED, fresh-fetch and STOP unless architect explicitly publishes another Muse READY task. Do not implement recommendations, accept, promote, merge, or clean refs.
+After T02A is reviewed by architect, advance at most one of the following review runs to READY at a time, in this order unless a blocker changes priority:
+
+### A03S1 independent review
+- Status: `WAITING_QUEUE`
+- Eligible: `OPENCODE-MUSE13`
+- Session: `NEW`
+- Run ID: `RUN-20260907-OPENCODE-MUSE13-A03S1-REVIEW-01`
+- Base: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
+- Code SHA: `700f033cc2700dcdbb6c9fbd387e2e44b8510ef8`
+- Branch: `review/a03s1-muse13`
+- Task file: `docs/agent-tasks/RUN-20260907-OPENCODE-MUSE13-A03S1-REVIEW-01.md`
+
+### A04S1 independent review
+- Status: `WAITING_QUEUE`
+- Eligible: `OPENCODE-MUSE13`
+- Session: `NEW`
+- Run ID: `RUN-20260907-OPENCODE-MUSE13-A04S1-REVIEW-01`
+- Base: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
+- Code SHA: `851f47566dd074538f412b9d258193dbde65195b`
+- Branch: `review/a04s1-muse13`
+- Task file: `docs/agent-tasks/RUN-20260907-OPENCODE-MUSE13-A04S1-REVIEW-01.md`
+
+### A04S2 independent review
+- Status: `WAITING_QUEUE`
+- Eligible: `OPENCODE-MUSE13`
+- Session: `NEW`
+- Run ID: `RUN-20260907-OPENCODE-MUSE13-A04S2-REVIEW-01`
+- Base: `851f47566dd074538f412b9d258193dbde65195b`
+- Code SHA: `e862c4f7b71f0aced86dc2b19843b47b4b23a0f2`
+- Branch: `review/a04s2-muse13`
+- Task file: `docs/agent-tasks/RUN-20260907-OPENCODE-MUSE13-A04S2-REVIEW-01.md`
+
+### A04S3 independent review
+- Status: `WAITING_QUEUE`
+- Eligible: `OPENCODE-MUSE13`
+- Session: `NEW`
+- Run ID: `RUN-20260907-OPENCODE-MUSE13-A04S3-REVIEW-01`
+- Base: `e862c4f7b71f0aced86dc2b19843b47b4b23a0f2`
+- Code SHA: `4d1a3106c3e3f64f8caa5b26bceacf9fafdf5873`
+- Branch: `review/a04s3-muse13`
+- Task file: `docs/agent-tasks/RUN-20260907-OPENCODE-MUSE13-A04S3-REVIEW-01.md`
+
+Muse authority remains review/analysis only. Do not implement fixes found by these reviews without a separate architect task; do not accept/promote/merge or clean refs.
 
 ## COMPLETED / STOPPED OPENCODE RUNS
 
@@ -97,16 +140,16 @@ Muse authority for this wave is analysis/report only. After T02A DONE/BLOCKED, f
 
 ## WAITING / ARCHITECT GATES
 
-- A03S2 waits for architect review/acceptance strategy and suitable implementation model budget.
+- A03S2 waits for A03S1 independent review plus architect acceptance strategy and suitable implementation budget.
 - A03S3 waits for accepted A02S2 FIX lineage.
-- A04 line waits for sufficient review/verification before acceptance/promotion.
+- A04 line cannot be accepted/promoted until A04S1, A04S2 and A04S3 independent review gates are complete; A04S3 review must also consider cumulative S1->S2->S3 risks.
 - T01 promotion pending.
 - A05 implementation waits for A05A analysis verdict and a new architect task.
-- Muse implementation authority remains gated until its real T02 analysis output is reviewed.
+- Muse implementation authority remains gated until its real analysis/review outputs are reviewed.
 
 ## COMPLETED AUTONOMOUS RUNS — recent
 
 - `RUN-20260907-OPENCODE-CLAUDE48-A02S2-FIX-01` — DONE, Code SHA `313b3af8b6377b2b66e07256f985b1663c5630ee`; acceptance pending.
-- `RUN-20260906-AUTO-ANTIGRAVITY-A03S1-IMPLEMENT-01` — DONE by OpenCode DeepSeek, Code SHA `700f033cc2700dcdbb6c9fbd387e2e44b8510ef8`; acceptance pending.
-- `RUN-20260907-AUTO-ANTIGRAVITY-A04S3-IMPLEMENT-01` — DONE, Code SHA `4d1a3106c3e3f64f8caa5b26bceacf9fafdf5873`; acceptance pending.
+- `RUN-20260906-AUTO-ANTIGRAVITY-A03S1-IMPLEMENT-01` — DONE by OpenCode DeepSeek, Code SHA `700f033cc2700dcdbb6c9fbd387e2e44b8510ef8`; acceptance pending independent review.
+- `RUN-20260907-AUTO-ANTIGRAVITY-A04S3-IMPLEMENT-01` — DONE, Code SHA `4d1a3106c3e3f64f8caa5b26bceacf9fafdf5873`; acceptance pending independent review chain.
 - `RUN-20260907-OPENCODE-DEEPSEEK-T01-SETTINGS-SEAM-01` — DONE, Code SHA `34efdb62d8fb1dcaa55119f47794c3b269772e9c`; promotion pending.
