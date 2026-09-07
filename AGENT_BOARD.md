@@ -54,14 +54,13 @@ On blocker/conflict/product ambiguity/data-loss risk: preserve safe state, push 
 
 - Shared accepted production identity remains `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`; higher shared commits are docs/tasks/claims/reports only unless explicitly promoted.
 - G03, G05/G05FIX, G06 accepted + runtime verified + promoted. A02S1 accepted, runtime verified and promoted by P08.
-- A02S2 broken implementation `c482ad3ae9c499ea32eb3c0cdd590e495a919e30` remains non-promotable. FIX is DONE at Code SHA `313b3af8b6377b2b66e07256f985b1663c5630ee`; acceptance/promotion pending.
-- A03S1 DONE at Code SHA `700f033cc2700dcdbb6c9fbd387e2e44b8510ef8`; repo-only scope review clean; not accepted/promoted.
-- A04S1/S2/S3 DONE in exact linear lineage through `4d1a3106c3e3f64f8caa5b26bceacf9fafdf5873`; repo-only scope review clean; line remains unaccepted/unpromoted.
-- Mandatory new pre-promotion gate: A03S1 and each A04 slice S1/S2/S3 must pass an independent review explicitly checking the A02S2 defect class (`#Include` + stale duplicate declarations), bounded x64/x86 `/Validate`, and whether claimed narrow coverage executes production seams rather than copied/static models. No acceptance/promotion before these review verdicts are available.
+- A02S2 FIX DONE at `313b3af8b6377b2b66e07256f985b1663c5630ee`; acceptance/promotion pending.
+- A03S1 DONE at `700f033cc2700dcdbb6c9fbd387e2e44b8510ef8`; independent pre-promotion review now READY.
+- A04S1/S2/S3 DONE in exact linear lineage through `4d1a3106c3e3f64f8caa5b26bceacf9fafdf5873`; independent S1/S2/S3 reviews remain mandatory before acceptance/promotion.
 - T01 settings-seam determinism DONE at `34efdb62d8fb1dcaa55119f47794c3b269772e9c`; promotion pending.
-- CODEX quota exhausted. DeepSeek and Claude OpenCode paid/limited runs are stopped after completed work.
-- Muse Spark 1.3 Contributor Free passed architect read-only repo/Git/reasoning diagnostic and is approved for low-risk analysis/review work. Do not give it implementation/promotion authority yet.
-- Branch/ref hygiene debt: remote `tmp/never` still exists; do not use as base and do not delete without local ref/worktree inspection.
+- T02A Muse audit DONE, verdict `NEEDS_PREREQUISITE`. Key findings: accepted `settings-seam.ahk` is largely copied-model/static-source-shape coverage with no production `#Include`; accepted suite hang is caused by missing `SettingsSectionSlot`/`SettingsChangedSlots`; production-direct coverage is sparse. No DELETE candidates yet. Adopt `/Validate` as mandatory extraction gate.
+- CODEX quota exhausted. DeepSeek and Claude limited OpenCode runs stopped. Muse Spark 1.3 Contributor Free is approved for analysis/review only, not implementation/promotion authority yet.
+- Branch/worktree clutter is acknowledged debt. A dedicated cleanup task exists but stays WAITING until a capable local Antigravity slot is free. No ad-hoc ref deletion.
 
 ## AUTONOMOUS QUEUE — ANTIGRAVITY
 
@@ -71,29 +70,32 @@ On blocker/conflict/product ambiguity/data-loss risk: preserve safe state, push 
 - Preferred model: `Gemini 3.8 Flash (Medium)`
 - Session: `NEW`
 - Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-A05-ANALYSIS-01`
-- Base/source rule: accepted shared production `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`; unaccepted A02/A03/A04 branches are context only, not production identity
+- Base/source rule: accepted shared production `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`; unaccepted A02/A03/A04 branches are context only
 - Branch: `analysis/a05-settings-tray-seam-antigravity`
 - Task file: `docs/agent-tasks/RUN-20260907-AUTO-ANTIGRAVITY-A05-ANALYSIS-01.md`
 
-After A05A DONE/BLOCKED, fresh-fetch and stop unless architect has published another Antigravity READY task. Do not implement A05 slices without a new architect task.
+### Deferred ref/worktree cleanup
+- Status: `WAITING_QUEUE`
+- Eligible: `ANTIGRAVITY`
+- Session: `NEW`
+- Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-REF-CLEANUP-01`
+- Branch: `maintenance/ref-cleanup-20260907`
+- Task file: `docs/agent-tasks/RUN-20260907-AUTO-ANTIGRAVITY-REF-CLEANUP-01.md`
+- Activate only when no higher-value Antigravity task is READY/running. Must inspect `git worktree list --porcelain`, unique commits and exact refs before deletion. Explicitly inspect `tmp/never` and accumulated task/review refs. Public `origin` untouched.
 
 ## AUTONOMOUS QUEUE — OPENCODE / MUSE 1.3 FREE
 
-### T02A — narrow test debt / production-seam coverage audit
+### T02A — narrow test debt audit
+- Status: `DONE`
+- Run ID: `RUN-20260907-OPENCODE-MUSE13-T02-TEST-DEBT-ANALYSIS-01`
+- Verdict: `NEEDS_PREREQUISITE`
+- Report branch: `analysis/test-debt-production-seams-muse13`
+- Report: `docs/agent-reports/2026-09-07-opencode-muse13-t02-test-debt-analysis.md`
+
+### A03S1 independent review
 - Status: `READY`
 - Eligible: `OPENCODE-MUSE13`
 - Required model: `Muse Spark 1.3 Contributor Free`
-- Session: `NEW`
-- Run ID: `RUN-20260907-OPENCODE-MUSE13-T02-TEST-DEBT-ANALYSIS-01`
-- Base/source rule: accepted shared production `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`; unaccepted feature lines are noncanonical context only
-- Branch: `analysis/test-debt-production-seams-muse13`
-- Task file: `docs/agent-tasks/RUN-20260907-OPENCODE-MUSE13-T02-TEST-DEBT-ANALYSIS-01.md`
-
-After T02A is reviewed by architect, advance at most one of the following review runs to READY at a time, in this order unless a blocker changes priority:
-
-### A03S1 independent review
-- Status: `WAITING_QUEUE`
-- Eligible: `OPENCODE-MUSE13`
 - Session: `NEW`
 - Run ID: `RUN-20260907-OPENCODE-MUSE13-A03S1-REVIEW-01`
 - Base: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
@@ -103,8 +105,6 @@ After T02A is reviewed by architect, advance at most one of the following review
 
 ### A04S1 independent review
 - Status: `WAITING_QUEUE`
-- Eligible: `OPENCODE-MUSE13`
-- Session: `NEW`
 - Run ID: `RUN-20260907-OPENCODE-MUSE13-A04S1-REVIEW-01`
 - Base: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
 - Code SHA: `851f47566dd074538f412b9d258193dbde65195b`
@@ -113,8 +113,6 @@ After T02A is reviewed by architect, advance at most one of the following review
 
 ### A04S2 independent review
 - Status: `WAITING_QUEUE`
-- Eligible: `OPENCODE-MUSE13`
-- Session: `NEW`
 - Run ID: `RUN-20260907-OPENCODE-MUSE13-A04S2-REVIEW-01`
 - Base: `851f47566dd074538f412b9d258193dbde65195b`
 - Code SHA: `e862c4f7b71f0aced86dc2b19843b47b4b23a0f2`
@@ -123,33 +121,18 @@ After T02A is reviewed by architect, advance at most one of the following review
 
 ### A04S3 independent review
 - Status: `WAITING_QUEUE`
-- Eligible: `OPENCODE-MUSE13`
-- Session: `NEW`
 - Run ID: `RUN-20260907-OPENCODE-MUSE13-A04S3-REVIEW-01`
 - Base: `e862c4f7b71f0aced86dc2b19843b47b4b23a0f2`
 - Code SHA: `4d1a3106c3e3f64f8caa5b26bceacf9fafdf5873`
 - Branch: `review/a04s3-muse13`
 - Task file: `docs/agent-tasks/RUN-20260907-OPENCODE-MUSE13-A04S3-REVIEW-01.md`
 
-Muse authority remains review/analysis only. Do not implement fixes found by these reviews without a separate architect task; do not accept/promote/merge or clean refs.
-
-## COMPLETED / STOPPED OPENCODE RUNS
-
-- A03S1 — DONE, Code SHA `700f033cc2700dcdbb6c9fbd387e2e44b8510ef8`; DeepSeek stopped after completion.
-- A02S2 FIX — DONE, Code SHA `313b3af8b6377b2b66e07256f985b1663c5630ee`; Claude 4.8 stopped after completion.
+Muse authority remains review/analysis only. Advance one review to READY at a time. Do not implement fixes, accept/promote/merge, or clean refs.
 
 ## WAITING / ARCHITECT GATES
 
-- A03S2 waits for A03S1 independent review plus architect acceptance strategy and suitable implementation budget.
+- A03S2 waits for A03S1 independent review and architect acceptance strategy.
 - A03S3 waits for accepted A02S2 FIX lineage.
-- A04 line cannot be accepted/promoted until A04S1, A04S2 and A04S3 independent review gates are complete; A04S3 review must also consider cumulative S1->S2->S3 risks.
-- T01 promotion pending.
+- A04 cannot be accepted/promoted until S1/S2/S3 independent review gates are complete.
+- T01 promotion pending; T02 identifies it as prerequisite for trustworthy settings-seam execution.
 - A05 implementation waits for A05A analysis verdict and a new architect task.
-- Muse implementation authority remains gated until its real analysis/review outputs are reviewed.
-
-## COMPLETED AUTONOMOUS RUNS — recent
-
-- `RUN-20260907-OPENCODE-CLAUDE48-A02S2-FIX-01` — DONE, Code SHA `313b3af8b6377b2b66e07256f985b1663c5630ee`; acceptance pending.
-- `RUN-20260906-AUTO-ANTIGRAVITY-A03S1-IMPLEMENT-01` — DONE by OpenCode DeepSeek, Code SHA `700f033cc2700dcdbb6c9fbd387e2e44b8510ef8`; acceptance pending independent review.
-- `RUN-20260907-AUTO-ANTIGRAVITY-A04S3-IMPLEMENT-01` — DONE, Code SHA `4d1a3106c3e3f64f8caa5b26bceacf9fafdf5873`; acceptance pending independent review chain.
-- `RUN-20260907-OPENCODE-DEEPSEEK-T01-SETTINGS-SEAM-01` — DONE, Code SHA `34efdb62d8fb1dcaa55119f47794c3b269772e9c`; promotion pending.
