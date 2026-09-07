@@ -56,7 +56,7 @@ On blocker/conflict/product ambiguity/data-loss risk: preserve safe state, push 
 - G03, G05/G05FIX, G06 accepted + runtime verified + promoted.
 - A02S1 accepted, runtime verified and promoted by P08.
 - A02S2 has an Antigravity claim from `2026-09-07T00:01:25+03:00`; as of architect check around 02:44 +03 no remote output branch existed yet. Treat as still owned by Antigravity; do not duplicate A02S2.
-- A03 analysis verdict `READY_TO_IMPLEMENT`; A03S1 is READY and may now be claimed by either Antigravity or OPENCODE-DEEPSEEK. First valid shared claim wins; the other worker must skip.
+- A03 analysis verdict `READY_TO_IMPLEMENT`; A03S1 is reserved for OPENCODE-DEEPSEEK while Antigravity continues A02S2. No claim race between the two workers.
 - T01 DeepSeek settings-seam determinism is DONE at Code SHA `34efdb62d8fb1dcaa55119f47794c3b269772e9c`; architect repo-only diff review found no scope issue. Agent verification: settings seam 5 consecutive direct exits, 256/256 pass; focus seam 3 direct exits, 9/9 pass; drawer validate pass; config.ini untouched. Not promoted yet.
 - DeepSeek A03S2 remains dependency-gated on A03S1 and must not be claimed early.
 - CODEX quota exhausted.
@@ -72,15 +72,7 @@ On blocker/conflict/product ambiguity/data-loss risk: preserve safe state, push 
 - Branch: `refactor/window-focus-history-foreground`
 - Task file: `docs/agent-tasks/RUN-20260906-AUTO-ANTIGRAVITY-A02S2-IMPLEMENT-01.md`
 
-### A03S1 — pure geometry plan seam
-- Status: `READY`
-- Eligible: `ANTIGRAVITY`, `OPENCODE-DEEPSEEK`
-- Session: `NEW`
-- Run ID: `RUN-20260906-AUTO-ANTIGRAVITY-A03S1-IMPLEMENT-01`
-- Base/source rule: accepted shared lineage at or above P08; no dependency on unaccepted A02S2
-- Branch: `refactor/window-geometry-plan-seam`
-- Task file: `docs/agent-tasks/RUN-20260906-AUTO-ANTIGRAVITY-A03S1-IMPLEMENT-01.md`
-- Claim race rule: first valid claim owns the Run ID/branch; other eligible workers skip after fresh fetch.
+No second Antigravity READY task is published while A02S2 is running. After A02S2 DONE/BLOCKED, architect review determines the next Antigravity assignment.
 
 ## AUTONOMOUS QUEUE — OPENCODE / DEEPSEEK (overnight priority)
 
@@ -93,16 +85,16 @@ On blocker/conflict/product ambiguity/data-loss risk: preserve safe state, push 
 - Branch: `test/settings-seam-determinism`
 - Architect repo-only review: no issue found; promotion still pending.
 
-### 2. A03S1 — pure geometry plan seam (fallback coding priority)
+### 2. A03S1 — pure geometry plan seam
 - Status: `READY`
-- Eligible: `OPENCODE-DEEPSEEK`, `ANTIGRAVITY`
-- Required model for OpenCode: `deepseek-v4-flash`
+- Eligible: `OPENCODE-DEEPSEEK`
+- Required model: `deepseek-v4-flash`
 - Session: `NEW`
 - Run ID: `RUN-20260906-AUTO-ANTIGRAVITY-A03S1-IMPLEMENT-01`
 - Base/source rule: accepted shared lineage at or above P08; must not depend on unaccepted A02S2
 - Branch: `refactor/window-geometry-plan-seam`
 - Task file: `docs/agent-tasks/RUN-20260906-AUTO-ANTIGRAVITY-A03S1-IMPLEMENT-01.md`
-- First valid claim wins.
+- Reserved for DeepSeek while Antigravity owns A02S2.
 
 ### 3. A04A — handles seam analysis
 - Status: `READY`
