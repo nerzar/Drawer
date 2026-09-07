@@ -8,8 +8,8 @@
 - Base: `cd6dc00b3d58c6abea709687618ea3702432bc45`
 - Branch: `analysis/manual-multimon-regression-muse13`
 - Worktree: `C:\Users\nerza\Projects\drawer-settings-integration`
-- Status: `CLAIMED`
+- Status: `DONE`
 - Report tip SHA: `PENDING_FINAL_COMMIT`
 - Code SHA: `NONE`
 - Report: `docs/agent-reports/2026-09-07-opencode-muse13-manual-multimon-analysis.md`
-- Verdict: `PENDING`
+- Verdict: `READY_FOR_FIX`
