@@ -10,7 +10,8 @@
 - Source branch: `test/settings-seam-determinism`
 - Branch: `verify/t01-settings-seam-antigravity`
 - Worktree: `C:\Users\nerza\Projects\drawer-agent-worktrees\T01-VERIFY-ANTIGRAVITY`
-- Status: `CLAIMED`
-- Report tip SHA: `PENDING`
-- Code SHA: `NONE`
+- Status: `DONE`
+- Report tip SHA: `PENDING_FINAL_COMMIT`
+- Code SHA: `34efdb62d8fb1dcaa55119f47794c3b269772e9c`
 - Report: `docs/agent-reports/2026-09-07-antigravity-t01-verify.md`
+- Verdict: `ACCEPT_CANDIDATE`
