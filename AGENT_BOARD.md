@@ -21,22 +21,24 @@ Read shared state from `refs/remotes/dev/wip/slots-parity`; shared docs push onl
 The night-wave is treated as suspect. Do not salvage arbitrary subsets by assumption.
 Future code must start from the known-good baseline and be reintroduced one bounded, behavior-neutral unit at a time. Any slice that can affect runtime behavior must go to immediate user manual verification before another such slice is stacked on top.
 
+## Completed maintenance
+### Reset repository around known-good baseline and clean superseded refs
+- Status: `DONE`
+- Eligible: `ANTIGRAVITY`
+- Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-RESET-TO-KNOWN-GOOD-CLEANUP-01`
+- Verdict: `CLEAN_BASELINE_READY`
+- Baseline: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
+- Baseline branch: `recovery/known-good-6bfa010`
+- Final docs commit observed: `3d40a2cb069bbfc28e06346c243d0828ffca86a8`
+- Result: 22 redundant/superseded local branches removed, one redundant remote branch removed, rejected RECOVERY-06 worktree removed, public `origin` untouched, known-good baseline preserved.
+- Important unresolved local-state note: Antigravity reported an uncommitted user-generated `src/config.ini` modification in `drawer-settings-integration` and stashed it to obtain a clean tree. Do not drop/overwrite/auto-apply that stash. User should decide whether those manual-test settings need restoring.
+- Documentation hygiene debt: claim/report still contain `Report tip SHA: PENDING_FINAL_COMMIT` even though final docs commit `3d40a2c...` exists. This is bookkeeping only; do not spend a scarce model run on it.
+
 ## AUTONOMOUS QUEUE — OPENCODE / MUSE
 No READY tasks. Muse remains disabled by user directive.
 
 ## AUTONOMOUS QUEUE — ANTIGRAVITY
-### Reset repository around known-good baseline and clean superseded refs
-- Status: `READY`
-- Eligible: `ANTIGRAVITY`
-- Preferred model: `Gemini 3.8 Flash (Medium)`
-- Session: `NEW`
-- Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-RESET-TO-KNOWN-GOOD-CLEANUP-01`
-- Baseline: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
-- Baseline branch: `recovery/known-good-6bfa010`
-- Branch: `maintenance/reset-known-good-cleanup-20260907`
-- Task: `docs/agent-tasks/RUN-20260907-AUTO-ANTIGRAVITY-RESET-TO-KNOWN-GOOD-CLEANUP-01.md`
-
-Maintenance only. No `src/`, `test/`, config or behavior changes. Safely reduce branch/worktree debt, preserve unique commits, keep known-good baseline intact, and leave one clean starting ref for future development.
+No READY tasks. STOP after fresh fetch.
 
 ## Next gate
-After cleanup, architect will choose exactly one small behavior-neutral slice to reintroduce from the known-good baseline. No multi-slice integration and no new refactor wave. Any runtime-affecting slice is followed immediately by user manual verification before continuing.
+Do not reintroduce night-wave code yet. User plans to hand the failure context directly to Claude after model limits recover and wants an independent diagnosis rather than architect-led salvage. Until then, preserve `6bfa010...` as the only trusted runtime baseline. No cleanup, refactor, merge, promotion, or implementation tasks are READY.
