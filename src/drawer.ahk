@@ -347,11 +347,11 @@ if !foreHook
 ; Кромка: толщина плитки в покое, при подходе курсора и под курсором,
 ; длина вдоль края и зазор в стопке. В покое плитка вмещает иконку
 ; приложения, поэтому тоньше 22 быть не может.
-HANDLE_REST  := 22
+HANDLE_REST  := handleWidth
 HANDLE_NEAR  := 28
 HANDLE_HOVER := 44
-HANDLE_LEN   := 34
-HANDLE_GAP   := 8
+HANDLE_LEN   := handleHeight
+HANDLE_GAP   := handleGap
 HANDLE_ICON  := 18
 HANDLE_ROUND := 6
 ; Опознаётся кромка иконкой, поэтому сама плитка нарочно неяркая:
@@ -1278,7 +1278,7 @@ HandleIcon(hwnd) {
 ; Пересобрать набор кромок по текущему состоянию ящика. Вызывается
 ; редким таймером и после каждого события, которое может его изменить.
 HandlesSync() {
-    global handles, handlesOn
+    global handles, handlesOn, HANDLE_REST
     if !handlesOn {                   ; кромки выключены в config.ini
         HandlesDestroyAll()
         return
@@ -1333,6 +1333,7 @@ HandlesSync() {
         }
         hd := handles[n]
         hd.mi := k.mi, hd.edge := k.edge, hd.base := k.base
+        hd.thick := HANDLE_REST, hd.from := HANDLE_REST, hd.to := HANDLE_REST
         HandleApply(hd)
     }
     HandleTimer()
@@ -4078,8 +4079,7 @@ SettingsReconcileRuntime(slotPlan, &diags) {
     RebindSlotHotkeys()
     SlotsSeedManaged()
     WatchSync()
-
-    SetTimer(HandlesSync, -1)
+    HandlesSync()
     DebugLog("[SETTINGS] SettingsReconcileRuntime completed")
 }
 
