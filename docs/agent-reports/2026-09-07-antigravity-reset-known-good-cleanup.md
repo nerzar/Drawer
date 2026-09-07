@@ -13,7 +13,7 @@
 - Branch: `maintenance/reset-known-good-cleanup-20260907`
 - Base SHA: `e12af8a264cb1a578a1f33f11d13f019f5a013ee`
 - Code SHA: `NONE`
-- Report tip SHA: `PENDING_FINAL_COMMIT`
+- Finalization docs commit observed by architect: `3d40a2cb069bbfc28e06346c243d0828ffca86a8`
 - Remote: `dev`
 
 ## 1. Goal
@@ -38,7 +38,7 @@ Establish a clean development state around the user-confirmed known-good baselin
 
 ## 3. Commits
 - Claim: `7855e5d` claim: RUN-20260907-AUTO-ANTIGRAVITY-RESET-TO-KNOWN-GOOD-CLEANUP-01
-- Report tip SHA: `PENDING_FINAL_COMMIT`
+- Finalization docs commit observed by architect: `3d40a2cb069bbfc28e06346c243d0828ffca86a8`
 
 ## 4. Important decisions
 - Proven Zero Commit Loss: Ran automated reachability audit across all candidate branches against `dev/*`. Every branch deleted locally had its exact SHA preserved on remote `dev` or was an ancestor of `dev/wip/slots-parity`.
@@ -57,7 +57,7 @@ Establish a clean development state around the user-confirmed known-good baselin
 - `git rev-parse dev/recovery/known-good-6bfa010` and `git rev-parse known-good`: both match `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa` exactly.
 
 ## 7. Known issues / unfinished
-- None. The repository is in a clean baseline state ready for the architect to specify the next slice.
+- None in repository/ref cleanup. The only preserved local-state item is the user-generated `src/config.ini` stash noted above; it must not be dropped, overwritten, or auto-applied.
 
 ## 8. Suggested next step
-- Architect can select one small behavior-neutral slice to reintroduce from baseline `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`.
+- Architect can select one small behavior-neutral slice to reintroduce from baseline `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa` only after the current independent diagnosis/product-contract gate is resolved.
