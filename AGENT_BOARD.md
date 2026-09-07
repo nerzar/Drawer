@@ -54,13 +54,13 @@ On blocker/conflict/product ambiguity/data-loss risk: preserve safe state, push 
 
 - Shared accepted production identity remains `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`; higher shared commits are docs/tasks/claims/reports only unless explicitly promoted.
 - G03, G05/G05FIX, G06 accepted + runtime verified + promoted. A02S1 accepted, runtime verified and promoted by P08.
-- A02S2 broken implementation `c482ad3ae9c499ea32eb3c0cdd590e495a919e30` remains non-promotable. FIX is DONE at Code SHA `313b3af8b6377b2b66e07256f985b1663c5630ee`, exact parent broken SHA, fixing duplicate declarations and P17 focus-history ordering. Reported x64/x86 drawer validate PASS, focus seam 30/30, regression proven against broken base. Full settings seam still blocked by pre-existing T01 hang reproduced on base; acceptance/promotion pending architect verification.
-- A03S1 is DONE at Code SHA `700f033cc2700dcdbb6c9fbd387e2e44b8510ef8`, report tip `27f235e5db64397a0affb7854124a10295f2f614`. Repo-only review: exact one-code-commit lineage from accepted `6bfa010f`; only `src/WindowGeometry.ahk`, `src/drawer.ahk`, `test/narrow/window-geometry-seam.ahk`; pure geometry policy extraction matches requested seam shape. Reported validate PASS and geometry seam 49/49, 5 consecutive direct exits 0. Not accepted/promoted.
-- A04 analysis DONE. A04S1 `851f47566dd074538f412b9d258193dbde65195b`, A04S2 `e862c4f7b71f0aced86dc2b19843b47b4b23a0f2`, A04S3 `4d1a3106c3e3f64f8caa5b26bceacf9fafdf5873` are DONE in exact linear lineage. A04S3 repo-only scope review clean; reported validate + 39/39 handle seam + settings/focus seams pass. Entire A04 line remains unaccepted/unpromoted pending stronger verification/review.
-- T01 DeepSeek settings-seam determinism DONE at `34efdb62d8fb1dcaa55119f47794c3b269772e9c`; repo-only review clean; promotion pending.
-- CODEX quota exhausted. OpenCode model budget exhausted after completed A03S1/A02S2 FIX; do not queue new OpenCode runs.
-- Antigravity is currently the only worker eligible for new autonomous tasks.
-- Branch/ref hygiene debt: remote `tmp/never` still exists. It is not a production/task branch and must not be used as a base. Delete only after safe ref/worktree inspection from a capable local agent/session; no forced cleanup from architect API.
+- A02S2 broken implementation `c482ad3ae9c499ea32eb3c0cdd590e495a919e30` remains non-promotable. FIX is DONE at Code SHA `313b3af8b6377b2b66e07256f985b1663c5630ee`; acceptance/promotion pending.
+- A03S1 DONE at Code SHA `700f033cc2700dcdbb6c9fbd387e2e44b8510ef8`; repo-only scope review clean; not accepted/promoted.
+- A04S1/S2/S3 DONE in exact linear lineage through `4d1a3106c3e3f64f8caa5b26bceacf9fafdf5873`; repo-only scope review clean; line remains unaccepted/unpromoted pending stronger verification/review.
+- T01 settings-seam determinism DONE at `34efdb62d8fb1dcaa55119f47794c3b269772e9c`; promotion pending.
+- CODEX quota exhausted. DeepSeek and Claude OpenCode paid/limited runs are stopped after completed work.
+- Muse Spark 1.3 Contributor Free passed architect read-only repo/Git/reasoning diagnostic and is approved for low-risk analysis/review work. Do not give it implementation/promotion authority yet.
+- Branch/ref hygiene debt: remote `tmp/never` still exists; do not use as base and do not delete without local ref/worktree inspection.
 
 ## AUTONOMOUS QUEUE — ANTIGRAVITY
 
@@ -76,39 +76,37 @@ On blocker/conflict/product ambiguity/data-loss risk: preserve safe state, push 
 
 After A05A DONE/BLOCKED, fresh-fetch and stop unless architect has published another Antigravity READY task. Do not implement A05 slices without a new architect task.
 
+## AUTONOMOUS QUEUE — OPENCODE / MUSE 1.3 FREE
+
+### T02A — narrow test debt / production-seam coverage audit
+- Status: `READY`
+- Eligible: `OPENCODE-MUSE13`
+- Required model: `Muse Spark 1.3 Contributor Free`
+- Session: `NEW`
+- Run ID: `RUN-20260907-OPENCODE-MUSE13-T02-TEST-DEBT-ANALYSIS-01`
+- Base/source rule: accepted shared production `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`; unaccepted feature lines are noncanonical context only
+- Branch: `analysis/test-debt-production-seams-muse13`
+- Task file: `docs/agent-tasks/RUN-20260907-OPENCODE-MUSE13-T02-TEST-DEBT-ANALYSIS-01.md`
+
+Muse authority for this wave is analysis/report only. After T02A DONE/BLOCKED, fresh-fetch and STOP unless architect explicitly publishes another Muse READY task. Do not implement recommendations, accept, promote, merge, or clean refs.
+
 ## COMPLETED / STOPPED OPENCODE RUNS
 
-### A03S1 — pure geometry plan seam
-- Status: `DONE`
-- Run ID: `RUN-20260906-AUTO-ANTIGRAVITY-A03S1-IMPLEMENT-01`
-- Code SHA: `700f033cc2700dcdbb6c9fbd387e2e44b8510ef8`
-- Report tip: `27f235e5db64397a0affb7854124a10295f2f614`
-- Branch: `refactor/window-geometry-plan-seam`
-- OpenCode STOP after completion; model budget exhausted.
-
-### A02S2 FIX — promotion blockers
-- Status: `DONE`
-- Run ID: `RUN-20260907-OPENCODE-CLAUDE48-A02S2-FIX-01`
-- Code SHA: `313b3af8b6377b2b66e07256f985b1663c5630ee`
-- Report tip: `7bf76393c7d6c37798475f67af877bc51679aaad`
-- Branch: `fix/a02s2-focus-history-blockers`
-- OpenCode STOP after completion; no second Claude task.
+- A03S1 — DONE, Code SHA `700f033cc2700dcdbb6c9fbd387e2e44b8510ef8`; DeepSeek stopped after completion.
+- A02S2 FIX — DONE, Code SHA `313b3af8b6377b2b66e07256f985b1663c5630ee`; Claude 4.8 stopped after completion.
 
 ## WAITING / ARCHITECT GATES
 
-- A03S2 dependency on A03S1 is technically satisfied, but remains `WAITING_QUEUE` because OpenCode budget is exhausted and A03S1 is not yet accepted/promoted.
+- A03S2 waits for architect review/acceptance strategy and suitable implementation model budget.
 - A03S3 waits for accepted A02S2 FIX lineage.
 - A04 line waits for sufficient review/verification before acceptance/promotion.
 - T01 promotion pending.
-- A05 implementation waits for A05A analysis verdict and a new architect-published task.
-- T02 test-debt audit waits; one scarce READY task maximum for Antigravity.
+- A05 implementation waits for A05A analysis verdict and a new architect task.
+- Muse implementation authority remains gated until its real T02 analysis output is reviewed.
 
 ## COMPLETED AUTONOMOUS RUNS — recent
 
 - `RUN-20260907-OPENCODE-CLAUDE48-A02S2-FIX-01` — DONE, Code SHA `313b3af8b6377b2b66e07256f985b1663c5630ee`; acceptance pending.
-- `RUN-20260906-AUTO-ANTIGRAVITY-A03S1-IMPLEMENT-01` — DONE by OpenCode DeepSeek, Code SHA `700f033cc2700dcdbb6c9fbd387e2e44b8510ef8`; repo-only scope review clean, acceptance pending.
-- `RUN-20260907-AUTO-ANTIGRAVITY-A04S3-IMPLEMENT-01` — DONE, Code SHA `4d1a3106c3e3f64f8caa5b26bceacf9fafdf5873`; repo-only scope review clean, acceptance pending.
-- `RUN-20260907-AUTO-ANTIGRAVITY-A04S2-IMPLEMENT-01` — DONE, Code SHA `e862c4f7b71f0aced86dc2b19843b47b4b23a0f2`; acceptance pending.
-- `RUN-20260907-AUTO-ANTIGRAVITY-A04S1-IMPLEMENT-01` — DONE, Code SHA `851f47566dd074538f412b9d258193dbde65195b`; acceptance pending.
-- `RUN-20260907-AUTO-ANTIGRAVITY-A04-ANALYSIS-01` — DONE, `READY_TO_IMPLEMENT`.
-- `RUN-20260907-OPENCODE-DEEPSEEK-T01-SETTINGS-SEAM-01` — DONE, Code SHA `34efdb62d8fb1dcaa55119f47794c3b269772e9c`; repo-only architect review clean.
+- `RUN-20260906-AUTO-ANTIGRAVITY-A03S1-IMPLEMENT-01` — DONE by OpenCode DeepSeek, Code SHA `700f033cc2700dcdbb6c9fbd387e2e44b8510ef8`; acceptance pending.
+- `RUN-20260907-AUTO-ANTIGRAVITY-A04S3-IMPLEMENT-01` — DONE, Code SHA `4d1a3106c3e3f64f8caa5b26bceacf9fafdf5873`; acceptance pending.
+- `RUN-20260907-OPENCODE-DEEPSEEK-T01-SETTINGS-SEAM-01` — DONE, Code SHA `34efdb62d8fb1dcaa55119f47794c3b269772e9c`; promotion pending.
