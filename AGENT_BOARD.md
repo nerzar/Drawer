@@ -49,48 +49,32 @@ On blocker/conflict/product ambiguity/data-loss risk: preserve safe state, push 
 
 ## Текущий статус
 
-- Shared accepted production identity remains `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`; nothing below is promoted yet.
-- T01 settings-seam determinism `34efdb62d8fb1dcaa55119f47794c3b269772e9c`: independent Antigravity verification DONE, verdict `ACCEPT_CANDIDATE`.
-- A02S2 focus-history line: broken implementation `c482ad3ae9c499ea32eb3c0cdd590e495a919e30` + FIX `313b3af8b6377b2b66e07256f985b1663c5630ee`; independent Antigravity verification DONE, verdict `ACCEPT_CANDIDATE`.
-- A03S1 geometry line: implementation `700f033cc2700dcdbb6c9fbd387e2e44b8510ef8` had a multi-monitor blocker; Muse FIX `90718c99de1609b40a7b7a8dbe314fbcb2d857dd`; independent Antigravity verification DONE, verdict `ACCEPT_CANDIDATE`.
-- A04 handles line: S1 `851f47566dd074538f412b9d258193dbde65195b`, S2 `e862c4f7b71f0aced86dc2b19843b47b4b23a0f2`, S3 `4d1a3106c3e3f64f8caa5b26bceacf9fafdf5873`; Muse independent reviews for S1/S2/S3 all DONE with verdict `ACCEPT_CANDIDATE`.
-- T02A test-debt audit DONE, verdict `NEEDS_PREREQUISITE`; its prerequisite T01 is now an acceptance candidate.
-- A05A Settings analysis DONE, verdict `READY_TO_IMPLEMENT`, but implementation remains intentionally gated until manual acceptance of the current refactor wave.
+- Shared accepted production identity remains `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`; current wave is NOT promoted yet.
+- Integration/manual candidate is assembled at Code SHA `cd6dc00b3d58c6abea709687618ea3702432bc45` on `integration/manual-candidate-20260907`; verdict `READY_FOR_MANUAL_ACCEPTANCE`.
+- Candidate contains independently reviewed/verified T01 settings-test determinism, corrected focus-history extraction, corrected multi-monitor geometry extraction, and reviewed handles S1/S2/S3 extraction.
+- Candidate gates at tip: drawer + WindowFocus + WindowGeometry + WindowHandles `/Validate` x64/x86 EXIT 0; focus seam 30/30; geometry seam 55/55; geometry adapter 9/9; handles seam 50/50 x3; settings seam 256/256 x3; `git diff --check` clean; `src/config.ini` untouched.
+- A05A Settings analysis DONE, verdict `READY_TO_IMPLEMENT`, but implementation remains intentionally gated until this manual checkpoint passes.
+- T02A audit DONE; its T01 prerequisite is included in the manual candidate.
 - Ref/worktree cleanup DONE.
-- CODEX quota exhausted. DeepSeek/Claude limited OpenCode runs stopped. Muse completed its current review chain.
 
-## AUTONOMOUS QUEUE — ANTIGRAVITY
+## AUTONOMOUS QUEUES
 
-### Manual acceptance candidate assembly
-- Status: `READY`
-- Eligible: `ANTIGRAVITY`
-- Preferred model: `Gemini 3.8 Flash (Medium)`
-- Session: `NEW`
-- Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-MANUAL-CANDIDATE-ASSEMBLE-01`
-- Base: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
+No current READY tasks for Antigravity or OPENCODE-MUSE13. Current refactor wave is intentionally paused for user manual acceptance.
+
+Agents must STOP after fresh fetch until architect publishes another READY task. Do not start A03S2/A03S3/A05 or promotion autonomously.
+
+## MANUAL ACCEPTANCE CHECKPOINT
+
+Candidate:
 - Branch: `integration/manual-candidate-20260907`
-- Task file: `docs/agent-tasks/RUN-20260907-AUTO-ANTIGRAVITY-MANUAL-CANDIDATE-ASSEMBLE-01.md`
+- Code SHA: `cd6dc00b3d58c6abea709687618ea3702432bc45`
+- Report: `docs/agent-reports/2026-09-07-antigravity-manual-candidate-assemble.md`
+- Status: `READY_FOR_MANUAL_ACCEPTANCE`
 
-Assemble T01 + corrected A02S2 + corrected A03S1 + reviewed A04 line into ONE integration branch for user manual testing. This is not acceptance/promotion. Stop on semantic conflict; mechanical conflict resolutions must be documented. After publishing candidate/report/claim, STOP.
+User-visible checks before promotion:
+1. Handles: edge handles appear; hover expansion is smooth; click deploys/slides the correct window.
+2. Focus: blur-hide returns focus to the previous foreground window; when Settings is previous, focus returns to Settings.
+3. Multi-monitor: internal-edge slots park off-screen correctly and do not animate across the neighboring monitor workspace.
+4. Settings: open Settings, change a visible setting such as accent/edge, Save, and confirm handles/runtime update and Settings reload remains healthy.
 
-## AUTONOMOUS QUEUE — OPENCODE / MUSE 1.3 FREE
-
-No current READY tasks. Current wave complete.
-
-Completed this wave:
-- T02A audit — DONE (`NEEDS_PREREQUISITE`).
-- A03S1 independent review — DONE (`NEEDS_FIX`).
-- A03S1 blocker FIX — DONE, Code SHA `90718c99de1609b40a7b7a8dbe314fbcb2d857dd`.
-- A04S1 review — DONE (`ACCEPT_CANDIDATE`).
-- A04S2 review — DONE (`ACCEPT_CANDIDATE`).
-- A04S3 review — DONE (`ACCEPT_CANDIDATE`).
-
-Muse has no implementation/promotion authority beyond completed explicit tasks. Stop until architect publishes another READY task.
-
-## MANUAL CHECKPOINT / NEXT WAVE GATES
-
-- Current priority is a user-testable integration candidate, not more refactoring.
-- Do not start A03S2, A03S3 or A05 implementation before manual checkpoint unless architect explicitly changes this gate.
-- If manual candidate is `READY_FOR_MANUAL_ACCEPTANCE`, architect/user performs visible runtime acceptance: focus return, two-monitor/internal-edge geometry and parking, handle hover/click/sync, Settings open/save/reload.
-- Any material manual failure blocks promotion and starts a targeted fix cycle.
-- If manual acceptance passes, architect may promote the accepted wave and then publish the next implementation queue.
+Any material failure blocks promotion and starts a targeted fix cycle. If manual acceptance passes, architect may promote this candidate and publish the next implementation wave.
