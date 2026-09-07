@@ -23,26 +23,28 @@ Read shared state from `refs/remotes/dev/wip/slots-parity`; shared docs push onl
 - User manual PASS: basic handles; Settings lifecycle.
 - User manual FAIL: monitor-2 deployment visibly starts/animates from monitor 1 / neighboring monitor; target/cursor monitor and deployment origin disagree; an edge handle disappeared completely once; multi-monitor behavior materially regressed.
 - Green narrow/validate gates did not predict this runtime failure. New refactors A03S2/A03S3/A05 remain frozen.
-- Antigravity diagnosis is DONE with verdict `READY_FOR_FIX`; report: `docs/agent-reports/2026-09-07-antigravity-manual-multimon-failure-analysis.md`.
-- Antigravity is now intentionally STOPPED to preserve remaining model budget. Publish no new Antigravity READY task until architect/user explicitly reopens it.
+- Antigravity diagnosis DONE, verdict `READY_FOR_FIX`; Antigravity remains intentionally STOPPED to preserve budget.
+- Muse independent diagnosis DONE, verdict `READY_FOR_FIX`.
+- Both independent analyses agree the earlier `5ed8b9a` missing-braces monitor collection bug was real but is already fixed by `26b1133`. Both independently identify the remaining likely runtime defect as unstable `monitor: cursor` identity between `HandlesSync` and `Show`, which can regroup/destroy handles and deploy a managed window against a different monitor after incidental cursor movement.
 
 ## AUTONOMOUS QUEUE — ANTIGRAVITY
-No current READY tasks. STOP after fresh fetch.
+No current READY tasks. STOP after fresh fetch. Do not spend remaining Antigravity budget unless architect/user explicitly reopens it.
 
 ## AUTONOMOUS QUEUE — OPENCODE / MUSE 1.3 FREE
-### Independent diagnosis B
+### Narrow FIX — managed-window monitor identity
 - Status: `READY`
 - Eligible: `OPENCODE-MUSE13`
 - Required model: `Muse Spark 1.3 Contributor Free`
 - Session: `NEW`
-- Run ID: `RUN-20260907-OPENCODE-MUSE13-MANUAL-MULTIMON-INDEPENDENT-ANALYSIS-01`
-- Base/source: failed candidate `cd6dc00b3d58c6abea709687618ea3702432bc45`; compare accepted `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
-- Branch: `analysis/manual-multimon-regression-muse13`
-- Task: `docs/agent-tasks/RUN-20260907-OPENCODE-MUSE13-MANUAL-MULTIMON-INDEPENDENT-ANALYSIS-01.md`
+- Run ID: `RUN-20260907-OPENCODE-MUSE13-MANUAL-MULTIMON-FIX-01`
+- Base: `cd6dc00b3d58c6abea709687618ea3702432bc45`
+- Source branch: `integration/manual-candidate-20260907`
+- Branch: `fix/manual-multimon-monitor-identity-muse13`
+- Task: `docs/agent-tasks/RUN-20260907-OPENCODE-MUSE13-MANUAL-MULTIMON-FIX-01.md`
 
-Muse must form and record its own hypothesis/evidence BEFORE reading Antigravity's failure-analysis report. After its independent evidence is fixed in the report draft, it may compare with Antigravity's report and explicitly state agreements/disagreements.
+Implement only the smallest monitor-identity stabilization justified by both diagnoses, plus deterministic regression coverage. Preserve first/unmanaged cursor semantics and `26b1133`. Do not broaden into A03S2/A03S3/A05, merge or promote.
 
-Analysis/report only. No production/test edits, no fix, no promotion, no candidate rebuild. After claim/report/push is DONE, fresh-fetch and STOP. There is intentionally no follow-on READY task tonight.
+After DONE/BLOCKED, fresh-fetch and STOP. There is intentionally no automatic follow-on READY task: architect must inspect Code SHA/report before assigning verification.
 
 ## Architect gate
-Next architect turn compares both diagnoses and publishes one narrow FIX task plus separate verification. Any fix must add evidence covering the observed runtime monitor-origin/handle-loss failure, not merely preserve current pure seams. Rebuild one candidate and perform early user dual-monitor re-test before any further refactoring.
+Review Muse FIX code/report. If evidence is sufficient, publish a separate verification/review task in a NEW session (prefer non-scarce Muse fresh session if Antigravity budget remains protected), then rebuild one candidate. Stop for early user dual-monitor runtime re-test before any further refactoring or promotion.
