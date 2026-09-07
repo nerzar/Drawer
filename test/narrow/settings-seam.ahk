@@ -1108,6 +1108,8 @@ if FileExist(drawerPath) {
 ; трогают настоящие окна и config.ini, и проверяются здесь по исходнику.
 if FileExist(drawerPath) {
     src16 := FileRead(drawerPath, "UTF-8")
+    focusPath16 := A_ScriptDir "\..\..\src\WindowFocus.ahk"
+    focusSrc16 := FileExist(focusPath16) ? FileRead(focusPath16, "UTF-8") : ""
 
     pDyn := InStr(src16, "SettingsDynSlotWrites(n, e, dynamic, &err, &field?) {")
     pPlan16 := InStr(src16, "SettingsSlotsPlan(edits, &err, dynamic := 0) {")
@@ -1138,11 +1140,13 @@ if FileExist(drawerPath) {
      && InStr(src16, "Integer(SubStr(w.sec, 5))") = 0)
 
     Assert("16h: фокус возвращается в настройки, если пользователь был там",
-        InStr(src16, "FocusCandidate(hwnd, skip, service := false) {") > 0
-     && InStr(src16, "return FocusCandidate(hwnd, skip, true) ? hwnd : 0") > 0
-     && InStr(src16, "if FocusCandidate(st.prev, parked, true) {") > 0)
+        focusSrc16 != ""
+     && InStr(focusSrc16, "FocusCandidate(hwnd, skip, service := false) {") > 0
+     && InStr(focusSrc16, "return FocusCandidate(hwnd, skip, true) ? hwnd : 0") > 0
+     && InStr(focusSrc16, "if FocusCandidate(prev, parked, true) {") > 0)
     Assert("16i: наугад из Z-порядка настройки по-прежнему не выбираются",
-        InStr(src16, "RedirectFocus(parked) {`r`n    for hwnd in WinGetList() {`r`n        if FocusCandidate(hwnd, parked) {") > 0)
+        focusSrc16 != ""
+     && InStr(focusSrc16, "RedirectFocus(parked) {`r`n    for hwnd in WinGetList() {`r`n        if FocusCandidate(hwnd, parked) {") > 0)
 
     Assert("16j: кромку получает каждый слот группы, а не только припаркованный",
         InStr(src16, "if !g.parked`r`n                continue") = 0

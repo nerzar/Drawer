@@ -1,8 +1,14 @@
 #Requires AutoHotkey v2.0
 
 ; ---- Test stubs (narrow-test env — no real windows) ----
-IsServiceWindow(hwnd) => false    ; stub: no service windows in unit context
-HitsMonitor(x, y, w, h) => false  ; stub: no monitors in unit context
+; Управляемые из тестов, чтобы прогонять положительные ветки предикатов,
+; а не только guard-clauses. Сигнатура HitsMonitor совпадает с production
+; (x, y, w, h, skip := 0) — иначе 5-аргументный вызов из focus-модуля
+; разошёлся бы с заглушкой незамеченным.
+StubService := Map()          ; hwnd -> true, если считать служебным окном
+StubMonitorHit := false       ; отдаёт HitsMonitor
+IsServiceWindow(hwnd) => StubService.Has(hwnd) && StubService[hwnd]
+HitsMonitor(x, y, w, h, skip := 0) => StubMonitorHit
 
 #Include ..\..\src\WindowFocus.ahk
 
@@ -86,6 +92,23 @@ WindowFocusForget(203)
 Assert("Forget удаляет и watched, и prevFocus",
     !WindowFocusState.watched.Has(203) && WindowFocusGetPrev(203) = 0)
 
+; ---- A02S2 FIX (F2/F3): watcher-only forget против полного забвения ----
+; Регрессия P17: Hide() снимает watcher до RestoreFocus(), поэтому история
+; предыдущего фокуса обязана пережить WatchForget(); стирать её вправе
+; только WindowFocusForget() из Release(). Проверяем оба контракта на
+; production-функциях в порядке, в котором их зовёт Hide().
+WindowFocusSetPrev(204, 600)
+WindowFocusState.watched[204] := { hideOnBlur: true }
+WatchForget(204)   ; так делает Hide() ПЕРЕД RestoreFocus()
+Assert("WatchForget снимает watcher, но сохраняет prevFocus (P17)",
+    !WindowFocusState.watched.Has(204) && WindowFocusGetPrev(204) = 600)
+; ...и на этом же шаге RestoreFocus смог бы прочитать историю:
+Assert("после WatchForget история всё ещё читаема к моменту RestoreFocus",
+    WindowFocusGetPrev(204) = 600)
+WindowFocusForget(204)   ; так делает Release(): забыть окончательно
+Assert("WindowFocusForget стирает историю (контракт Release)",
+    WindowFocusGetPrev(204) = 0)
+
 ; ---- A02S2: foreground observation (WindowFocusOnEvent) ----
 WindowFocusInitFore(0)
 
@@ -101,24 +124,57 @@ Assert("WindowFocusOnEvent отвергает idObject≠0",
 Assert("WindowFocusOnEvent отвергает несуществующее окно",
     !WindowFocusOnEvent(99999))
 
-; If accepted, same hwnd again → dedup (not re-accepted)
-WindowFocusState.foreWnd := 0   ; reset
-; We can only test dedup once a real hwnd is in state
-WindowFocusState.foreWnd := 777
-Assert("WindowFocusOnEvent отвергает повтор текущего foreWnd",
-    !WindowFocusOnEvent(777))
+; ---- A02S2 FIX (F4): реальная приёмка и дедуп через настоящее окно ----
+; Настоящее top-level окно проходит TrackedFore(), поэтому событие
+; действительно доходит до ветки приёмки и до дедупа, а не отсекается
+; раньше на несуществующем HWND.
+probe := Gui("+Owner", "WF Seam Probe")
+probe.Show("x-4000 y-4000 w80 h60")   ; за краем: фокус пользователя не трогаем
+probeHwnd := probe.Hwnd
+WindowFocusInitFore(0)
+WindowFocusState.foreWnd  := 0
+WindowFocusState.lastFore := 0
+acceptedFirst := WindowFocusOnEvent(probeHwnd)
+Assert("WindowFocusOnEvent принимает новое отслеживаемое окно и переключает foreWnd",
+    acceptedFirst && WindowFocusState.foreWnd = probeHwnd)
+Assert("после приёмки lastFore хранит прежний foreWnd (0)",
+    WindowFocusState.lastFore = 0)
+dedup := WindowFocusOnEvent(probeHwnd)
+Assert("WindowFocusOnEvent дедупит повтор того же реального foreWnd",
+    !dedup && WindowFocusState.foreWnd = probeHwnd)
 
 ; ---- A02S2: Vanished predicate ----
 Assert("Vanished(0) = true — нулевой hwnd исчез",
     Vanished(0))
 Assert("Vanished(несуществующее) = true",
     Vanished(99999999))
+Assert("Vanished(живого окна) = false",
+    !Vanished(probeHwnd))
 
 ; ---- A02S2: FocusCandidate guards ----
 Assert("FocusCandidate(0, skip) = false",
     !FocusCandidate(0, 1))
 Assert("FocusCandidate(hwnd, hwnd) = false — skip совпадает",
     !FocusCandidate(5, 5))
+
+; ---- A02S2 FIX (F4): положительный путь FocusCandidate и служебное окно ----
+; То же реальное окно попадает на монитор (заглушка управляема), поэтому
+; исполняется положительная ветка, а не только guard-clauses.
+StubMonitorHit := true
+Assert("FocusCandidate(живое окно на мониторе) = true",
+    FocusCandidate(probeHwnd, 0))
+; Служебное окно (настройки) без service-флага отвергается, со service —
+; принимается: это и есть правило возврата фокуса в настройки (16h).
+StubService[probeHwnd] := true
+Assert("FocusCandidate служебного окна без service = false",
+    !FocusCandidate(probeHwnd, 0))
+Assert("FocusCandidate служебного окна со service = true (возврат в настройки)",
+    FocusCandidate(probeHwnd, 0, true))
+; PrevActive допускает настройки (service := true внутри) — если активное
+; окно годно как кандидат, оно и возвращается.
+StubService.Delete(probeHwnd)
+StubMonitorHit := false
+probe.Destroy()
 
 
 out := ""

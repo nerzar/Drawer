@@ -613,7 +613,7 @@ ReleaseSlot(n) {
 Release(hwnd) {
     DebugLog("[RELEASE] Release(hwnd=" hwnd ")")
     global state
-    WatchForget(hwnd)
+    WindowFocusForget(hwnd)   ; окно больше не наше — забыть и watcher, и историю фокуса
     if !state.Has(hwnd)
         return
     st := state[hwnd]
@@ -876,100 +876,11 @@ Hide(hwnd, st) {
         Slide(hwnd, g.sx, g.sy, g.hx, g.hy, g.w, g.h)
     WinMove(g.px, g.py, g.w, g.h, "ahk_id " hwnd)   ; парковка вне всех мониторов
     if wasActive
-        RestoreFocus(hwnd, st)
+        RestoreFocus(hwnd)
+    ; История предыдущего фокуса нужна была только для RestoreFocus выше;
+    ; watcher сняли ещё в начале Hide(). Здесь окно припарковано, но всё
+    ; ещё наше (Release() его не трогал) — историю чистить рано.
     SetTimer(HandlesSync, -1)    ; окно припарковано — кромка возвращается
-}
-
-; Припаркованное окно не должно остаться активным: ввод уходил бы в
-; невидимое окно, а щелчок по значку на панели задач сворачивал бы его
-; вместо активации. Возвращаем фокус тому, что работало до показа, а
-; если его больше нет — верхнему подходящему окну по Z-порядку.
-RestoreFocus(parked, st := 0) {
-    prev := WindowFocusGetPrev(parked)
-    st := { prev: prev }
-    if FocusCandidate(st.prev, parked, true) {
-        WinActivate("ahk_id " st.prev)
-        return
-    }
-    RedirectFocus(parked)
-}
-
-; Увести фокус с припаркованного окна на верхнее подходящее по Z-порядку.
-RedirectFocus(parked) {
-    for hwnd in WinGetList() {
-        if FocusCandidate(hwnd, parked) {
-            WinActivate("ahk_id " hwnd)
-            return
-        }
-    }
-}
-
-; Кто был активен перед показом. Само выезжающее окно, оболочка и то,
-; что уже спрятано за краем, в кандидаты не годятся.
-PrevActive(skip) {
-    hwnd := WinExist("A")
-    ; Настройки здесь допустимы: пользователь в них и стоял.
-    return FocusCandidate(hwnd, skip, true) ? hwnd : 0
-}
-
-; Годится ли окно, чтобы отдать ему фокус. Проверка по факту: окно за
-; пределами всех мониторов не годится, кем бы оно ни было припарковано.
-;
-; service — можно ли отдать фокус собственному окну настроек. По умолчанию
-; нельзя: наугад выбирать настройки из Z-порядка значило бы вытаскивать их
-; поверх работы. Но если пользователь нажал хоткей, СТОЯ в настройках, то
-; вернуть фокус туда — единственно верное: иначе слот уезжает, а вместо
-; настроек наверх выходит случайное чужое окно, и открытая форма пропадает.
-FocusCandidate(hwnd, skip, service := false) {
-    if (!hwnd || hwnd = skip)
-        return false
-    if (!service && IsServiceWindow(hwnd))
-        return false
-    try {
-        if !WinExist("ahk_id " hwnd)
-            return false
-        if (WinGetMinMax("ahk_id " hwnd) = -1)
-            return false
-        if !(WinGetStyle("ahk_id " hwnd) & 0x10000000)      ; WS_VISIBLE
-            return false
-        if (WinGetTitle("ahk_id " hwnd) = "")
-            return false
-        cls := WinGetClass("ahk_id " hwnd)
-        if (cls = "Progman" || cls = "WorkerW"
-            || cls = "Shell_TrayWnd" || cls = "Shell_SecondaryTrayWnd")
-            return false
-        WinGetPos(&x, &y, &w, &h, "ahk_id " hwnd)
-        return HitsMonitor(x, y, w, h)
-    }
-    return false
-}
-
-; Не потеря фокуса, а всплывающее меню того же приложения: у Qt-программ
-; (Telegram и подобных) контекстное меню — отдельное окно верхнего
-; уровня, и на миг само становится передним планом, хотя пользователь
-; никуда не уходил. У VS Code и Steam меню передний план не перехватывает
-; вообще — там первая проверка (WinActive) отвечает сама. Отличаем
-; всплывающее окно от честной потери фокуса тем же признаком, что уже
-; использует TrackedFore() для служебных окон — WS_EX_TOOLWINDOW, — и
-; только если оно принадлежит тому же процессу, что и слот: чужой
-; тултип чужого приложения фокусом слота не считается.
-StillFocused(hwnd) {
-    if WinActive("ahk_id " hwnd)
-        return true
-    try {
-        fore := WinExist("A")
-        if !fore
-            return false
-        ; Уход в настройки — не потеря фокуса: иначе окно уезжало бы за
-        ; край ровно в тот момент, когда пользователь открыл его настройки.
-        ; Механика та же, что ниже для всплывающих меню.
-        if IsServiceWindow(fore)
-            return true
-        if !(WinGetExStyle("ahk_id " fore) & 0x00000080)    ; WS_EX_TOOLWINDOW
-            return false
-        return WinGetPID("ahk_id " fore) = WinGetPID("ahk_id " hwnd)
-    }
-    return false
 }
 
 ; Управляет ли ящик этим окном: геометрия посчитана, значит слот хоть раз
