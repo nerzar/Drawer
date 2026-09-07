@@ -17,45 +17,49 @@ Read shared state from `refs/remotes/dev/wip/slots-parity`; shared docs push onl
 4. Run bounded targeted gates; report/commit/push; verify remote + clean tree.
 5. Never self-accept/promote or broaden scope. On blocker/conflict/data-loss risk: report `BLOCKED`, stop.
 
-## Current status — manual retest FAILED; previous fix hypothesis rejected
+## Current status — manual retest FAILED; product behavior locked
 - Accepted production remains `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`.
 - Integrated candidate `cd6dc00b3d58c6abea709687618ea3702432bc45` remains **DO NOT PROMOTE**.
-- Muse monitor-pinning FIX `073a9e649bb85b4766acec33e49f975d5444a140` is **REJECTED** despite automated verification because it changes intended product behavior.
-- User explicitly confirmed historical/required contract for `monitor: cursor`: even after binding, moving cursor to another monitor moves the active edge handle there and deployment must occur on that cursor monitor. A managed window is NOT pinned to its bind monitor.
-- The rejected fix caused exactly the wrong behavior: bound VS Code/Storm stayed on original monitor, handle no longer followed cursor, and deployment/animation remained wrong. Therefore previous diagnosis "cursor monitor instability is the bug" was incorrect as a product conclusion.
-- Accepted code itself proves dynamic behavior: `Show()` resolves `mi := ResolveMonitor(cfg)` on every deploy. Preserve that contract.
-- Real unresolved bug: candidate lineage causes wrong animation origin / cross-monitor staging and transient handle disappearance while dynamic cursor-follow must remain intact.
+- Monitor-pinning FIX `073a9e649bb85b4766acec33e49f975d5444a140` remains **REJECTED** because it changes required behavior.
+- User-required contract is immutable unless user explicitly changes it: for `monitor: cursor`, managed windows and the active edge handle follow the current cursor monitor; Show/deploy uses that cursor monitor. No pinning to bind monitor.
+- Real unresolved defects: wrong animation origin / cross-monitor staging and transient disappearing edge handle while cursor-follow remains dynamic.
 - A03S2/A03S3/A05 and promotion remain frozen.
 
+## Completed analysis wave
+- `RUN-20260907-AUTO-ANTIGRAVITY-MULTIMON-RUNTIME-BISECT-02` — DONE, verdict `READY_FOR_FIX`. Report claims `5ed8b9a` for wrong-origin and `fae1850` for handle migration.
+- `RUN-20260907-OPENCODE-MUSE13-CURSOR-CONTRACT-AUDIT-02` — DONE, verdict `NEEDS_RUNTIME_BISECT`. Static audit proves cursor-follow contract but conflicts with the Antigravity root-cause conclusion: it shows the `5ed8b9a` missing-braces geometry bug is fixed by `26b1133` inside the failed candidate and finds no remaining geometry semantic delta.
+
+Because the two analyses do **not** converge, implementation is NOT authorized yet. The previous Antigravity report does not include an explicit per-commit runtime pass/fail matrix strong enough to resolve this contradiction. Do not convert speculative DWM/timer explanations into code changes.
+
 ## AUTONOMOUS QUEUE — ANTIGRAVITY
-### Live/runtime bisection of real regression
+### Runtime evidence reconciliation
 - Status: `READY`
 - Eligible: `ANTIGRAVITY`
 - Preferred model: `Gemini 3.8 Flash (Medium)`
 - Session: `NEW`
-- Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-MULTIMON-RUNTIME-BISECT-02`
+- Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-MULTIMON-EVIDENCE-RECONCILE-03`
 - Accepted baseline: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
 - Failed candidate: `cd6dc00b3d58c6abea709687618ea3702432bc45`
-- Rejected semantic fix: `073a9e649bb85b4766acec33e49f975d5444a140`
-- Branch: `analysis/multimon-runtime-bisect-02-antigravity`
-- Task: `docs/agent-tasks/RUN-20260907-AUTO-ANTIGRAVITY-MULTIMON-RUNTIME-BISECT-02.md`
+- Rejected fix: `073a9e649bb85b4766acec33e49f975d5444a140`
+- Branch: `analysis/multimon-evidence-reconcile-03-antigravity`
+- Task: `docs/agent-tasks/RUN-20260907-AUTO-ANTIGRAVITY-MULTIMON-EVIDENCE-RECONCILE-03.md`
 
-Analysis only. Prefer actual dual-monitor VM/runtime bisection. Identify first bad commit for wrong animation origin and disappearing edge while preserving cursor-follow semantics.
+Analysis/report only. Produce an explicit per-commit runtime pass/fail matrix if dual-monitor runtime is genuinely available. If not, report `BLOCKED_RUNTIME_EVIDENCE`; do not call static reasoning a runtime bisection. Preserve cursor-follow.
 
 ## AUTONOMOUS QUEUE — OPENCODE / MUSE 1.3 FREE
-### Cursor-follow contract / semantic-drift audit
+### Fix-boundary reconciliation
 - Status: `READY`
 - Eligible: `OPENCODE-MUSE13`
 - Required model: `Muse Spark 1.3 Contributor Free`
 - Session: `NEW`
-- Run ID: `RUN-20260907-OPENCODE-MUSE13-CURSOR-CONTRACT-AUDIT-02`
+- Run ID: `RUN-20260907-OPENCODE-MUSE13-MULTIMON-FIX-BOUNDARY-03`
 - Accepted baseline: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
 - Failed candidate: `cd6dc00b3d58c6abea709687618ea3702432bc45`
 - Rejected fix: `073a9e649bb85b4766acec33e49f975d5444a140`
-- Branch: `analysis/cursor-contract-audit-02-muse13`
-- Task: `docs/agent-tasks/RUN-20260907-OPENCODE-MUSE13-CURSOR-CONTRACT-AUDIT-02.md`
+- Branch: `analysis/multimon-fix-boundary-03-muse13`
+- Task: `docs/agent-tasks/RUN-20260907-OPENCODE-MUSE13-MULTIMON-FIX-BOUNDARY-03.md`
 
-Analysis only. Prove accepted cursor-follow contract and identify semantic drift/animation staging changes across the candidate lineage. Do not implement another fix yet.
+Analysis/report only. Independently review both prior reports, flag unsupported claims, and define the smallest behavior-preserving fix boundary or explicitly wait for runtime evidence. No production/test edits.
 
 ## Architect gate
-Wait for both analyses. Compare runtime bisection with static semantic audit. Then publish one narrow FIX that preserves dynamic cursor-follow and specifically addresses wrong animation origin/handle disappearance. The next regression tests must fail both bad candidate `cd6dc00` and rejected pinning fix `073a9e6` for distinct reasons while passing accepted behavior. Rebuild one candidate and request immediate user dual-monitor retest before any other refactor or promotion.
+Wait for both reconciliation reports. Publish implementation only if the evidence converges on a narrow mechanism that preserves accepted user behavior. Any proposed fix must have regression coverage that preserves managed cursor-follow and must not revive monitor pinning. After a verified narrow fix, build exactly one candidate and stop for immediate user dual-monitor retest before any other refactor or promotion.
