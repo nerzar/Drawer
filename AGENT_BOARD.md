@@ -7,6 +7,10 @@ Blackboard между архитектором ChatGPT и coding agents.
 ## Critical Git ref hygiene
 Read shared state from `refs/remotes/dev/wip/slots-parity`; shared docs push only to `HEAD:refs/heads/wip/slots-parity`. Never create local `dev/...` refs or use ambiguous `dev/wip/slots-parity`. Public `origin` stays untouched.
 
+Current shared docs tip observed by architect: `c9fae3080fce82380f8a1cbfd76107c8e215f552` (docs-only movement after cleanup; does **not** replace the runtime baseline).
+
+A number of historical remote `analysis/*`, `fix/*`, `refactor/*`, `diag/*`, `integration/*` branches still exist. They are **dormant evidence/history, not active task branches and not promotion candidates** unless a future task names one explicitly by full ref + Code SHA. Do not infer work from branch names.
+
 ## Source of truth / locked behavior
 - Accepted production baseline: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`.
 - Dedicated manual-baseline branch: `recovery/known-good-6bfa010` -> exactly `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`.
@@ -16,6 +20,11 @@ Read shared state from `refs/remotes/dev/wip/slots-parity`; shared docs push onl
 - Rejected recovery candidate `71d67845467893f7dfe82267289cd7ea5dd95886`: rejected / do not use.
 - Existing user-visible behavior is immutable unless the user explicitly requests a change.
 - In particular `monitor: cursor` remains dynamic exactly as accepted production.
+
+## Product contract draft
+- `docs/PRODUCT_SPEC.md` exists on the shared docs branch as a **DRAFT** for user review.
+- It is not yet an acceptance authority where it conflicts with the manually verified `6bfa010...` baseline or where it contains `USER REVIEW` markers.
+- Do not implement from unresolved draft wording. Wait for owner edits/approval.
 
 ## Recovery policy
 The night-wave is treated as suspect. Do not salvage arbitrary subsets by assumption.
