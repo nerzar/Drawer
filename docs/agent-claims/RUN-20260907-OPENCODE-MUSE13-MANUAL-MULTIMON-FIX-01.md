@@ -8,5 +8,9 @@
 - Base: `cd6dc00b3d58c6abea709687618ea3702432bc45`
 - Branch: `fix/manual-multimon-monitor-identity-muse13`
 - Worktree: `C:\Users\nerza\Projects\drawer-settings-integration`
-- Status: `CLAIMED`
+- Status: `DONE`
 - Report: `docs/agent-reports/2026-09-07-opencode-muse13-manual-multimon-fix.md`
+- Code SHA: `073a9e649bb85b4766acec33e49f975d5444a140`
+- Report tip SHA: `dc194946300b2d0e5d7c9ce6e6781452f80417d6`
+- Checks: `/validate drawer x64(3x)+x86 EXIT 0; WindowGeometry x64+x86 EXIT 0; new monitor-identity seam 24/24 EXIT 0 (3x); geometry/adapter/handles/focus/settings seams EXIT 0; probe on Base cd6dc00 EXIT 1 (6/6 FAIL) vs fix texts EXIT 0 (6/6 PASS); diff --check clean; config.ini untouched`
+- Verdict: `READY_FOR_INDEPENDENT_VERIFY`
