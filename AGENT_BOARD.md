@@ -41,7 +41,7 @@ Future code must start from the known-good baseline and be reintroduced one boun
 - Final docs commit observed: `3d40a2cb069bbfc28e06346c243d0828ffca86a8`
 - Result: 22 redundant/superseded local branches removed, one redundant remote branch removed, rejected RECOVERY-06 worktree removed, public `origin` untouched, known-good baseline preserved.
 - Important unresolved local-state note: Antigravity reported an uncommitted user-generated `src/config.ini` modification in `drawer-settings-integration` and stashed it to obtain a clean tree. Do not drop/overwrite/auto-apply that stash. User should decide whether those manual-test settings need restoring.
-- Documentation hygiene debt: claim/report still contain `Report tip SHA: PENDING_FINAL_COMMIT` even though final docs commit `3d40a2c...` exists. This is bookkeeping only; do not spend a scarce model run on it.
+- Claim/report bookkeeping finalized by architect; no scarce model run used.
 - Maintenance branch `maintenance/reset-known-good-cleanup-20260907` is completed evidence/history, not an active task branch.
 
 ## AUTONOMOUS QUEUE — OPENCODE / MUSE
