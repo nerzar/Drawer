@@ -29,6 +29,9 @@ export type GeneralDraft = {
   animCustom?: boolean
   blurCheckMs: string
   accent: string
+  handleWidth: string
+  handleHeight: string
+  handleGap: string
 }
 
 export const EDGE_OPTIONS: { value: Edge; label: string }[] = [
@@ -65,6 +68,7 @@ export function isCustomAnim(animMs: string, animSteps: string): boolean {
 
 export function draftFromState(g: GeneralSettings): GeneralDraft {
   const m = g.dynamicDefaults.monitor
+  const handle = g.handle ?? { width: 22, height: 34, gap: 8 }
   const animMs = String(g.animation.durationMs)
   const animSteps = String(g.animation.steps)
   return {
@@ -81,6 +85,9 @@ export function draftFromState(g: GeneralSettings): GeneralDraft {
     animCustom: isCustomAnim(animMs, animSteps),
     blurCheckMs: String(g.blurCheckMs),
     accent: g.accent,
+    handleWidth: String(handle.width),
+    handleHeight: String(handle.height),
+    handleGap: String(handle.gap),
   }
 }
 
@@ -97,6 +104,7 @@ export function draftToWire(d: GeneralDraft): GeneralSettings {
     animation: { durationMs: num(d.animMs), steps: num(d.animSteps) },
     blurCheckMs: num(d.blurCheckMs),
     accent: d.accent,
+    handle: { width: num(d.handleWidth), height: num(d.handleHeight), gap: num(d.handleGap) },
   }
 }
 

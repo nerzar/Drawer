@@ -45,6 +45,7 @@ export type GeneralSettings = {
   animation: { durationMs: number; steps: number }
   blurCheckMs: number
   accent: string
+  handle: { width: number; height: number; gap: number }
 }
 
 export type PermanentSlotValue = SlotBehavior & {

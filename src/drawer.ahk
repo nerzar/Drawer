@@ -120,6 +120,9 @@ LoadConfig(path, &diags) {
     animMs    := IniRead(path, "general", "animMs", 160)
     animSteps := IniRead(path, "general", "animSteps", 14)
     blurMs    := IniRead(path, "general", "blurMs", 250)
+    handleWidth := IniRead(path, "general", "handleWidth", 22)
+    handleHeight := IniRead(path, "general", "handleHeight", 34)
+    handleGap := IniRead(path, "general", "handleGap", 8)
     ; По умолчанию включено: в конфиге, написанном до появления кромок,
     ; строки нет, и поведение должно остаться таким же, как без неё.
     handlesOn := IniBool(path, "general", "handles", true, &diags)
@@ -194,6 +197,7 @@ LoadConfig(path, &diags) {
 
     DebugLog("[CONFIG] LoadConfig done: " perm.Count " permanent slot(s), " overrides.Count " override(s)")
     return { animMs: animMs, animSteps: animSteps, blurMs: blurMs,
+             handleWidth: handleWidth, handleHeight: handleHeight, handleGap: handleGap,
              handlesOn: handlesOn, accent: handleBg,
              perm: perm, dynamic: dynamic, overrides: overrides, hotkeys: hotkeys }
 }
@@ -222,10 +226,16 @@ ConfigDiagShow(diags) {
 ; входят: их проекция — Slots.Apply(), и она отдельная, потому что
 ; реконсиляции после Save нужен ещё и снимок постоянных привязок.
 ConfigApply(cfg) {
-    global animMs, animSteps, blurMs, handlesOn, HANDLE_BG
+    global animMs, animSteps, blurMs, handleWidth, handleHeight, handleGap, handlesOn, HANDLE_BG
     animMs    := cfg.animMs
     animSteps := cfg.animSteps
     blurMs    := cfg.blurMs
+    handleWidth := cfg.handleWidth
+    handleHeight := cfg.handleHeight
+    handleGap := cfg.handleGap
+    HANDLE_REST := handleWidth
+    HANDLE_LEN := handleHeight
+    HANDLE_GAP := handleGap
     handlesOn := cfg.handlesOn
     HANDLE_BG := cfg.accent
     DebugLog("[CONFIG] ConfigApply: animMs=" animMs " animSteps=" animSteps " blurMs=" blurMs " handles=" (handlesOn ? "true" : "false") " accent=" HANDLE_BG)
@@ -3492,6 +3502,9 @@ SettingsGeneralPlan(input, &err) {
     edge := SettingsEdgeIn(input.edge, "Край", false, &err)
     mon := SettingsMonitorIn(input.monitor, "Монитор", false, &err)
     accent := SettingsAccentIn(input.accent, "Цвет кромки", &err)
+    hw := SettingsNum(input.handleWidth, 8, 200, "Размер кромки", &err)
+    hh := SettingsNum(input.handleHeight, 8, 200, "Высота кромки", &err)
+    gap := SettingsNum(input.handleGap, 0, 200, "Отступ между кромками", &err)
     act := SettingsBoolIn(input.activateOnShow, "Активация", &err)
     blur := SettingsBoolIn(input.hideOnBlur, "Автоскрытие", &err)
     handles := SettingsBoolIn(input.handlesEnabled, "Кромки", &err)
@@ -3512,6 +3525,9 @@ SettingsGeneralPlan(input, &err) {
     cand.Push({ sec: "general", key: "animSteps",      val: String(steps) })
     cand.Push({ sec: "general", key: "blurMs",         val: String(b) })
     cand.Push({ sec: "general", key: "accent",         val: accent })
+    cand.Push({ sec: "general", key: "handleWidth",  val: String(hw) })
+    cand.Push({ sec: "general", key: "handleHeight", val: String(hh) })
+    cand.Push({ sec: "general", key: "handleGap",    val: String(gap) })
 
     out := []
     for c in cand {
@@ -3539,7 +3555,7 @@ SettingsDynamicFinal(generalWrites) {
 ; значения. Валидацию и сравнение с runtime делает SettingsGeneralPlan —
 ; backend-seam controls/GUI не видит.
 SettingsCollect(&err) {
-    global setUI
+    global setUI, handleWidth, handleHeight, handleGap
     err := ""
     if !(ui := setUI)
         return 0
@@ -3554,7 +3570,10 @@ SettingsCollect(&err) {
         animMs: ui.animMs.Value,
         animSteps: ui.animSteps.Value,
         blurMs: ui.blurMs.Value,
-        accent: ui.accentVal
+        accent: ui.accentVal,
+        handleWidth: handleWidth,
+        handleHeight: handleHeight,
+        handleGap: handleGap
     }
     return SettingsGeneralPlan(input, &err)
 }
@@ -4086,7 +4105,7 @@ SettingsBehaviorCopy(cfg) {
 ; перевод в имена wire (executable/windowClass/widthPercent, MonitorRef)
 ; — работа порта, здесь ей не место.
 SettingsStateSnapshot() {
-    global animMs, animSteps, blurMs, handlesOn, HANDLE_BG
+    global animMs, animSteps, blurMs, handleWidth, handleHeight, handleGap, handlesOn, HANDLE_BG
     slots := []
     Loop 9 {
         n := A_Index
@@ -4107,6 +4126,7 @@ SettingsStateSnapshot() {
     return { general: { dynamicDefaults: SettingsBehaviorCopy(SlotDefaults()),
                         handlesEnabled: handlesOn, animMs: animMs,
                         animSteps: animSteps, blurMs: blurMs,
+                        handleWidth: handleWidth, handleHeight: handleHeight, handleGap: handleGap,
                         accent: HANDLE_BG },
              slots: slots }
 }

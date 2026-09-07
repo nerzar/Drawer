@@ -444,7 +444,7 @@ SlotBind(n) {
             st.orig := CaptureOrigin(hwnd, mi)
         st.geom := ComputeGeom(SlotCfg(n), mi)
     }
-    SetTimer(HandlesSync, -1)
+    HandlesSync()
     title := WinGetTitle("ahk_id " hwnd)
     DebugLog("[BIND] Slot " n " bound to hwnd=" hwnd " ('" title "')")
     return { ok: true, code: "", message: "Слот " n " → " title, hwnd: hwnd, title: title }

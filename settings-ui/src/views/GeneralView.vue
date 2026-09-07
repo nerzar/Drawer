@@ -136,6 +136,19 @@ function triggerCustomColor() {
           <span>Кромки у края экрана</span>
         </label>
 
+        <div class="row">
+          <label>Размер кромки (px)</label>
+          <div class="field">
+            <input class="num-sm" type="text" data-testid="handleWidth" v-model="d.handleWidth" />
+            <span class="unit">×</span>
+            <input class="num-sm" type="text" data-testid="handleHeight" v-model="d.handleHeight" />
+          </div>
+        </div>
+        <div class="row">
+          <label>Отступ между кромками (px)</label>
+          <div class="field"><input class="num-sm" type="text" data-testid="handleGap" v-model="d.handleGap" /></div>
+        </div>
+
         <div class="divider"></div>
 
         <div class="row" style="margin-bottom: 10px">

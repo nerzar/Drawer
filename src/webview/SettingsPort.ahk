@@ -288,7 +288,10 @@ class DrawerSettingsPort {
             animMs:         this._Int(anim, "durationMs", "general.animation.durationMs", &err, &field),
             animSteps:      this._Int(anim, "steps", "general.animation.steps", &err, &field),
             blurMs:         this._Int(g, "blurCheckMs", "general.blurCheckMs", &err, &field),
-            accent:         this._Text(g, "accent", "general.accent", &err, &field)
+            accent:         this._Text(g, "accent", "general.accent", &err, &field),
+            handleWidth:    this._Int(JsonGet(g, "handle", 0), "width", "general.handle.width", &err, &field),
+            handleHeight:   this._Int(JsonGet(g, "handle", 0), "height", "general.handle.height", &err, &field),
+            handleGap:      this._Int(JsonGet(g, "handle", 0), "gap", "general.handle.gap", &err, &field)
         }
     }
 
@@ -316,7 +319,10 @@ class DrawerSettingsPort {
             "general.animation.durationMs",           "длительность анимации",
             "general.animation.steps",                "шаги анимации",
             "general.blurCheckMs",                    "проверка потери фокуса",
-            "general.accent",                         "цвет акцента")
+            "general.accent",                         "цвет акцента",
+            "general.handle.width",                   "размер кромки",
+            "general.handle.height",                  "высота кромки",
+            "general.handle.gap",                     "отступ между кромками")
         if names.Has(path)
             return names[path]
         ; Имена полей слота знает backend: он же ставит их в свои
@@ -465,7 +471,10 @@ class DrawerSettingsPort {
             "animation", Map("durationMs", this._Num(g.animMs, 160),
                              "steps", this._Num(g.animSteps, 14)),
             "blurCheckMs", this._Num(g.blurMs, 250),
-            "accent", String(Opt(g, "accent", "2A2E35")))
+            "accent", String(Opt(g, "accent", "2A2E35")),
+            "handle", Map("width", this._Num(Opt(g, "handleWidth", 22), 22),
+                           "height", this._Num(Opt(g, "handleHeight", 34), 34),
+                           "gap", this._Num(Opt(g, "handleGap", 8), 8)))
     }
 
     _BehaviorDto(b) {
