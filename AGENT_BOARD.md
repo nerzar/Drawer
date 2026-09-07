@@ -17,43 +17,29 @@ Read shared state from `refs/remotes/dev/wip/slots-parity`; shared docs push onl
 4. Run bounded targeted gates; report/commit/push; verify remote + clean tree.
 5. Never self-accept/promote or broaden scope. On blocker/conflict/data-loss risk: report `BLOCKED`, stop.
 
-## Current status — failed manual candidate, narrow fix under independent gate
+## Current status — READY FOR USER DUAL-MONITOR RETEST
 - Accepted production remains `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`.
 - Failed candidate `cd6dc00b3d58c6abea709687618ea3702432bc45` remains **DO NOT PROMOTE**.
-- User manual failure: wrong-monitor deployment/animation on monitor 2 plus one transient disappearing edge handle.
-- Independent Antigravity + Muse diagnoses converged on unstable `monitor: cursor` identity between `HandlesSync` and `Show`; earlier missing-braces monitor enumeration bug is already fixed by `26b1133`.
-- Muse narrow FIX DONE at Code SHA `073a9e649bb85b4766acec33e49f975d5444a140`, branch `fix/manual-multimon-monitor-identity-muse13`, verdict `READY_FOR_INDEPENDENT_VERIFY`.
-- Muse reports a managed-window monitor pin via stored geometry/config fingerprint; first/unmanaged cursor behavior preserved; new monitor-identity seam 24/24 x3 and negative control distinguishes failed candidate from fix. This is evidence only, not acceptance.
-- A03S2/A03S3/A05 remain frozen until user dual-monitor PASS.
+- Muse narrow multi-monitor FIX is `073a9e649bb85b4766acec33e49f975d5444a140`.
+- Antigravity independently verified that exact FIX with verdict `ACCEPT_FOR_MANUAL_RETEST`.
+- OpenCode/Muse preflight independently found no blocker and verdict `READY_FOR_MANUAL_RETEST_IF_VERIFY_PASSES`.
+- Architect created `integration/manual-retest-20260907` pointing exactly at Code SHA `073a9e649bb85b4766acec33e49f975d5444a140`.
+- No further refactoring is allowed before user dual-monitor retest. A03S2/A03S3/A05 remain frozen.
 
-## AUTONOMOUS QUEUE — ANTIGRAVITY
-### Independent verification of Muse multi-monitor FIX
-- Status: `READY`
-- Eligible: `ANTIGRAVITY`
-- Preferred model: `Gemini 3.8 Flash (Medium)`
-- Session: `NEW`
-- Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-MULTIMON-FIX-VERIFY-01`
-- Accepted comparison: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
-- Failed candidate base: `cd6dc00b3d58c6abea709687618ea3702432bc45`
-- FIX Code SHA: `073a9e649bb85b4766acec33e49f975d5444a140`
-- Source branch: `fix/manual-multimon-monitor-identity-muse13`
-- Branch: `review/manual-multimon-fix-antigravity`
-- Task: `docs/agent-tasks/RUN-20260907-AUTO-ANTIGRAVITY-MULTIMON-FIX-VERIFY-01.md`
+## AUTONOMOUS QUEUES
+No current READY tasks for Antigravity or OPENCODE-MUSE13. Both workers STOP after fresh fetch until architect publishes a new task following the user's retest result.
 
-Verification/report only. Do not self-fix, promote, merge, or assemble candidate. After DONE/BLOCKED, fresh-fetch and STOP unless architect publishes another explicit READY task.
+## MANUAL RETEST CHECKPOINT
+Candidate:
+- Branch: `integration/manual-retest-20260907`
+- Code SHA: `073a9e649bb85b4766acec33e49f975d5444a140`
+- Base failed candidate: `cd6dc00b3d58c6abea709687618ea3702432bc45`
 
-## AUTONOMOUS QUEUE — OPENCODE / MUSE 1.3 FREE
-### Manual retest preflight
-- Status: `READY`
-- Eligible: `OPENCODE-MUSE13`
-- Required model: `Muse Spark 1.3 Contributor Free`
-- Session: `NEW`
-- Run ID: `RUN-20260907-OPENCODE-MUSE13-MULTIMON-RETEST-PREFLIGHT-01`
-- Base/source: failed candidate `cd6dc00b3d58c6abea709687618ea3702432bc45`; Muse FIX `073a9e649bb85b4766acec33e49f975d5444a140`; accepted comparison `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
-- Branch: `analysis/multimon-retest-preflight-muse13`
-- Task: `docs/agent-tasks/RUN-20260907-OPENCODE-MUSE13-MULTIMON-RETEST-PREFLIGHT-01.md`
+User should retest first and foremost:
+1. On monitor 2, deploy the same slot/window that previously started animation from monitor 1; animation origin must now remain on monitor 2.
+2. Move cursor between monitors while the window is managed/hidden; the handle must not jump/disappear solely because the cursor moved.
+3. Click the handle after cursor movement; Show/deploy must use the same monitor as the managed slot/handle.
+4. Recheck an internal edge between monitors: no slide across the neighboring workspace.
+5. Quick smoke: basic handles + Settings lifecycle still work.
 
-Report-only preflight in parallel with Anti verification. Inspect exact code/diff; determine whether FIX can itself be the next manual candidate tip; prepare human dual-monitor retest checklist and diagnostics if failure persists. No production/test edits, no merge/promotion/candidate assembly. After DONE/BLOCKED, fresh-fetch and STOP unless architect publishes another explicit READY task.
-
-## Next gate
-If Antigravity returns `ACCEPT_FOR_MANUAL_RETEST` and OpenCode preflight finds no blocker, architect will publish one narrow candidate-assembly task using exact verified SHA(s), then stop for immediate user dual-monitor runtime retest. No A03S2/A03S3/A05 before user PASS.
+Any material failure blocks promotion and starts a targeted fix. If user PASSes this retest, architect may accept/promote this wave and publish the next implementation queue.
