@@ -54,37 +54,42 @@ On blocker/conflict/product ambiguity/data-loss risk: preserve safe state, push 
 
 - Shared accepted production identity remains `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`; higher shared commits are docs/tasks/claims/reports only unless explicitly promoted.
 - G03, G05/G05FIX, G06 accepted + runtime verified + promoted. A02S1 accepted, runtime verified and promoted by P08.
-- A02S2 FIX DONE at `313b3af8b6377b2b66e07256f985b1663c5630ee`; independent Antigravity verification is now READY.
-- A03S1 broken implementation `700f033cc2700dcdbb6c9fbd387e2e44b8510ef8` review found a multi-monitor blocker. Muse FIX is DONE at `90718c99de1609b40a7b7a8dbe314fbcb2d857dd`; acceptance/promotion pending independent verification.
-- A04S1/S2/S3 DONE in exact linear lineage through `4d1a3106c3e3f64f8caa5b26bceacf9fafdf5873`; independent Muse reviews are in progress/queued before acceptance/promotion.
+- A02S2 FIX `313b3af8b6377b2b66e07256f985b1663c5630ee` independent Antigravity verification DONE with verdict `ACCEPT_CANDIDATE`.
+- A03S1 broken implementation `700f033cc2700dcdbb6c9fbd387e2e44b8510ef8` review found a multi-monitor blocker. Muse FIX is DONE at `90718c99de1609b40a7b7a8dbe314fbcb2d857dd`; independent Antigravity verification is now READY.
+- A04S1 and A04S2 independent Muse reviews DONE with verdict `ACCEPT_CANDIDATE`; A04S3 review remains in the Muse chain.
 - T01 settings-seam determinism `34efdb62d8fb1dcaa55119f47794c3b269772e9c` independent Antigravity verification DONE with verdict `ACCEPT_CANDIDATE`.
-- T02A Muse audit DONE, verdict `NEEDS_PREREQUISITE`; accepted settings-seam is largely copied/static coverage and hangs at accepted production, making T01 a prerequisite for trustworthy settings refactors.
-- A05A analysis DONE, verdict `READY_TO_IMPLEMENT`; A05 implementation remains gated until T01 is accepted and a trustworthy integration/manual-test candidate is assembled.
+- T02A Muse audit DONE, verdict `NEEDS_PREREQUISITE`.
+- A05A analysis DONE, verdict `READY_TO_IMPLEMENT`; A05 implementation remains gated until manual checkpoint.
 - Ref/worktree cleanup DONE.
 - CODEX quota exhausted. DeepSeek and Claude limited OpenCode runs stopped. Muse remains active for its review chain.
 
 ## AUTONOMOUS QUEUE — ANTIGRAVITY
 
-### A02S2 FIX independent verification
+### A03S1 FIX independent verification
 - Status: `READY`
 - Eligible: `ANTIGRAVITY`
 - Preferred model: `Gemini 3.8 Flash (Medium)`
 - Session: `NEW`
-- Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-A02S2FIX-VERIFY-01`
-- Base: `c482ad3ae9c499ea32eb3c0cdd590e495a919e30`
-- Code SHA under verification: `313b3af8b6377b2b66e07256f985b1663c5630ee`
-- Source branch: `fix/a02s2-focus-history-blockers`
-- Branch: `verify/a02s2fix-antigravity`
-- Task file: `docs/agent-tasks/RUN-20260907-AUTO-ANTIGRAVITY-A02S2FIX-VERIFY-01.md`
+- Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-A03S1FIX-VERIFY-01`
+- Base: `700f033cc2700dcdbb6c9fbd387e2e44b8510ef8`
+- Code SHA under verification: `90718c99de1609b40a7b7a8dbe314fbcb2d857dd`
+- Source branch: `fix/a03s1-monitor-enumeration-muse13`
+- Branch: `verify/a03s1fix-antigravity`
+- Task file: `docs/agent-tasks/RUN-20260907-AUTO-ANTIGRAVITY-A03S1FIX-VERIFY-01.md`
 
-After this verification DONE/BLOCKED, fresh-fetch and stop unless architect has published another Antigravity READY task. Verification/report only; no self-fix, accept, promote, merge or unrelated ref cleanup.
+After this verification DONE/BLOCKED, fresh-fetch and stop unless architect has published another Antigravity READY task. Verification/report only; no self-fix, accept, promote, merge or unrelated cleanup.
+
+### A02S2 FIX independent verification
+- Status: `DONE`
+- Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-A02S2FIX-VERIFY-01`
+- Code SHA: `313b3af8b6377b2b66e07256f985b1663c5630ee`
+- Verdict: `ACCEPT_CANDIDATE`
 
 ### T01 independent verification
 - Status: `DONE`
 - Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-T01-VERIFY-01`
 - Code SHA: `34efdb62d8fb1dcaa55119f47794c3b269772e9c`
 - Verdict: `ACCEPT_CANDIDATE`
-- Report: `docs/agent-reports/2026-09-07-antigravity-t01-verify.md`
 
 ### Ref/worktree cleanup
 - Status: `DONE`
@@ -103,25 +108,16 @@ Muse is free/non-scarce for this wave. Process its published READY chain strictl
 - Status: `DONE`
 - Run ID: `RUN-20260907-OPENCODE-MUSE13-A03S1-FIX-01`
 - Code SHA: `90718c99de1609b40a7b7a8dbe314fbcb2d857dd`
-- Branch: `fix/a03s1-monitor-enumeration-muse13`
 
 ### A04S1 independent review
-- Status: `READY`
-- Eligible: `OPENCODE-MUSE13`
+- Status: `DONE`
 - Run ID: `RUN-20260907-OPENCODE-MUSE13-A04S1-REVIEW-01`
-- Base: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
-- Code SHA: `851f47566dd074538f412b9d258193dbde65195b`
-- Branch: `review/a04s1-muse13`
-- Task file: `docs/agent-tasks/RUN-20260907-OPENCODE-MUSE13-A04S1-REVIEW-01.md`
+- Verdict: `ACCEPT_CANDIDATE`
 
 ### A04S2 independent review
-- Status: `READY`
-- Eligible: `OPENCODE-MUSE13`
+- Status: `DONE`
 - Run ID: `RUN-20260907-OPENCODE-MUSE13-A04S2-REVIEW-01`
-- Base: `851f47566dd074538f412b9d258193dbde65195b`
-- Code SHA: `e862c4f7b71f0aced86dc2b19843b47b4b23a0f2`
-- Branch: `review/a04s2-muse13`
-- Task file: `docs/agent-tasks/RUN-20260907-OPENCODE-MUSE13-A04S2-REVIEW-01.md`
+- Verdict: `ACCEPT_CANDIDATE`
 
 ### A04S3 independent review
 - Status: `READY`
@@ -136,9 +132,9 @@ Muse authority is review/analysis only for A04. Do not implement A04 fixes, acce
 
 ## WAITING / ARCHITECT GATES
 
-- T01 is now an acceptance candidate; architect will include it in the next integration/manual-test candidate rather than starting a new Settings refactor first.
-- A02S2 acceptance waits for the current independent Antigravity verification.
-- A03S1 corrected lineage waits for independent verification before acceptance.
-- A03S2/A03S3 remain gated until the corrected upstream focus/geometry lines are accepted.
-- A04 cannot be accepted/promoted until S1/S2/S3 independent reviews are complete and any blockers are fixed.
+- T01 is an acceptance candidate.
+- A02S2 FIX is an acceptance candidate.
+- Corrected A03S1 waits for the current independent Antigravity verification.
+- A03S2/A03S3 remain gated until corrected upstream focus/geometry lines are accepted.
+- A04 cannot be accepted/promoted until A04S3 independent review completes and any blockers are fixed.
 - Next manual-test candidate should be assembled after T01 + A02S2 FIX + corrected A03S1 + reviewed A04 line reach acceptance-candidate status; do not start A05 implementation before that manual checkpoint.
