@@ -17,29 +17,45 @@ Read shared state from `refs/remotes/dev/wip/slots-parity`; shared docs push onl
 4. Run bounded targeted gates; report/commit/push; verify remote + clean tree.
 5. Never self-accept/promote or broaden scope. On blocker/conflict/data-loss risk: report `BLOCKED`, stop.
 
-## Current status — READY FOR USER DUAL-MONITOR RETEST
+## Current status — manual retest FAILED; previous fix hypothesis rejected
 - Accepted production remains `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`.
-- Failed candidate `cd6dc00b3d58c6abea709687618ea3702432bc45` remains **DO NOT PROMOTE**.
-- Muse narrow multi-monitor FIX is `073a9e649bb85b4766acec33e49f975d5444a140`.
-- Antigravity independently verified that exact FIX with verdict `ACCEPT_FOR_MANUAL_RETEST`.
-- OpenCode/Muse preflight independently found no blocker and verdict `READY_FOR_MANUAL_RETEST_IF_VERIFY_PASSES`.
-- Architect created `integration/manual-retest-20260907` pointing exactly at Code SHA `073a9e649bb85b4766acec33e49f975d5444a140`.
-- No further refactoring is allowed before user dual-monitor retest. A03S2/A03S3/A05 remain frozen.
+- Integrated candidate `cd6dc00b3d58c6abea709687618ea3702432bc45` remains **DO NOT PROMOTE**.
+- Muse monitor-pinning FIX `073a9e649bb85b4766acec33e49f975d5444a140` is **REJECTED** despite automated verification because it changes intended product behavior.
+- User explicitly confirmed historical/required contract for `monitor: cursor`: even after binding, moving cursor to another monitor moves the active edge handle there and deployment must occur on that cursor monitor. A managed window is NOT pinned to its bind monitor.
+- The rejected fix caused exactly the wrong behavior: bound VS Code/Storm stayed on original monitor, handle no longer followed cursor, and deployment/animation remained wrong. Therefore previous diagnosis "cursor monitor instability is the bug" was incorrect as a product conclusion.
+- Accepted code itself proves dynamic behavior: `Show()` resolves `mi := ResolveMonitor(cfg)` on every deploy. Preserve that contract.
+- Real unresolved bug: candidate lineage causes wrong animation origin / cross-monitor staging and transient handle disappearance while dynamic cursor-follow must remain intact.
+- A03S2/A03S3/A05 and promotion remain frozen.
 
-## AUTONOMOUS QUEUES
-No current READY tasks for Antigravity or OPENCODE-MUSE13. Both workers STOP after fresh fetch until architect publishes a new task following the user's retest result.
+## AUTONOMOUS QUEUE — ANTIGRAVITY
+### Live/runtime bisection of real regression
+- Status: `READY`
+- Eligible: `ANTIGRAVITY`
+- Preferred model: `Gemini 3.8 Flash (Medium)`
+- Session: `NEW`
+- Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-MULTIMON-RUNTIME-BISECT-02`
+- Accepted baseline: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
+- Failed candidate: `cd6dc00b3d58c6abea709687618ea3702432bc45`
+- Rejected semantic fix: `073a9e649bb85b4766acec33e49f975d5444a140`
+- Branch: `analysis/multimon-runtime-bisect-02-antigravity`
+- Task: `docs/agent-tasks/RUN-20260907-AUTO-ANTIGRAVITY-MULTIMON-RUNTIME-BISECT-02.md`
 
-## MANUAL RETEST CHECKPOINT
-Candidate:
-- Branch: `integration/manual-retest-20260907`
-- Code SHA: `073a9e649bb85b4766acec33e49f975d5444a140`
-- Base failed candidate: `cd6dc00b3d58c6abea709687618ea3702432bc45`
+Analysis only. Prefer actual dual-monitor VM/runtime bisection. Identify first bad commit for wrong animation origin and disappearing edge while preserving cursor-follow semantics.
 
-User should retest first and foremost:
-1. On monitor 2, deploy the same slot/window that previously started animation from monitor 1; animation origin must now remain on monitor 2.
-2. Move cursor between monitors while the window is managed/hidden; the handle must not jump/disappear solely because the cursor moved.
-3. Click the handle after cursor movement; Show/deploy must use the same monitor as the managed slot/handle.
-4. Recheck an internal edge between monitors: no slide across the neighboring workspace.
-5. Quick smoke: basic handles + Settings lifecycle still work.
+## AUTONOMOUS QUEUE — OPENCODE / MUSE 1.3 FREE
+### Cursor-follow contract / semantic-drift audit
+- Status: `READY`
+- Eligible: `OPENCODE-MUSE13`
+- Required model: `Muse Spark 1.3 Contributor Free`
+- Session: `NEW`
+- Run ID: `RUN-20260907-OPENCODE-MUSE13-CURSOR-CONTRACT-AUDIT-02`
+- Accepted baseline: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
+- Failed candidate: `cd6dc00b3d58c6abea709687618ea3702432bc45`
+- Rejected fix: `073a9e649bb85b4766acec33e49f975d5444a140`
+- Branch: `analysis/cursor-contract-audit-02-muse13`
+- Task: `docs/agent-tasks/RUN-20260907-OPENCODE-MUSE13-CURSOR-CONTRACT-AUDIT-02.md`
 
-Any material failure blocks promotion and starts a targeted fix. If user PASSes this retest, architect may accept/promote this wave and publish the next implementation queue.
+Analysis only. Prove accepted cursor-follow contract and identify semantic drift/animation staging changes across the candidate lineage. Do not implement another fix yet.
+
+## Architect gate
+Wait for both analyses. Compare runtime bisection with static semantic audit. Then publish one narrow FIX that preserves dynamic cursor-follow and specifically addresses wrong animation origin/handle disappearance. The next regression tests must fail both bad candidate `cd6dc00` and rejected pinning fix `073a9e6` for distinct reasons while passing accepted behavior. Rebuild one candidate and request immediate user dual-monitor retest before any other refactor or promotion.
