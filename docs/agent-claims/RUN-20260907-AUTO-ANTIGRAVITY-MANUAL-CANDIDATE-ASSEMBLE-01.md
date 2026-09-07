@@ -8,7 +8,8 @@
 - Base: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
 - Branch: `integration/manual-candidate-20260907`
 - Worktree: `C:\Users\nerza\Projects\drawer-agent-worktrees\MANUAL-CANDIDATE-ASSEMBLE`
-- Status: `CLAIMED`
-- Report tip SHA: `PENDING`
-- Code SHA: `NONE`
+- Status: `DONE`
+- Report tip SHA: `PENDING_FINAL_COMMIT`
+- Code SHA: `cd6dc00b3d58c6abea709687618ea3702432bc45`
 - Report: `docs/agent-reports/2026-09-07-antigravity-manual-candidate-assemble.md`
+- Verdict: `READY_FOR_MANUAL_ACCEPTANCE`
