@@ -1992,6 +1992,38 @@ if FileExist(drawerPath) {
      && InStr(focusSrc, "WindowWatchReconcile(watched, candidates)") > 0)
 }
 
+; ---------------------------------------------------------------------
+; Точка 22: распространение размеров кромки и отступов (gap) в рантайм
+; ---------------------------------------------------------------------
+if FileExist(drawerPath) {
+    src22 := FileRead(drawerPath, "UTF-8")
+    pCA := InStr(src22, "ConfigApply(cfg) {")
+    pCAEnd := InStr(src22, "DebugLog(`"[CONFIG] ConfigApply:")
+    codeCA := (pCA > 0 && pCAEnd > pCA) ? SubStr(src22, pCA, pCAEnd - pCA) : ""
+
+    Assert("22a: ConfigApply объявляет HANDLE_REST, HANDLE_LEN, HANDLE_GAP глобальными",
+        InStr(codeCA, "global HANDLE_REST, HANDLE_NEAR, HANDLE_HOVER, HANDLE_LEN, HANDLE_GAP") > 0)
+    Assert("22b: ConfigApply присваивает HANDLE_GAP, HANDLE_REST, HANDLE_LEN из cfg",
+        InStr(codeCA, "HANDLE_GAP   := handleGap") > 0
+     && InStr(codeCA, "HANDLE_REST  := handleWidth") > 0
+     && InStr(codeCA, "HANDLE_LEN   := handleHeight") > 0)
+    Assert("22c: HANDLE_NEAR и HANDLE_HOVER масштабируются от HANDLE_REST",
+        InStr(codeCA, "HANDLE_NEAR  := HANDLE_REST + 6") > 0
+     && InStr(codeCA, "HANDLE_HOVER := HANDLE_REST + 22") > 0)
+
+    pSL := InStr(src22, "SettingsLive(sec, key) {")
+    pSLEnd := InStr(src22, "; -------------------------- ЗАПИСЬ [slotN] -------------------------")
+    codeSL := (pSL > 0 && pSLEnd > pSL) ? SubStr(src22, pSL, pSLEnd - pSL) : ""
+
+    Assert("22d: SettingsLive отслеживает handleWidth, handleHeight и handleGap",
+        InStr(codeSL, "case `"handleWidth`":") > 0
+     && InStr(codeSL, "case `"handleHeight`":") > 0
+     && InStr(codeSL, "case `"handleGap`":") > 0)
+    Assert("22e: HandleResizeAll пересобирает кромки через HandlesSync",
+        InStr(src22, "HandleResizeAll() {`r`n    HandlesSync()`r`n}") > 0
+     || InStr(src22, "HandleResizeAll() {`n    HandlesSync()`n}") > 0)
+}
+
 out := ""
 allOk := true
 for r in results {

@@ -227,17 +227,20 @@ ConfigDiagShow(diags) {
 ; реконсиляции после Save нужен ещё и снимок постоянных привязок.
 ConfigApply(cfg) {
     global animMs, animSteps, blurMs, handleWidth, handleHeight, handleGap, handlesOn, HANDLE_BG
-    animMs    := cfg.animMs
-    animSteps := cfg.animSteps
-    blurMs    := cfg.blurMs
-    handleWidth := cfg.handleWidth
+    global HANDLE_REST, HANDLE_NEAR, HANDLE_HOVER, HANDLE_LEN, HANDLE_GAP
+    animMs       := cfg.animMs
+    animSteps    := cfg.animSteps
+    blurMs       := cfg.blurMs
+    handleWidth  := cfg.handleWidth
     handleHeight := cfg.handleHeight
-    handleGap := cfg.handleGap
-    HANDLE_REST := handleWidth
-    HANDLE_LEN := handleHeight
-    HANDLE_GAP := handleGap
-    handlesOn := cfg.handlesOn
-    HANDLE_BG := cfg.accent
+    handleGap    := cfg.handleGap
+    HANDLE_REST  := handleWidth
+    HANDLE_NEAR  := HANDLE_REST + 6
+    HANDLE_HOVER := HANDLE_REST + 22
+    HANDLE_LEN   := handleHeight
+    HANDLE_GAP   := handleGap
+    handlesOn    := cfg.handlesOn
+    HANDLE_BG    := cfg.accent
     DebugLog("[CONFIG] ConfigApply: animMs=" animMs " animSteps=" animSteps " blurMs=" blurMs " handles=" (handlesOn ? "true" : "false") " accent=" HANDLE_BG)
 }
 
@@ -348,8 +351,8 @@ if !foreHook
 ; длина вдоль края и зазор в стопке. В покое плитка вмещает иконку
 ; приложения, поэтому тоньше 22 быть не может.
 HANDLE_REST  := handleWidth
-HANDLE_NEAR  := 28
-HANDLE_HOVER := 44
+HANDLE_NEAR  := HANDLE_REST + 6
+HANDLE_HOVER := HANDLE_REST + 22
 HANDLE_LEN   := handleHeight
 HANDLE_GAP   := handleGap
 HANDLE_ICON  := 18
@@ -1484,13 +1487,7 @@ HandleRepaintAll() {
 }
 
 HandleResizeAll() {
-    global handles, HANDLE_REST
-    for n, hd in handles {
-        hd.thick := HANDLE_REST
-        hd.from := HANDLE_REST
-        hd.to := HANDLE_REST
-        HandleApply(hd)
-    }
+    HandlesSync()
 }
 
 HandleDestroy(n) {
@@ -3593,18 +3590,21 @@ SettingsCollect(&err) {
 ; меняли, остаётся ненаписанным сам собой — умолчания живут в
 ; LoadConfig, и дублировать их здесь не приходится.
 SettingsLive(sec, key) {
-    global animMs, animSteps, blurMs, handlesOn, HANDLE_BG
+    global animMs, animSteps, blurMs, handlesOn, HANDLE_BG, handleWidth, handleHeight, handleGap
     if (sec = "dynamic") {
         v := Opt(SlotDefaults(), key, "")
         return (key = "activateOnShow" || key = "hideOnBlur")
              ? (v ? "true" : "false") : String(v)
     }
     switch key {
-    case "animMs":    return String(animMs)
-    case "animSteps": return String(animSteps)
-    case "blurMs":    return String(blurMs)
-    case "handles":   return handlesOn ? "true" : "false"
-    case "accent":    return HANDLE_BG
+    case "animMs":       return String(animMs)
+    case "animSteps":    return String(animSteps)
+    case "blurMs":       return String(blurMs)
+    case "handles":      return handlesOn ? "true" : "false"
+    case "accent":       return HANDLE_BG
+    case "handleWidth":  return String(handleWidth)
+    case "handleHeight": return String(handleHeight)
+    case "handleGap":    return String(handleGap)
     }
     return ""
 }
@@ -4082,7 +4082,6 @@ SettingsReconcileRuntime(slotPlan, &diags) {
         HANDLE_BG_HOT := HandleLighten(HANDLE_BG, 0.10)
     catch
         HANDLE_BG_HOT := "3A414D"
-    HandleResizeAll()
     HandleRepaintAll()
 
     Slots.Apply(cfg, slotPlan.prevPerm)
@@ -4090,6 +4089,7 @@ SettingsReconcileRuntime(slotPlan, &diags) {
     SlotsSeedManaged()
     WatchSync()
     HandlesSync()
+    HandleResizeAll()
     DebugLog("[SETTINGS] SettingsReconcileRuntime completed")
 }
 
