@@ -55,104 +55,65 @@ On blocker/conflict/product ambiguity/data-loss risk: preserve safe state, push 
 - Shared accepted production identity remains `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`; higher shared commits are docs/tasks/claims/reports only unless explicitly promoted.
 - G03, G05/G05FIX, G06 accepted + runtime verified + promoted.
 - A02S1 accepted, runtime verified and promoted by P08.
-- A02S2 implementation is DONE at Code SHA `c482ad3ae9c499ea32eb3c0cdd590e495a919e30`, but independent Claude Opus 5 review verdict is `NEEDS_FIX`; do NOT promote that SHA.
-- A02S2 blockers: F1 duplicate focus function declarations make `src/drawer.ahk` `/Validate` fail; F2/P17 `Hide()` clears previous-focus history before `RestoreFocus()` consumes it. Fix run is currently CLAIMED by OpenCode Claude 4.8.
-- A04 analysis DONE, verdict `READY_TO_IMPLEMENT`.
-- A04S1 DONE at Code SHA `851f47566dd074538f412b9d258193dbde65195b`; repo-only diff review found expected narrow scope (WindowHandles + drawer adapter + direct seam test), not accepted/promoted.
-- A04S2 DONE at Code SHA `e862c4f7b71f0aced86dc2b19843b47b4b23a0f2`, exact parent A04S1 Code SHA; repo-only diff review found expected continuation scope and reported validate + 24/24 handle seam + settings seam pass. Not accepted/promoted.
-- A03S1 is CLAIMED by OpenCode DeepSeek from accepted shared base and must not depend on unaccepted A02S2.
-- T01 DeepSeek settings-seam determinism is DONE at Code SHA `34efdb62d8fb1dcaa55119f47794c3b269772e9c`; architect repo-only diff review found no scope issue; promotion pending.
+- A02S2 implementation `c482ad3ae9c499ea32eb3c0cdd590e495a919e30` is `NEEDS_FIX`; OpenCode Claude 4.8 owns the fix run. Do not promote broken SHA.
+- A04 analysis DONE. A04S1 `851f47566dd074538f412b9d258193dbde65195b`, A04S2 `e862c4f7b71f0aced86dc2b19843b47b4b23a0f2`, and A04S3 `4d1a3106c3e3f64f8caa5b26bceacf9fafdf5873` are DONE in exact linear lineage. A04S3 repo-only scope review: one commit, only `src/WindowHandles.ahk`, `src/drawer.ahk`, `test/narrow/window-handles-seam.ahk`; reported validate + 39/39 handle seam + settings/focus seams pass. Entire A04 line remains unaccepted/unpromoted pending stronger verification/review.
+- A03S1 remains owned by OpenCode DeepSeek until its current run finishes; no new OpenCode work afterward due current model limit.
+- T01 DeepSeek settings-seam determinism DONE at `34efdb62d8fb1dcaa55119f47794c3b269772e9c`; promotion pending.
 - CODEX quota exhausted. Do not spend Codex.
+- Current resource policy: Antigravity is the only worker eligible for new autonomous tasks. OpenCode Claude 4.8 may finish its already-claimed A02S2 FIX only; do not queue it another run. DeepSeek may finish A03S1 only; do not queue another run.
 
 ## AUTONOMOUS QUEUE — ANTIGRAVITY
 
-### A04S3 — handle runtime synchronization and click seam
+### A05A — Settings service / tray seam analysis
 - Status: `READY`
 - Eligible: `ANTIGRAVITY`
-- Preferred model: `Gemini 3.8 Flash (Medium)`; Claude allowed only if Gemini unavailable
+- Preferred model: `Gemini 3.8 Flash (Medium)`
 - Session: `NEW`
-- Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-A04S3-IMPLEMENT-01`
-- Base: `e862c4f7b71f0aced86dc2b19843b47b4b23a0f2`
-- Branch: `refactor/window-handles-runtime-sync`
-- Task file: `docs/agent-tasks/RUN-20260907-AUTO-ANTIGRAVITY-A04S3-IMPLEMENT-01.md`
+- Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-A05-ANALYSIS-01`
+- Base/source rule: accepted shared production `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`; unaccepted A02/A04 branches are context only, not production identity
+- Branch: `analysis/a05-settings-tray-seam-antigravity`
+- Task file: `docs/agent-tasks/RUN-20260907-AUTO-ANTIGRAVITY-A05-ANALYSIS-01.md`
 
-After A04S3 DONE/BLOCKED, fresh-fetch and stop unless architect has published another Antigravity READY task.
+After A05A DONE/BLOCKED, fresh-fetch and stop unless architect has published another Antigravity READY task. Do not implement A05 slices without a new architect task.
 
-## AUTONOMOUS QUEUE — OPENCODE / DEEPSEEK
+## OPENCODE — FINISH CURRENT RUNS ONLY
 
 ### A03S1 — pure geometry plan seam
 - Status: `CLAIMED/RUNNING`
 - Eligible: `OPENCODE-DEEPSEEK`
-- Required model: `deepseek-v4-flash`
-- Session: `NEW`
 - Run ID: `RUN-20260906-AUTO-ANTIGRAVITY-A03S1-IMPLEMENT-01`
 - Base: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
 - Branch: `refactor/window-geometry-plan-seam`
 - Claim: `docs/agent-claims/RUN-20260906-AUTO-ANTIGRAVITY-A03S1-IMPLEMENT-01.md`
 - Task file: `docs/agent-tasks/RUN-20260906-AUTO-ANTIGRAVITY-A03S1-IMPLEMENT-01.md`
-
-### A05A — Settings service / tray seam analysis
-- Status: `WAITING_QUEUE`
-- Eligible: `OPENCODE-DEEPSEEK`
-- Required model: `deepseek-v4-flash`
-- Session: `NEW`
-- Run ID: `RUN-20260907-OPENCODE-DEEPSEEK-A05-ANALYSIS-01`
-- Base/source rule: accepted shared production `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
-- Branch: `analysis/a05-settings-tray-seam-deepseek`
-- Task file: `docs/agent-tasks/RUN-20260907-OPENCODE-DEEPSEEK-A05-ANALYSIS-01.md`
-
-### T02A — narrow test debt / production-seam coverage audit
-- Status: `WAITING_QUEUE`
-- Eligible: `OPENCODE-DEEPSEEK`
-- Required model: `deepseek-v4-flash`
-- Session: `NEW`
-- Run ID: `RUN-20260907-OPENCODE-DEEPSEEK-T02-TEST-DEBT-ANALYSIS-01`
-- Base/source rule: latest accepted shared production identity when claimed; docs-only higher tip allowed
-- Branch: `analysis/test-debt-production-seams-deepseek`
-- Task file: `docs/agent-tasks/RUN-20260907-OPENCODE-DEEPSEEK-T02-TEST-DEBT-ANALYSIS-01.md`
-
-### A03S2 — monitor / origin selection seam
-- Status: `WAITING_DEPENDENCY`
-- Eligible: `OPENCODE-DEEPSEEK`
-- Required model: `deepseek-v4-flash`
-- Session: `NEW`
-- Run ID: `RUN-20260907-OPENCODE-DEEPSEEK-A03S2-IMPLEMENT-01`
-- Dependency: A03S1 DONE with pushed Code SHA
-- Branch: `refactor/window-geometry-monitor-origin-seam`
-- Task file: `docs/agent-tasks/RUN-20260907-OPENCODE-DEEPSEEK-A03S2-IMPLEMENT-01.md`
-
-After A03S1 DONE/BLOCKED, DeepSeek must fresh-fetch. Architect will advance at most one next DeepSeek task to READY.
-
-## AUTONOMOUS QUEUE — OPENCODE / CLAUDE 4.8
+- After completion: STOP; model budget exhausted.
 
 ### A02S2 FIX — promotion blockers
 - Status: `CLAIMED/RUNNING`
 - Eligible: `OPENCODE-CLAUDE48`
 - Required model: `agentrouter/claude-opus-4-8`
-- Session: `NEW`
 - Run ID: `RUN-20260907-OPENCODE-CLAUDE48-A02S2-FIX-01`
 - Base: `c482ad3ae9c499ea32eb3c0cdd590e495a919e30`
 - Branch: `fix/a02s2-focus-history-blockers`
 - Claim: `docs/agent-claims/RUN-20260907-OPENCODE-CLAUDE48-A02S2-FIX-01.md`
 - Task file: `docs/agent-tasks/RUN-20260907-OPENCODE-CLAUDE48-A02S2-FIX-01.md`
-- Do not self-promote.
+- After completion: STOP; no second Claude task.
 
-No second Claude 4.8 READY task while this run is active.
+## WAITING / ARCHITECT GATES
+
+- A03S2 waits for architect review of A03S1 and renewed model budget.
+- A03S3 waits for accepted A02S2.
+- A04 line waits for sufficient review/verification before acceptance/promotion.
+- T01 promotion pending.
+- A05 implementation waits for A05A analysis verdict and a new architect-published task.
+- T02 test-debt audit waits; no scarce worker spent while A05 architecture is higher value.
 
 ## COMPLETED AUTONOMOUS RUNS — recent
 
-- `RUN-20260907-AUTO-ANTIGRAVITY-A04S2-IMPLEMENT-01` — DONE, Code SHA `e862c4f7b71f0aced86dc2b19843b47b4b23a0f2`; repo-only architect scope review clean, acceptance pending.
+- `RUN-20260907-AUTO-ANTIGRAVITY-A04S3-IMPLEMENT-01` — DONE, Code SHA `4d1a3106c3e3f64f8caa5b26bceacf9fafdf5873`; repo-only scope review clean, acceptance pending.
+- `RUN-20260907-AUTO-ANTIGRAVITY-A04S2-IMPLEMENT-01` — DONE, Code SHA `e862c4f7b71f0aced86dc2b19843b47b4b23a0f2`; acceptance pending.
 - `RUN-20260907-AUTO-ANTIGRAVITY-A04S1-IMPLEMENT-01` — DONE, Code SHA `851f47566dd074538f412b9d258193dbde65195b`; acceptance pending.
 - `RUN-20260907-AUTO-ANTIGRAVITY-A04-ANALYSIS-01` — DONE, `READY_TO_IMPLEMENT`.
 - `RUN-20260906-AUTO-ANTIGRAVITY-A02S2-IMPLEMENT-01` — DONE, Code SHA `c482ad3ae9c499ea32eb3c0cdd590e495a919e30`; independent review `NEEDS_FIX`, no promotion.
 - `RUN-20260907-OPENCODE-DEEPSEEK-T01-SETTINGS-SEAM-01` — DONE, Code SHA `34efdb62d8fb1dcaa55119f47794c3b269772e9c`; repo-only architect review clean.
 - `RUN-20260906-AUTO-ANTIGRAVITY-P08-A02S1-PROMOTE-01` — DONE, shared production Code SHA `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`.
-
-## NEXT AFTER THIS WAVE
-
-- Review A02S2 FIX before any acceptance/promotion.
-- Review A03S1 output; only then unlock A03S2.
-- Review A04S3 output before deciding whether the handles line is promotable or needs runtime/manual verification.
-- T01 promotion remains pending.
-- A03S3 remains blocked on accepted A02S2.
-- A05 implementation is not autonomous until architect explicitly publishes it.
