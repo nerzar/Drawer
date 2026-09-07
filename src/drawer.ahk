@@ -1483,6 +1483,16 @@ HandleRepaintAll() {
     }
 }
 
+HandleResizeAll() {
+    global handles, HANDLE_REST
+    for n, hd in handles {
+        hd.thick := HANDLE_REST
+        hd.from := HANDLE_REST
+        hd.to := HANDLE_REST
+        HandleApply(hd)
+    }
+}
+
 HandleDestroy(n) {
     global handles
     if !handles.Has(n)
@@ -4072,6 +4082,7 @@ SettingsReconcileRuntime(slotPlan, &diags) {
         HANDLE_BG_HOT := HandleLighten(HANDLE_BG, 0.10)
     catch
         HANDLE_BG_HOT := "3A414D"
+    HandleResizeAll()
     HandleRepaintAll()
 
     Slots.Apply(cfg, slotPlan.prevPerm)
