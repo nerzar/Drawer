@@ -11,7 +11,7 @@ A task is autonomous-ready only with `Status: READY`, eligible agent, Run ID, ex
 Read shared state from `refs/remotes/dev/wip/slots-parity`; shared docs push only to `HEAD:refs/heads/wip/slots-parity`. Never create local `dev/...` refs or use ambiguous `dev/wip/slots-parity`. Inspect worktrees/exact refs/unique commits before cleanup. Public `origin` is untouched.
 
 ### Publish-before-DONE invariant
-Agent work is not considered durable/completed until claim, remote branch, report tip and exact Code SHA (when code changes exist) are re-fetched from private `dev`. Recover unpublished local work before starting another run.
+Agent work is not durable/completed until claim, remote branch, report tip and exact Code SHA (when code/test changes exist) are re-fetched from private `dev`.
 
 ## Protocol
 1. `git fetch dev`; read current board, exact task and `REPORT_FORMAT.md`.
@@ -29,17 +29,16 @@ RepoWise may be used only as supplementary navigation/indexing aid. Git refs/SHA
 - Rejected monitor-pinning fix: `073a9e649bb85b4766acec33e49f975d5444a140` — **DO NOT USE**.
 - `monitor: cursor` stays dynamic exactly as accepted production: managed window + active edge handle follow the live cursor monitor and Show/deploy resolves the current cursor monitor. No sticky/pinned bind-monitor behavior.
 
-## User directive — stop test churn, restore behavior, user will verify
-The user explicitly requested that agents stop spending time trying to prove the bug via self-tests and instead produce a behavior-preserving recovery candidate for manual testing on the real dual-monitor setup.
+## User directive — stop agent churn; Gemini owns recovery
+The user explicitly disabled Muse/OpenCode for now and requested clear Gemini/Antigravity tasks to eliminate the broken night-wave state. No parallel Muse analysis/review/recovery work is authorized until the user explicitly re-enables it.
 
-Accordingly, prior diagnostic-only READY tasks are superseded and must NOT be picked:
-- `RUN-20260907-OPENCODE-MUSE13-MULTIMON-TRACE-PUBLISH-RECOVERY-05` — superseded;
-- `RUN-20260907-AUTO-ANTIGRAVITY-MULTIMON-VM-CAPTURE-PREP-04` — superseded.
+Prior Muse READY/recovery/trace tasks are superseded and MUST NOT be picked.
 
-No new runtime-harness work is needed before the next user test.
+## AUTONOMOUS QUEUE — OPENCODE / MUSE 1.3 FREE
+No READY tasks. STOP after fresh fetch. Do not recover, analyze, review, test, or implement anything until user/architect explicitly re-enables Muse.
 
 ## AUTONOMOUS QUEUE — ANTIGRAVITY
-### Build conservative recovery candidate
+### 1. Restore known-good monitor behavior and build manual-test candidate
 - Status: `READY`
 - Eligible: `ANTIGRAVITY`
 - Preferred model: `Gemini 3.8 Flash (Medium)`
@@ -50,27 +49,32 @@ No new runtime-harness work is needed before the next user test.
 - Branch: `fix/manual-recovery-revert-geometry-handles-antigravity`
 - Task: `docs/agent-tasks/RUN-20260907-AUTO-ANTIGRAVITY-MULTIMON-RECOVERY-CANDIDATE-06.md`
 
-Build a conservative manual-test candidate by removing the unaccepted geometry + handles refactor line from the failed candidate while retaining unrelated focus/settings-test work. No redesign. Required machine checks are only syntax validate x64/x86, diff-check, config untouched and lineage/scope audit. User manual test is the behavioral gate.
+This is the only current READY task. Goal: remove the unaccepted geometry + handles night refactor line from the failed candidate, preserve unrelated focus/settings-test work, restore monitor/handle behavior to accepted production on those paths, and output one Code SHA for immediate user manual test. No redesign. No monitor pinning. No broad behavioral test marathon. Required checks only: x64/x86 `/Validate`, `git diff --check`, config untouched, exact lineage/scope audit.
 
-## AUTONOMOUS QUEUE — OPENCODE / MUSE 1.3 FREE
-### Recovery rollback boundary map
-- Status: `READY`
-- Eligible: `OPENCODE-MUSE13`
-- Required model: `Muse Spark 1.3 Contributor Free`
+If revert conflicts make semantics ambiguous, STOP `BLOCKED` rather than invent behavior.
+
+## WAITING AFTER USER RETEST
+### 2. Consolidate the safe subset after explicit user PASS
+- Status: `WAITING_USER_PASS`
+- Eligible: `ANTIGRAVITY`
 - Session: `NEW`
-- Run ID: `RUN-20260907-OPENCODE-MUSE13-MULTIMON-RECOVERY-BOUNDARY-06`
-- Failed candidate: `cd6dc00b3d58c6abea709687618ea3702432bc45`
-- Accepted behavior reference: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
-- Branch: `analysis/multimon-recovery-boundary-muse13`
-- Task: `docs/agent-tasks/RUN-20260907-OPENCODE-MUSE13-MULTIMON-RECOVERY-BOUNDARY-06.md`
+- Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-POST-RETEST-CONSOLIDATE-07`
+- Dependency: explicit user dual-monitor PASS on task 06 candidate.
+- Task: `docs/agent-tasks/RUN-20260907-AUTO-ANTIGRAVITY-POST-RETEST-CONSOLIDATE-07.md`
 
-Map the exact geometry/handles rollback boundary and dependencies. Analysis only, no src/test edits, no broad tests. Flag only concrete conflicts that could remove unrelated focus/settings work.
+Do not start until architect pins the passed recovery SHA and changes status to READY. This task keeps only the safe subset already present in the passed candidate and records abandoned/superseded night refs. It does not resurrect geometry/handles refactors.
 
-## Acceptance debt — after user PASS
-Unpromoted focus/focus-history/geometry/handles refactors remain acceptance debt. If the conservative recovery candidate passes the user's dual-monitor test, immediately consolidate/accept the safe subset, then run post-wave ref cleanup before any new A03S2/A03S3/A05 work.
+### 3. Branch/worktree cleanup
+- Status: `WAITING_DEPENDENCY`
+- Eligible: `ANTIGRAVITY`
+- Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-POST-WAVE-REF-CLEANUP-02`
+- Dependency: task 07 DONE with `READY_FOR_BRANCH_CLEANUP`.
+- Task: `docs/agent-tasks/RUN-20260907-AUTO-ANTIGRAVITY-POST-WAVE-REF-CLEANUP-02.md`
 
-## Branch/worktree debt
-Post-wave cleanup task remains `WAITING_DEPENDENCY`: `RUN-20260907-AUTO-ANTIGRAVITY-POST-WAVE-REF-CLEANUP-02`.
+Cleanup must preserve unique commits and report before/after ref counts. No mass deletion by pattern.
+
+## Acceptance debt / abandoned night wave
+The unpromoted focus/focus-history/geometry/handles lines are not automatically accepted just because code exists. Geometry/handles are being explicitly rolled back from the manual recovery candidate. Focus/focus-history may survive only if the user-tested recovery candidate proves stable. No new A03S2/A03S3/A05 refactor wave until recovery PASS, consolidation and ref cleanup complete.
 
 ## Architect gate
-Wait for Antigravity recovery Code SHA and Muse rollback-boundary report. If Antigravity produces `READY_FOR_USER_RETEST` and Muse finds no rollback-boundary blocker, expose that exact Code SHA to the user immediately. No additional behavioral test/review cycle before the user's manual dual-monitor test.
+Wait for Gemini task 06 Code SHA. Expose that exact candidate to the user immediately for manual two-monitor testing. Do not insert another agent review/testing cycle before the user test. On PASS, activate task 07; on FAIL, give Gemini one narrow corrective task based on the user's concrete symptom. Muse stays disabled.
