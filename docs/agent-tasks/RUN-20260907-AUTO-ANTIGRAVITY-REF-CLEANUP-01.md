@@ -1,6 +1,6 @@
 # Deferred Git branch/worktree cleanup
 
-- Status: `WAITING_QUEUE`
+- Status: `READY`
 - Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-REF-CLEANUP-01`
 - Eligible: `ANTIGRAVITY`
 - Preferred model: `Gemini 3.8 Flash (Medium)`
