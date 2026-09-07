@@ -245,8 +245,7 @@ handleSync := 0      ; тактов до следующей полной пер�
 setGui    := 0       ; окно настроек, пока оно открыто
 setUI     := 0       ; его контролы и значения, с которыми окно открылось
 serviceWindows := Map()   ; hwnd своего окна -> true, пока оно живо
-foreWnd   := WinExist("A")     ; текущее окно переднего плана
-lastFore  := 0                 ; окно, которое было активно до него
+WindowFocusInitFore()
 
 ; Хоткеи ставятся через клавиатурный хук ($). RegisterHotkey отдаёт
 ; комбинацию первому, кто её занял: если предыдущий экземпляр ещё не
@@ -543,55 +542,15 @@ OnClearHotkey(*) {
 ; Событий приходит больше, чем переключений. Переключатель Alt+Tab по
 ; дороге отдаёт передний план своим служебным окнам и присылает такое
 ; событие ещё раз уже после того, как выбранное окно стало активным.
-; До срабатывания таймера остаётся последнее событие — то есть мусорное,
-; и выбор пользователя терялся. Поэтому служебные окна отсеиваем сразу,
-; в самом событии: до таймера доходят только настоящие окна.
 OnForeground(hook, event, hwnd, idObject, idChild, thread, time) {
-    global foreWnd, lastFore
-    if (idObject != 0 || !hwnd) ; OBJID_WINDOW: событие про само окно
-        return
-    if !TrackedFore(hwnd)       ; служебное окно, а не выбор пользователя
-        return
-    if (hwnd = foreWnd)         ; то же самое окно, в том числе после нашей
-        return                  ; собственной активации
-    lastFore := foreWnd
-    foreWnd  := hwnd
-    SetTimer(ForegroundWork, -1)
+    if WindowFocusOnEvent(hwnd, idObject)
+        SetTimer(ForegroundWork, -1)
 }
 
-; Настоящее ли это окно приложения. Переключатель Alt+Tab, панель задач
-; и прочая оболочка тоже получают передний план, но выбором пользователя
-; это не является. Проверяем в момент события: служебные окна живут доли
-; секунды, и через миллисекунду отличить их от закрытого пользователем
-; окна уже нельзя.
-TrackedFore(hwnd) {
-    if !hwnd
-        return false
-    if IsServiceWindow(hwnd)     ; окно настроек ящик за смену окна не считает (Р18)
-        return false
-    try {
-        if !WinExist("ahk_id " hwnd)
-            return false
-        if (WinGetTitle("ahk_id " hwnd) = "")
-            return false
-        cls := WinGetClass("ahk_id " hwnd)
-        if (cls = "Progman" || cls = "WorkerW"
-            || cls = "Shell_TrayWnd" || cls = "Shell_SecondaryTrayWnd"
-            || cls = "XamlExplorerHostIslandWindow" || cls = "MultitaskingViewFrame")
-            return false
-        return !(WinGetExStyle("ahk_id " hwnd) & 0x00000080)    ; WS_EX_TOOLWINDOW
-    }
-    return false
-}
-
-; Показать имеет право только окно из самого события и только если оно
-; припарковано. Цикл «показали — событие — снова показали» гасится не
-; флагом, а фактом: после показа окно уже на экране, и повторное
-; событие от нашей же активации ничего не делает.
 ForegroundWork() {
-    global foreWnd, lastFore, state
+    global state
     Critical()
-    hwnd := foreWnd, prev := lastFore
+    hwnd := WindowFocusGetFore(), prev := WindowFocusGetLastFore()
     if (!hwnd || !WinExist("ahk_id " hwnd))
         return
     ; EVENT_SYSTEM_FOREGROUND даёт lifecycle без polling: запущенное после
@@ -625,14 +584,6 @@ ForegroundWork() {
         Show(hwnd, cfg, state[hwnd], false, prev)
     } catch as e
         Notify("Сбой: " e.Message, "Ящик", 3)
-}
-
-; Окно перестало быть активным потому, что исчезло, а не потому, что
-; пользователь выбрал другое: закрыто, скрыто или свёрнуто.
-Vanished(hwnd) {
-    if (!hwnd || !WinExist("ahk_id " hwnd))
-        return true
-    return WinGetMinMax("ahk_id " hwnd) = -1
 }
 
 ; Колбэк держит НОМЕР слота, а не позицию в массиве. Номер слота
@@ -872,7 +823,7 @@ FocusWindow(hwnd, cfg) {
 StateOf(hwnd) {
     global state
     if !state.Has(hwnd)
-        state[hwnd] := { orig: 0, geom: 0, prev: 0 }
+        state[hwnd] := { orig: 0, geom: 0 }
     return state[hwnd]
 }
 
@@ -885,7 +836,7 @@ Show(hwnd, cfg, st, forceActivate := false, prev := 0) {
     title := ""
     try title := WinGetTitle("ahk_id " hwnd)
     DebugLog("[SHOW] Showing hwnd=" hwnd " ('" title "') forceActivate=" (forceActivate ? "1" : "0") " prev=" prev)
-    st.prev := FocusCandidate(prev, hwnd) ? prev : PrevActive(hwnd)
+    WindowFocusSetPrev(hwnd, FocusCandidate(prev, hwnd) ? prev : PrevActive(hwnd))
     if (WinGetMinMax("ahk_id " hwnd) != 0)
         WinRestore("ahk_id " hwnd)
 
@@ -933,7 +884,9 @@ Hide(hwnd, st) {
 ; невидимое окно, а щелчок по значку на панели задач сворачивал бы его
 ; вместо активации. Возвращаем фокус тому, что работало до показа, а
 ; если его больше нет — верхнему подходящему окну по Z-порядку.
-RestoreFocus(parked, st) {
+RestoreFocus(parked, st := 0) {
+    prev := WindowFocusGetPrev(parked)
+    st := { prev: prev }
     if FocusCandidate(st.prev, parked, true) {
         WinActivate("ahk_id " st.prev)
         return
@@ -1776,7 +1729,7 @@ GetNextBugNumber() {
 }
 
 BugReportShow(*) {
-    global bugGui, capturedActiveForBug, foreWnd
+    global bugGui, capturedActiveForBug
     if bugGui {
         try WinActivate("ahk_id " bugGui.Hwnd)
         return
@@ -1785,8 +1738,9 @@ BugReportShow(*) {
     ; Запоминаем активное окно до открытия диалога
     activeHwnd := WinExist("A")
     if (IsServiceWindow(activeHwnd) || !TrackedFore(activeHwnd)) {
-        if (IsSet(foreWnd) && foreWnd && WinExist("ahk_id " foreWnd))
-            activeHwnd := foreWnd
+        foreHwnd := WindowFocusGetFore()
+        if (foreHwnd && WinExist("ahk_id " foreHwnd))
+            activeHwnd := foreHwnd
     }
     capturedActiveForBug := activeHwnd
 

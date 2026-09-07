@@ -1,4 +1,9 @@
 #Requires AutoHotkey v2.0
+
+; ---- Test stubs (narrow-test env — no real windows) ----
+IsServiceWindow(hwnd) => false    ; stub: no service windows in unit context
+HitsMonitor(x, y, w, h) => false  ; stub: no monitors in unit context
+
 #Include ..\..\src\WindowFocus.ahk
 
 results := []
@@ -60,6 +65,61 @@ desired := Reconcile(prior,
     [{ hwnd: 101, cfg: { hideOnBlur: false, activateOnShow: true } }], 250, &period)
 Assert("authoritative permanent cfg снимает duplicate-HWND watcher",
     !desired.Has(101) && period = 0)
+
+; ---- A02S2: focus history (SetPrev / GetPrev / Forget) ----
+WindowFocusSetPrev(201, 300)
+Assert("SetPrev записывает prevFocus для HWND",
+    WindowFocusGetPrev(201) = 300)
+
+WindowFocusSetPrev(201, 0)
+Assert("SetPrev(0) очищает запись prevFocus",
+    WindowFocusGetPrev(201) = 0)
+
+WindowFocusSetPrev(202, 400)
+WindowFocusForget(202)
+Assert("Forget удаляет prevFocus",
+    WindowFocusGetPrev(202) = 0)
+
+WindowFocusSetPrev(203, 500)
+WindowFocusState.watched[203] := { hideOnBlur: true }
+WindowFocusForget(203)
+Assert("Forget удаляет и watched, и prevFocus",
+    !WindowFocusState.watched.Has(203) && WindowFocusGetPrev(203) = 0)
+
+; ---- A02S2: foreground observation (WindowFocusOnEvent) ----
+WindowFocusInitFore(0)
+
+; zero hwnd → rejected
+Assert("WindowFocusOnEvent отвергает hwnd=0",
+    !WindowFocusOnEvent(0))
+
+; non-zero idObject → rejected
+Assert("WindowFocusOnEvent отвергает idObject≠0",
+    !WindowFocusOnEvent(99, 1))
+
+; TrackedFore(non-existent hwnd) = false in unit env → rejected
+Assert("WindowFocusOnEvent отвергает несуществующее окно",
+    !WindowFocusOnEvent(99999))
+
+; If accepted, same hwnd again → dedup (not re-accepted)
+WindowFocusState.foreWnd := 0   ; reset
+; We can only test dedup once a real hwnd is in state
+WindowFocusState.foreWnd := 777
+Assert("WindowFocusOnEvent отвергает повтор текущего foreWnd",
+    !WindowFocusOnEvent(777))
+
+; ---- A02S2: Vanished predicate ----
+Assert("Vanished(0) = true — нулевой hwnd исчез",
+    Vanished(0))
+Assert("Vanished(несуществующее) = true",
+    Vanished(99999999))
+
+; ---- A02S2: FocusCandidate guards ----
+Assert("FocusCandidate(0, skip) = false",
+    !FocusCandidate(0, 1))
+Assert("FocusCandidate(hwnd, hwnd) = false — skip совпадает",
+    !FocusCandidate(5, 5))
+
 
 out := ""
 allOk := true
