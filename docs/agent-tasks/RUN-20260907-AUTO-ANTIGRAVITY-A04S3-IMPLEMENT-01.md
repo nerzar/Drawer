@@ -2,9 +2,10 @@
 
 - Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-A04S3-IMPLEMENT-01`
 - Eligible: `ANTIGRAVITY`
-- Preferred model: Gemini available in Antigravity; Claude allowed only if Gemini unavailable
+- Preferred model: `Gemini 3.8 Flash (Medium)`; Claude allowed only if Gemini unavailable
 - Session: `NEW`
-- Dependency: A04S2 must be DONE with pushed Code SHA. Use that exact Code SHA as base; do not use report-tip SHA.
+- Base: `e862c4f7b71f0aced86dc2b19843b47b4b23a0f2` (exact pushed A04S2 Code SHA)
+- Dependency: A04S2 DONE at the exact Code SHA above
 - Branch: `refactor/window-handles-runtime-sync`
 - Worktree: `C:\Users\nerza\Projects\drawer-agent-worktrees\A04S3`
 
@@ -14,7 +15,7 @@ Finish the handles extraction by moving the remaining live handle runtime synchr
 Human meaning: the edge handle must continue to appear/disappear/update with its Drawer window and clicking it must restore/show the correct window without stealing focus or changing timing semantics.
 
 ## Scope
-Start from the exact pushed A04S2 Code SHA. Inspect the accepted A04 analysis/report and actual A04S1/A04S2 code before editing. Move only the remaining handle-specific runtime ownership needed for:
+Start from exact base `e862c4f7b71f0aced86dc2b19843b47b4b23a0f2`. Inspect the A04 analysis/report and actual A04S1/A04S2 code before editing. Move only the remaining handle-specific runtime ownership needed for:
 - handle show/hide/update/synchronization with deployed window state;
 - mapping handle GUI/HWND back to its owning Drawer window/slot where currently required;
 - click dispatch behavior and existing asynchronous timing semantics;
