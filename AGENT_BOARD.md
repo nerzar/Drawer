@@ -55,26 +55,39 @@ On blocker/conflict/product ambiguity/data-loss risk: preserve safe state, push 
 - Shared production identity after P08: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`; higher shared commits may be docs/tasks/claims/reports.
 - G03, G05/G05FIX, G06 accepted + runtime verified + promoted.
 - A02S1 accepted, runtime verified and promoted by P08.
-- A02S2 has an Antigravity claim from `2026-09-07T00:01:25+03:00`; as of architect check around 02:44 +03 no remote output branch existed yet. Treat as still owned by Antigravity; do not duplicate A02S2.
-- A03 analysis verdict `READY_TO_IMPLEMENT`; A03S1 is reserved for OPENCODE-DEEPSEEK while Antigravity continues A02S2. No claim race between the two workers.
+- A02S2 is DONE by Antigravity at Code SHA `c482ad3ae9c499ea32eb3c0cdd590e495a919e30`; agent reports AHK validate pass, targeted narrow suites pass, `src/config.ini` untouched, remote branch verified. Architect acceptance/promotion is still pending.
+- A03 analysis verdict `READY_TO_IMPLEMENT`; A03S1 remains reserved for OPENCODE-DEEPSEEK and must not depend on unaccepted A02S2.
 - T01 DeepSeek settings-seam determinism is DONE at Code SHA `34efdb62d8fb1dcaa55119f47794c3b269772e9c`; architect repo-only diff review found no scope issue. Agent verification: settings seam 5 consecutive direct exits, 256/256 pass; focus seam 3 direct exits, 9/9 pass; drawer validate pass; config.ini untouched. Not promoted yet.
 - DeepSeek A03S2 remains dependency-gated on A03S1 and must not be claimed early.
 - CODEX quota exhausted.
-- DeepSeek overnight policy: after each DONE fresh-fetch and continue. A dependency wait is not a global blocker; skip dependency-gated work and take the next independent READY item. Stop only for real blocker/conflict/product ambiguity/data-loss risk or no eligible READY work.
+- One READY task per scarce agent: Antigravity has A04A; DeepSeek has A03S1. Lower-priority work stays queued but not READY until architect advances it.
 
 ## AUTONOMOUS QUEUE — ANTIGRAVITY
 
 ### A02S2 — focus history + foreground state extraction
-- Status: `CLAIMED/RUNNING`
+- Status: `DONE`
 - Eligible: `ANTIGRAVITY`
 - Run ID: `RUN-20260906-AUTO-ANTIGRAVITY-A02S2-IMPLEMENT-01`
 - Base: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
 - Branch: `refactor/window-focus-history-foreground`
+- Code SHA: `c482ad3ae9c499ea32eb3c0cdd590e495a919e30`
 - Task file: `docs/agent-tasks/RUN-20260906-AUTO-ANTIGRAVITY-A02S2-IMPLEMENT-01.md`
+- Do not self-promote; architect review/acceptance remains pending.
 
-No second Antigravity READY task is published while A02S2 is running. After A02S2 DONE/BLOCKED, architect review determines the next Antigravity assignment.
+### A04A — handles seam analysis
+- Status: `READY`
+- Eligible: `ANTIGRAVITY`
+- Preferred model: `Gemini 3.8 Flash (Medium)`
+- Session: `NEW`
+- Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-A04-ANALYSIS-01`
+- Base/source rule: analyze accepted shared production `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`; docs-only higher shared commits do not change analyzed code
+- Branch: `tmp/never`
+- Task file: `docs/agent-tasks/RUN-20260907-AUTO-ANTIGRAVITY-A04-ANALYSIS-01.md`
+- Analysis only. Do not implement A04 until architect publishes an implementation task.
 
-## AUTONOMOUS QUEUE — OPENCODE / DEEPSEEK (overnight priority)
+After A04A DONE/BLOCKED, fresh-fetch and stop unless architect has published the next Antigravity READY task.
+
+## AUTONOMOUS QUEUE — OPENCODE / DEEPSEEK
 
 ### 1. T01 — settings-seam determinism / timeout
 - Status: `DONE`
@@ -94,20 +107,10 @@ No second Antigravity READY task is published while A02S2 is running. After A02S
 - Base/source rule: accepted shared lineage at or above P08; must not depend on unaccepted A02S2
 - Branch: `refactor/window-geometry-plan-seam`
 - Task file: `docs/agent-tasks/RUN-20260906-AUTO-ANTIGRAVITY-A03S1-IMPLEMENT-01.md`
-- Reserved for DeepSeek while Antigravity owns A02S2.
+- Reserved for DeepSeek.
 
-### 3. A04A — handles seam analysis
-- Status: `READY`
-- Eligible: `OPENCODE-DEEPSEEK`
-- Required model: `deepseek-v4-flash`
-- Session: `NEW`
-- Run ID: `RUN-20260907-OPENCODE-DEEPSEEK-A04-ANALYSIS-01`
-- Base/source rule: accepted shared production `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
-- Branch: `analysis/a04-handles-seam-deepseek`
-- Task file: `docs/agent-tasks/RUN-20260907-OPENCODE-DEEPSEEK-A04-ANALYSIS-01.md`
-
-### 4. A05A — Settings service / tray seam analysis
-- Status: `READY`
+### 3. A05A — Settings service / tray seam analysis
+- Status: `WAITING_QUEUE`
 - Eligible: `OPENCODE-DEEPSEEK`
 - Required model: `deepseek-v4-flash`
 - Session: `NEW`
@@ -116,8 +119,8 @@ No second Antigravity READY task is published while A02S2 is running. After A02S
 - Branch: `analysis/a05-settings-tray-seam-deepseek`
 - Task file: `docs/agent-tasks/RUN-20260907-OPENCODE-DEEPSEEK-A05-ANALYSIS-01.md`
 
-### 5. T02A — narrow test debt / production-seam coverage audit
-- Status: `READY`
+### 4. T02A — narrow test debt / production-seam coverage audit
+- Status: `WAITING_QUEUE`
 - Eligible: `OPENCODE-DEEPSEEK`
 - Required model: `deepseek-v4-flash`
 - Session: `NEW`
@@ -126,7 +129,7 @@ No second Antigravity READY task is published while A02S2 is running. After A02S
 - Branch: `analysis/test-debt-production-seams-deepseek`
 - Task file: `docs/agent-tasks/RUN-20260907-OPENCODE-DEEPSEEK-T02-TEST-DEBT-ANALYSIS-01.md`
 
-### 6. A03S2 — monitor / origin selection seam
+### 5. A03S2 — monitor / origin selection seam
 - Status: `WAITING_DEPENDENCY`
 - Eligible: `OPENCODE-DEEPSEEK`
 - Required model: `deepseek-v4-flash`
@@ -135,12 +138,12 @@ No second Antigravity READY task is published while A02S2 is running. After A02S
 - Dependency: A03S1 DONE with pushed Code SHA
 - Branch: `refactor/window-geometry-monitor-origin-seam`
 - Task file: `docs/agent-tasks/RUN-20260907-OPENCODE-DEEPSEEK-A03S2-IMPLEMENT-01.md`
-- After each independent DONE re-check dependency; once A03S1 Code SHA exists, prefer A03S2 over remaining lower-value analysis work.
 
-After these tasks DeepSeek must idle. Do not invent or implement A04/A05 from its own analysis without a new architect-published implementation task.
+DeepSeek must fresh-fetch after A03S1 DONE/BLOCKED and stop unless architect has advanced another task to READY.
 
 ## COMPLETED AUTONOMOUS RUNS — recent
 
+- `RUN-20260906-AUTO-ANTIGRAVITY-A02S2-IMPLEMENT-01` — DONE, Code SHA `c482ad3ae9c499ea32eb3c0cdd590e495a919e30`; acceptance pending.
 - `RUN-20260907-OPENCODE-DEEPSEEK-T01-SETTINGS-SEAM-01` — DONE, Code SHA `34efdb62d8fb1dcaa55119f47794c3b269772e9c`; repo-only architect review clean.
 - `RUN-20260906-AUTO-ANTIGRAVITY-P08-A02S1-PROMOTE-01` — DONE, shared production Code SHA `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`.
 - `RUN-20260906-AUTO-CODEX-P07-G06-PROMOTE-CLEANUP-01` — DONE.
