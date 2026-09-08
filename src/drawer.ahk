@@ -63,7 +63,7 @@ ApplyDwmTitlebarTheme(hwnd) {
 ;   Ctrl+Alt+N        — выдвинуть / убрать окно слота
 ;   Ctrl+Alt+Shift+N  — запомнить в слоте текущее активное окно
 ;   Ctrl+Alt+0        — очистить все динамические слоты
-;   Ctrl+Alt+Shift+0  — выход, окна возвращаются на исходные места
+;   Ctrl+Alt+Shift+0  — полный сброс настроек и привязок
 ;
 ; Все настройки — в config.ini рядом с программой. Файл читается при
 ; запуске; окно Settings записывает только явно изменённые ключи после
@@ -322,12 +322,12 @@ try {
     MsgBox("Хоткей очистки слотов не назначен:`n" e.Message, "Ящик")
 }
 try {
-    Hotkey(Hooked("^!+0"), (*) => ExitApp())
+    Hotkey(Hooked("^!+0"), OnFullResetHotkey)
     live++
-    DebugLog("[HOTKEY] Registered " Hooked("^!+0") " (Exit Drawer)")
+    DebugLog("[HOTKEY] Registered " Hooked("^!+0") " (Full reset)")
 } catch as e {
     DebugLog("[HOTKEY] Failed to register ^!+0: " e.Message)
-    MsgBox("Хоткей выхода не назначен:`n" e.Message, "Ящик")
+    MsgBox("Хоткей полного сброса не назначен:`n" e.Message, "Ящик")
 }
 DebugLog("[HOTKEY] Total live hotkeys registered: " live)
 
@@ -547,6 +547,83 @@ OnClearHotkey(*) {
         DebugLog("[EXCEPTION] OnClearHotkey: " e.Message)
         Notify("Сбой: " e.Message, "Ящик", 3)
     }
+}
+
+OnFullResetHotkey(*) {
+    DebugLog("[HOTKEY] Pressed ^!+0 (Full reset)")
+    if SettingsPickerState().active
+        return
+    try {
+        FullReset()
+        Notify("Привязки и настройки сброшены", "Ящик")
+    } catch as e {
+        OnDrawerException(e, "OnFullResetHotkey")
+        Notify("Полный сброс не выполнен: " e.Message, "Ящик", 3)
+    }
+}
+
+FullResetDefaultWrites() {
+    return [
+        { sec: "general", key: "animMs", val: "160" },
+        { sec: "general", key: "animSteps", val: "14" },
+        { sec: "general", key: "blurMs", val: "250" },
+        { sec: "general", key: "handles", val: "true" },
+        { sec: "dynamic", key: "name", val: "Слот" },
+        { sec: "dynamic", key: "monitor", val: "cursor" },
+        { sec: "dynamic", key: "edge", val: "right" },
+        { sec: "dynamic", key: "width", val: "70" },
+        { sec: "dynamic", key: "activateOnShow", val: "true" },
+        { sec: "dynamic", key: "hideOnBlur", val: "true" }
+    ]
+}
+
+; Готовим новый config рядом со старым и заменяем оригинал только после
+; полной записи и сверки. Сбой посередине не оставляет полусброшенный файл.
+FullResetPersist(path) {
+    temp := path ".reset-" DllCall("GetCurrentProcessId", "UInt") ".tmp"
+    try FileDelete(temp)
+    FileCopy(path, temp, true)
+    try {
+        sections := ["general", "dynamic", "hotkeys"]
+        Loop 9 {
+            sections.Push("slot" A_Index)
+            sections.Push("dynamicSlot" A_Index)
+        }
+        for sec in sections {
+            if SettingsVerifyDeleted(temp, sec)
+                continue
+            IniDelete(temp, sec)
+            if !SettingsVerifyDeleted(temp, sec)
+                throw Error("не удалилась секция [" sec "]")
+        }
+        for w in FullResetDefaultWrites() {
+            IniWrite(w.val, temp, w.sec, w.key)
+            detail := ""
+            if !SettingsVerifyValue(temp, w.sec, w.key, w.val, &detail)
+                throw Error("не записалось [" w.sec "] " w.key detail)
+        }
+        FileMove(temp, path, true)
+    } catch as e {
+        try FileDelete(temp)
+        throw e
+    }
+}
+
+FullReset() {
+    global configPath, setGui
+    FullResetPersist(configPath)
+
+    ; Открытые редакторы больше не должны сохранять старый черновик поверх
+    ; только что восстановленных defaults.
+    if setGui
+        SettingsClose(true)
+    SettingsWebShutdown()
+
+    SlotClearAll()
+    emptyPerm := { bySlot: Map(), ident: Map() }
+    SettingsReconcileRuntime({ prevPerm: emptyPerm }, &diags)
+    ConfigDiagShow(diags)
+    DebugLog("[RESET] Full reset completed")
 }
 
 ; Колбэк хука должен возвращать управление немедленно, поэтому вся
@@ -3128,9 +3205,9 @@ SettingsOpen() {
 
     g.SetFont("c9A9CA3")
     panelAbout.Push(g.Add("Text", "x" contentX " y186 w780 h60",
-          "Программа трогает этот файл только тогда, когда вы нажали "
-        . "«Применить» или «ОК», и записывает ровно те строки, которые "
-        . "вы изменили. Ни закрытие окна, ни выход из программы ничего "
+          "Программа меняет этот файл по «Применить» или «ОК», а полный "
+        . "сброс Ctrl+Alt+Shift+0 возвращает настройки к значениям по "
+        . "умолчанию. Ни закрытие окна, ни выход из программы ничего "
         . "не сохраняют."))
     g.SetFont("cEDEDEF")
     panelAbout.Push(g.Add("Text", "x" contentX " y254 w780 h20", "github.com/nerzar/Drawer  ·  лицензия MIT"))
@@ -3141,7 +3218,7 @@ SettingsOpen() {
     hk := [["Ctrl+Alt+1…9", "Выдвинуть / убрать окно слота"],
            ["Ctrl+Alt+Shift+1…9", "Назначить активное окно слоту"],
            ["Ctrl+Alt+0", "Очистить динамические слоты"],
-           ["Ctrl+Alt+Shift+0", "Выход, окна возвращаются на места"]]
+           ["Ctrl+Alt+Shift+0", "Полный сброс настроек и привязок"]]
     for row in hk {
         y := 320 + (A_Index - 1) * 26
         panelAbout.Push(g.Add("Text", "x" contentX " y" y " w220 h20", row[1]))
@@ -3423,7 +3500,7 @@ SettingsHotkeyConflict(ahk, n) {
     if (Hooked("^!0") = want)
         return "Ctrl+Alt+0 — очистить динамические слоты"
     if (Hooked("^!+0") = want)
-        return "Ctrl+Alt+Shift+0 — выход"
+        return "Ctrl+Alt+Shift+0 — полный сброс"
     return ""
 }
 

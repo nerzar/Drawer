@@ -496,3 +496,19 @@ SlotClearDynamic() {
     }
     SetTimer(HandlesSync, -1)
 }
+
+; Полный сброс освобождает и динамические привязки, и уже захваченные
+; окна постоянных слотов. Конфигурацию функция не меняет: её отдельно
+; заменяет FullResetPersist(), после чего реестр перечитывается с диска.
+SlotClearAll() {
+    DebugLog("[RELEASE] SlotClearAll: clearing all slots")
+    Loop Slots.COUNT {
+        s := Slots.Get(A_Index)
+        if !s.window
+            continue
+        DebugLog("[RELEASE] Slot " A_Index " fully reset hwnd=" s.window)
+        Release(s.window)
+        s.window := 0
+    }
+    SetTimer(HandlesSync, -1)
+}
