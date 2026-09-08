@@ -1,107 +1,43 @@
-# Drawer — setup
+# Drawer
 
-Reference for `config.ini`. For what Drawer is and how to start, see
-`README.md` (the short one, also on the project page).
+Drawer — Windows-утилита для быстрого показа и скрытия выбранных окон через слоты, хоткеи и кромки экрана.
 
-## Run
+## Где смотреть актуальную информацию
 
-1. Extract `Drawer-v0.1.2-beta` anywhere.
-2. Run `Drawer.exe`.
+- `docs/PRODUCT_SPEC.md` — как Drawer должен вести себя с точки зрения пользователя.
+- `docs/05-план-работ.md` — что планируется делать дальше.
+- `docs/architect/PROJECT_STATE.md` — текущее состояние проекта и известные проблемы.
+- `AGENT_BOARD.md` — только текущая работа агентов.
 
-A tray notification shows the version and how many hotkeys registered.
-Fewer than expected means another program already holds some of them.
-Launching again replaces the running instance — no need to exit first.
+Старые решения, отчёты и история Git не являются источником продуктового поведения, если расходятся с `PRODUCT_SPEC.md` или свежим решением владельца.
 
-`Drawer.exe` is self-contained; AutoHotkey is not required. Windows 10/11.
-The WebView2 settings window additionally needs the Microsoft Edge WebView2
-Runtime, which Windows 11 ships and Edge installs on Windows 10; without it
-Drawer says so and the classic settings window still works.
-If `config.ini` is missing next to the exe, Drawer says so and stops
-rather than starting half-configured.
+## Запуск
 
-## Hotkeys
+Релизный `Drawer.exe` самодостаточен. Для разработки исходника нужен AutoHotkey v2.
 
-| Hotkey | Action |
-|---|---|
-| `Ctrl+Alt+1…9` | show / hide the slot |
-| `Ctrl+Alt+Shift+1…9` | bind the active window to the slot |
-| `Ctrl+Alt+0` | clear all dynamic slots, windows return home |
-| `Ctrl+Alt+Shift+0` | exit, windows return home |
-| `focusHotkey` | optional per-slot hotkey that only restores focus |
+Drawer работает в фоне через tray. Основные хоткеи:
 
-## Slots
+- `Ctrl+Alt+1…9` — показать или скрыть слот;
+- `Ctrl+Alt+Shift+1…9` — привязать активное окно к временному слоту;
+- `Ctrl+Alt+0` — очистить временные привязки;
+- `Ctrl+Alt+Shift+0` — полный сброс / аварийный выход согласно текущему продуктовому контракту.
 
-All nine slots are **dynamic** out of the box: empty until you press
-`Ctrl+Alt+Shift+N`. That binds the *exact window* that was active, not
-the application — one Chrome window out of five. Rebinding an occupied
-slot sends the old window home. Dynamic bindings are forgotten on exit.
+Точные правила постоянных и временных слотов, мониторов, кромок, Settings и анимации описаны только в `docs/PRODUCT_SPEC.md`.
 
-A slot becomes **permanent** by adding a `[slotN]` section with `exe=`.
-It finds its application by process name on every press, so it survives
-restarting that application, and `Ctrl+Alt+Shift+N` refuses to overwrite
-it. With several windows of one application it takes the largest.
+## Настройки
 
-## config.ini
+`config.ini` остаётся постоянным хранилищем настроек. Settings — графическая оболочка над ним.
 
-Plain text next to `Drawer.exe`, read at startup. Settings writes only
-keys changed through Apply/OK; closing Settings, Cancel and application
-exit do not save anything. Every option is documented inline in the file.
+Не ориентироваться на старые технические параметры как на обязательные пользовательские настройки: часть из них сохранена в коде ради совместимости, но скрывается или будет заменена более понятным UI.
 
-| Setting | Where | Meaning |
-|---|---|---|
-| `exe`, `cls` | `[slotN]` | makes the slot permanent |
-| `monitor` | any slot section | `1`, `2`, … or `cursor` |
-| `edge` | any slot section | `left`, `right`, `top`, `bottom` |
-| `width` | any slot section | percent of the screen the drawer takes |
-| `activateOnShow` | any slot section | take focus when sliding in |
-| `hideOnBlur` | any slot section | hide again when focus leaves |
-| `focusHotkey` | `[slotN]` | hotkey that focuses without toggling |
-| defaults | `[dynamic]` | applies to every dynamic slot |
-| overrides | `[dynamicSlotN]` | settings for one dynamic slot |
-| `handles` | `[general]` | edge handles, on by default |
-| `animMs`, `animSteps`, `blurMs` | `[general]` | animation and focus polling |
+## Разработка
 
-Two traps: a `;` comment must sit on its own line — trailing comments
-become part of the value; and the file is UTF-16, so keep that encoding
-if your editor asks.
+- `src/` — основной код Drawer;
+- `settings-ui/` — интерфейс Settings;
+- `build/build.ps1` — сборка;
+- `test/` — тестовый стенд;
+- `docs/architect/` — короткий контекст для архитектора и агентов.
 
-Settings is available from the tray menu. General edits dynamic defaults;
-Slots can edit permanent bindings and convert slots between permanent and
-dynamic. The file remains the only persistent settings store.
+Runtime-тесты, которые управляют окнами, мышью или фокусом, по умолчанию запускать в подготовленной Windows VM. На основной Windows владельца тесты Drawer запускать только по его прямому запросу.
 
-## Edge handles
-
-Each parked window leaves a small tile with its application icon at its
-edge of the monitor. Move the pointer close and it grows and shows the
-slot number; click it and the slot slides in — the same thing the hotkey
-does. The deployed slot has no tile, its neighbours keep theirs, so you
-can switch between parked windows with the mouse alone.
-
-Set `handles=false` in `[general]` to turn this off entirely.
-
-## Known limitations
-
-- Killing the process instead of exiting with `Ctrl+Alt+Shift+0` leaves
-  parked windows off-screen. Restart Drawer, bind them again and exit
-  properly, or move them back with another tool.
-- Mashing a hotkey queues the presses: after ~24 rapid presses the window
-  keeps moving for about six seconds.
-- When the chosen edge faces a second monitor, the slot appears and
-  disappears instantly — animating there would show the window on the
-  neighbouring screen.
-- A fullscreen window that is itself always-on-top covers the handles.
-- Only one dynamic slot cannot be cleared on its own — clear all, or
-  close the window and the slot frees itself.
-- Managed windows stay in Alt+Tab and on the taskbar. Handles do not.
-- No autostart.
-- Display scaling other than 100% and monitor layouts other than
-  side-by-side are untested.
-
-## Development
-
-`src/drawer.ahk` runs directly under [AutoHotkey v2](https://www.autohotkey.com/);
-`build/build.ps1` builds the settings frontend from `settings-ui/` (Node.js)
-and compiles the exe with [Ahk2Exe](https://github.com/AutoHotkey/Ahk2Exe/releases),
-embedding the frontend and `WebView2Loader.dll` into it.
-`test/` is the test bench — see `test/README.md`. Design notes and the
-requirement history live in `docs/`, in Russian.
+Если документация противоречит сама себе — не угадывать. Свериться с `PRODUCT_SPEC.md`, а при продуктовой неоднозначности спросить владельца.
