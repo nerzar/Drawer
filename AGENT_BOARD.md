@@ -7,6 +7,10 @@ Blackboard между архитектором ChatGPT и coding agents.
 ## Critical Git ref hygiene
 Read shared state from `refs/remotes/dev/wip/slots-parity`; shared docs push only to `HEAD:refs/heads/wip/slots-parity`. Never create local `dev/...` refs or use ambiguous `dev/wip/slots-parity`. Public `origin` stays untouched.
 
+The shared docs branch may advance with docs-only commits. Do **not** treat its moving HEAD as the runtime Code SHA. Runtime work must name an explicit Code SHA; the accepted runtime baseline remains the SHA listed below until deliberately changed.
+
+A number of historical remote `analysis/*`, `fix/*`, `refactor/*`, `diag/*`, `integration/*` branches still exist. They are **dormant evidence/history, not active task branches and not promotion candidates** unless a future task names one explicitly by full ref + Code SHA. Do not infer work from branch names.
+
 ## Source of truth / locked behavior
 - Accepted production baseline: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`.
 - Dedicated manual-baseline branch: `recovery/known-good-6bfa010` -> exactly `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`.
@@ -17,9 +21,15 @@ Read shared state from `refs/remotes/dev/wip/slots-parity`; shared docs push onl
 - Existing user-visible behavior is immutable unless the user explicitly requests a change.
 - In particular `monitor: cursor` remains dynamic exactly as accepted production.
 
+## Product contract
+- `docs/PRODUCT_SPEC.md` has been owner-edited and its textual behavior decisions are now **owner-confirmed** as of docs commit `71f3a137cf632759c57ce3d04bbb630d212ee113`.
+- Visual reference screenshots are still pending and therefore visual styling/appearance must not be inferred beyond the explicit text.
+- The product contract deliberately overrides baseline behavior only where it says so; for existing behavior not redefined there, trusted runtime baseline `6bfa010...` remains the reference.
+- Newly confirmed product changes are **not permission to implement yet** while the recovery/Claude diagnosis gate below is active.
+
 ## Recovery policy
 The night-wave is treated as suspect. Do not salvage arbitrary subsets by assumption.
-Future code must start from the known-good baseline and be reintroduced one bounded, behavior-neutral unit at a time. Any slice that can affect runtime behavior must go to immediate user manual verification before another such slice is stacked on top.
+Future code must start from the known-good baseline and be reintroduced one bounded unit at a time. Any slice that can affect runtime behavior must go to immediate user manual verification before another such slice is stacked on top.
 
 ## Completed maintenance
 ### Reset repository around known-good baseline and clean superseded refs
@@ -32,7 +42,8 @@ Future code must start from the known-good baseline and be reintroduced one boun
 - Final docs commit observed: `3d40a2cb069bbfc28e06346c243d0828ffca86a8`
 - Result: 22 redundant/superseded local branches removed, one redundant remote branch removed, rejected RECOVERY-06 worktree removed, public `origin` untouched, known-good baseline preserved.
 - Important unresolved local-state note: Antigravity reported an uncommitted user-generated `src/config.ini` modification in `drawer-settings-integration` and stashed it to obtain a clean tree. Do not drop/overwrite/auto-apply that stash. User should decide whether those manual-test settings need restoring.
-- Documentation hygiene debt: claim/report still contain `Report tip SHA: PENDING_FINAL_COMMIT` even though final docs commit `3d40a2c...` exists. This is bookkeeping only; do not spend a scarce model run on it.
+- Claim/report bookkeeping finalized by architect; no scarce model run used.
+- Maintenance branch `maintenance/reset-known-good-cleanup-20260907` is completed evidence/history, not an active task branch.
 
 ## AUTONOMOUS QUEUE — OPENCODE / MUSE
 No READY tasks. Muse remains disabled by user directive.
