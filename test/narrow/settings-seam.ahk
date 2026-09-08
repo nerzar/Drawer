@@ -2053,6 +2053,34 @@ if FileExist(drawerPath) {
         InStr(hostSrc, 'try webAdapter.Destroy("stale")') > 0)
 }
 
+; Gate 24: config path actions (RUN-20260908-MUSE-SETTINGS-CONFIG-PATH-01).
+; About shows the real config.ini path from host; copy is done by host
+; clipboard, never by browser. Source assertions only: executing the port
+; needs a running Drawer (VM acceptance covers it).
+bridgePath := A_ScriptDir "\..\..\src\webview\SettingsJsonBridge.ahk"
+portPath := A_ScriptDir "\..\..\src\webview\SettingsPort.ahk"
+if FileExist(bridgePath) && FileExist(portPath) {
+    bridgeSrc := FileRead(bridgePath, "UTF-8")
+    portSrc := FileRead(portPath, "UTF-8")
+    Assert("24a: bridge dispatches settings.getConfigPath to port",
+        InStr(bridgeSrc, 'case "settings.getConfigPath":') > 0
+     && InStr(bridgeSrc, "this._port.GetConfigPath(Request.payload)") > 0)
+    Assert("24b: bridge dispatches settings.copyConfigPath to port",
+        InStr(bridgeSrc, 'case "settings.copyConfigPath":') > 0
+     && InStr(bridgeSrc, "this._port.CopyConfigPath(Request.payload)") > 0)
+    Assert("24c: path actions pass awaitingDecision gate like getInitialState",
+        InStr(bridgeSrc, '&& action != "settings.getConfigPath"') > 0
+     && InStr(bridgeSrc, '&& action != "settings.copyConfigPath"') > 0)
+    Assert("24d: port GetConfigPath returns host configPath, no frontend compute",
+        InStr(portSrc, "GetConfigPath(payload) {") > 0
+     && InStr(portSrc, 'return SettingsBridgeOk(Map("path", configPath))') > 0)
+    Assert("24e: port CopyConfigPath copies via host clipboard",
+        InStr(portSrc, "CopyConfigPath(payload) {") > 0
+     && InStr(portSrc, "A_Clipboard := configPath") > 0)
+} else {
+    Assert("24: webview bridge/port sources present", false)
+}
+
 out := ""
 allOk := true
 for r in results {

@@ -67,7 +67,9 @@ class SettingsJsonBridge {
         }
         if (this._closeState = "awaitingDecision"
             && action != "settings.cancel" && action != "settings.ok"
-            && action != "settings.getInitialState") {
+            && action != "settings.getInitialState"
+            && action != "settings.getConfigPath"
+            && action != "settings.copyConfigPath") {
             this._SendError(Request, "busy", "Ожидается решение о закрытии Settings", true)
             return
         }
@@ -76,6 +78,10 @@ class SettingsJsonBridge {
             switch action {
             case "settings.getInitialState":
                 outcome := this._port.GetInitialState(Request.payload)
+            case "settings.getConfigPath":
+                outcome := this._port.GetConfigPath(Request.payload)
+            case "settings.copyConfigPath":
+                outcome := this._port.CopyConfigPath(Request.payload)
             case "settings.apply":
                 outcome := this._port.Apply(Request.payload)
             case "settings.ok":

@@ -4,7 +4,9 @@
 ; единственное место, которое знает оба словаря сразу: снаружи —
 ; executable/windowClass/widthPercent/blurCheckMs, внутри — exe/cls/
 ; width/blurMs, слоты, apps и config.ini. Мост словаря рантайма не
-; видит, Vue не видит ни INI-секций, ни HWND, ни configPath.
+; видит, Vue не видит ни INI-секций, ни HWND. Абсолютный путь к config.ini
+; Vue получает только через GetConfigPath/CopyConfigPath — вычислять его
+; во frontend нельзя.
 ;
 ; Записи здесь нет ни одной строки: Apply строит тот же вход, что и
 ; native UI-адаптер, и отдаёт его в SettingsGeneralPlan →
@@ -51,6 +53,25 @@ class DrawerSettingsPort {
 
     GetInitialState(payload) {
         return SettingsBridgeOk(this.StateDto())
+    }
+
+    ; Фактический путь к используемому config.ini. Vue его не вычисляет:
+    ; файл выбирает AHK (рядом со скриптом/exe), путь уходит только отсюда.
+    GetConfigPath(payload) {
+        global configPath
+        return SettingsBridgeOk(Map("path", configPath))
+    }
+
+    ; Копирование делает host (A_Clipboard), а не browser clipboard:
+    ; в WebView2 на него нельзя полагаться. Копируется тот же configPath,
+    ; что отдаёт GetConfigPath.
+    CopyConfigPath(payload) {
+        global configPath
+        try
+            A_Clipboard := configPath
+        catch as e
+            return SettingsBridgeError("internal_error", "Не удалось скопировать путь: " e.Message, false)
+        return SettingsBridgeOk(Map("path", configPath))
     }
 
     GetSlotStatuses() {

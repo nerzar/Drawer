@@ -1,5 +1,8 @@
 <script setup>
+import { onMounted, ref } from 'vue'
 import AppLogo from '../components/AppLogo.vue'
+import { copyConfigPath, fetchConfigPath } from '../bridge/about'
+import { settingsClient } from '../bridge/settings'
 
 const hotkeys = [
   {
@@ -10,6 +13,31 @@ const hotkeys = [
   { combo: ['Ctrl', 'Alt', '0'], desc: 'Очистить динамические слоты' },
   { combo: ['Ctrl', 'Alt', 'Shift', '0'], desc: 'Полный сброс настроек и привязок' },
 ]
+
+// Фактический путь к используемому config.ini — только от host.
+// null: host недоступен или не ответил (например, страница открыта не из Ящика).
+const configPath = ref<string | null>(null)
+const copyState = ref<'idle' | 'copied' | 'error'>('idle')
+
+onMounted(async () => {
+  const api = settingsClient()
+  if (!api) return
+  configPath.value = await fetchConfigPath(api)
+})
+
+async function onCopyPath() {
+  const api = settingsClient()
+  if (!api || !configPath.value) return
+  copyState.value = 'idle'
+  const copied = await copyConfigPath(api)
+  if (copied) {
+    // Эхо host: копируется именно строка, полученная от него.
+    configPath.value = copied
+    copyState.value = 'copied'
+  } else {
+    copyState.value = 'error'
+  }
+}
 </script>
 
 <template>
@@ -28,6 +56,14 @@ const hotkeys = [
       Ctrl + Alt + Shift + 0 возвращает настройки к значениям по умолчанию. Ни закрытие окна,
       ни выход из программы ничего не сохраняют.
     </p>
+
+    <div v-if="configPath" class="config-path-row">
+      <code class="config-path">{{ configPath }}</code>
+      <button class="btn-copy" type="button" @click="onCopyPath">Копировать путь</button>
+      <span v-if="copyState === 'copied'" class="copy-hint">Скопировано</span>
+      <span v-if="copyState === 'error'" class="copy-error">Не удалось скопировать</span>
+    </div>
+    <p v-else class="about-p muted">Путь к config.ini недоступен: откройте настройки из Ящика.</p>
 
     <div class="link-row">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent-fg)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -113,6 +149,46 @@ h3.section {
   margin-bottom: 30px;
 }
 .link-row .muted {
+  color: var(--text-3);
+}
+.config-path-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 22px;
+}
+.config-path {
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 11.5px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 5px 8px;
+  border-radius: 4px;
+  color: var(--text);
+  word-break: break-all;
+}
+.btn-copy {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+.btn-copy:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.copy-hint {
+  font-size: 12px;
+  color: var(--accent-fg);
+}
+.copy-error {
+  font-size: 12px;
+  color: #e06565;
+}
+.about-p.muted {
   color: var(--text-3);
 }
 .kbd {

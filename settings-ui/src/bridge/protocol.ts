@@ -156,6 +156,18 @@ export type RequestMap = {
     payload: Record<string, never>
     result: SettingsState
   }
+  // Путь к используемому config.ini приходит только от host: вычислять
+  // его во frontend нельзя — файл выбирает AHK (рядом со скриптом/exe).
+  // Копирование тоже делает host (A_Clipboard), чтобы не зависеть от
+  // разрешений browser clipboard.
+  'settings.getConfigPath': {
+    payload: Record<string, never>
+    result: { path: string }
+  }
+  'settings.copyConfigPath': {
+    payload: Record<string, never>
+    result: { path: string }
+  }
   'settings.apply': {
     payload: { draft: SettingsDraft }
     result: SaveResult
