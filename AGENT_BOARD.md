@@ -21,14 +21,15 @@ A number of historical remote `analysis/*`, `fix/*`, `refactor/*`, `diag/*`, `in
 - Existing user-visible behavior is immutable unless the user explicitly requests a change.
 - In particular `monitor: cursor` remains dynamic exactly as accepted production.
 
-## Product contract draft
-- `docs/PRODUCT_SPEC.md` exists on the shared docs branch as a **DRAFT** for user review.
-- It is not yet an acceptance authority where it conflicts with the manually verified `6bfa010...` baseline or where it contains `USER REVIEW` markers.
-- Do not implement from unresolved draft wording. Wait for owner edits/approval.
+## Product contract
+- `docs/PRODUCT_SPEC.md` has been owner-edited and its textual behavior decisions are now **owner-confirmed** as of docs commit `71f3a137cf632759c57ce3d04bbb630d212ee113`.
+- Visual reference screenshots are still pending and therefore visual styling/appearance must not be inferred beyond the explicit text.
+- The product contract deliberately overrides baseline behavior only where it says so; for existing behavior not redefined there, trusted runtime baseline `6bfa010...` remains the reference.
+- Newly confirmed product changes are **not permission to implement yet** while the recovery/Claude diagnosis gate below is active.
 
 ## Recovery policy
 The night-wave is treated as suspect. Do not salvage arbitrary subsets by assumption.
-Future code must start from the known-good baseline and be reintroduced one bounded, behavior-neutral unit at a time. Any slice that can affect runtime behavior must go to immediate user manual verification before another such slice is stacked on top.
+Future code must start from the known-good baseline and be reintroduced one bounded unit at a time. Any slice that can affect runtime behavior must go to immediate user manual verification before another such slice is stacked on top.
 
 ## Completed maintenance
 ### Reset repository around known-good baseline and clean superseded refs
