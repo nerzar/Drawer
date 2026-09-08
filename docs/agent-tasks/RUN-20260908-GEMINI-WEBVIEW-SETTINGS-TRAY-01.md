@@ -2,17 +2,18 @@
 
 - Run ID: `RUN-20260908-GEMINI-WEBVIEW-SETTINGS-TRAY-01`
 - Agent: `GEMINI`
-- Status: `BLOCKED`
+- Status: `INTEGRATED`
 - Session: `NEW`
 - Base SHA: `c68929c6adf2a6b7291af4b8c829b863c00754ca`
 - Task branch: `gemini/webview-settings-tray`
 - Code SHA: `bbae7aaab110aa0ab995a796292a58d0ae3ec382`
+- Integration SHA: `57bc0cea3a5c4dab6e0a0a1ca5aacd72deac2bec`
 
 ## Текущий статус
 
-- Код и репо-тесты: ГОТОВО. Ветка `gemini/webview-settings-tray` содержит коммит реализации `bbae7aaab110aa0ab995a796292a58d0ae3ec382` и отчёт `docs/agent-reports/2026-09-08-gemini-webview-settings-tray.md`.
+- Код принят после code/semantic review и сведён в `codex/integrate-wave-20260908`. Ветка `gemini/webview-settings-tray` содержит коммит реализации `bbae7aaab110aa0ab995a796292a58d0ae3ec382` и отчёт `docs/agent-reports/2026-09-08-gemini-webview-settings-tray.md`.
 - Все узкие проверки `test\narrow\settings-seam.ahk` (включая блок 23) пройдены (exit code 0).
-- Инфраструктурный блокер VM: `check-guest.ps1` возвращает `BLOCKED: DRAWER_VM_PASSWORD not set` (на хосте не передана переменная окружения с паролем гостя).
+- Отдельный worker VM acceptance снят как integration gate решением владельца; runtime-приёмка выполняется на итоговой сведённой версии.
 
 ## Цель
 

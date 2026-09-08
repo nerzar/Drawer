@@ -2,10 +2,13 @@
 
 - Run ID: `RUN-20260908-MUSE-SETTINGS-CONFIG-PATH-01`
 - Agent: `MUSE`
-- Status: `READY`
+- Status: `INTEGRATED`
 - Session: `NEW`
 - Base SHA: `12c45e4a7fb59642e42318f4b8a8ef4b4db0343b`
 - Task branch: `muse/settings-config-path`
+- Code SHA: `ed99e0dd82d537a9f3067dcb2e6192fe4bd20587`
+- Integration SHA: `9753d3be2c39ce9adcfe44c793dd6bc937fdfe07`
+- Acceptance: принято владельцем без отдельного worker VM acceptance; runtime-приёмка выполняется на итоговой сведённой версии.
 
 ## Цель
 

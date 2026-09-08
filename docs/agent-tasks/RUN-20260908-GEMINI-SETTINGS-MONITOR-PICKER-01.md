@@ -2,10 +2,12 @@
 
 - Run ID: `RUN-20260908-GEMINI-SETTINGS-MONITOR-PICKER-01`
 - Agent: `GEMINI`
-- Status: `BLOCKED` (реализация и repo/narrow тесты готовы в `gemini/settings-monitor-picker`, Code SHA `a9a101f018c8044565ef5ffb835f480387334ded`, VM acceptance заблокирован отсутствием `$env:DRAWER_VM_PASSWORD`)
+- Status: `INTEGRATED` (реализация принята после code/semantic review; отдельный worker VM acceptance снят как integration gate решением владельца)
 - Session: `NEW`
 - Base SHA: `c68929c6adf2a6b7291af4b8c829b863c00754ca`
 - Task branch: `gemini/settings-monitor-picker`
+- Code SHA: `a9a101f018c8044565ef5ffb835f480387334ded`
+- Integration SHA: `e660bee2153d058e76497f3be1fc796103968dc9`
 
 ## Цель
 

@@ -2,7 +2,7 @@
 
 - Run ID: `RUN-20260908-MUSE-SETTINGS-USER-FACING-CONTROLS-01`
 - Agent: `MUSE`
-- Status: `READY`
+- Status: `PAUSED` (текущая integration wave закрывается; запуск только после нового решения архитектора/владельца)
 - Session: `NEW`
 - Base SHA: `12c45e4a7fb59642e42318f4b8a8ef4b4db0343b`
 - Task branch: `muse/settings-user-facing-controls`

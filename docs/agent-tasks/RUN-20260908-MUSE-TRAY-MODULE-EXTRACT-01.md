@@ -2,7 +2,7 @@
 
 - Run ID: `RUN-20260908-MUSE-TRAY-MODULE-EXTRACT-01`
 - Agent: `MUSE`
-- Status: `READY`
+- Status: `PAUSED` (текущая integration wave закрывается; запуск только после нового решения архитектора/владельца)
 - Session: `NEW`
 - Base SHA: `bbae7aaab110aa0ab995a796292a58d0ae3ec382`
 - Task branch: `muse/tray-module-extract`
