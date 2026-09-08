@@ -2031,6 +2031,28 @@ if FileExist(drawerPath) {
      && InStr(src22, "HandlesTopmostAll()") > 0)
 }
 
+; ---------------------------------------------------------------------
+; Точка 23: регистрация Settings в трее и single-instance WebView
+; ---------------------------------------------------------------------
+if FileExist(drawerPath) {
+    src23 := FileRead(drawerPath, "UTF-8")
+    hostPath := A_ScriptDir "\..\..\src\webview\SettingsWebHost.ahk"
+    hostSrc := FileExist(hostPath) ? FileRead(hostPath, "UTF-8") : ""
+
+    Assert("23a: Tray регистрирует Settings на вызов SettingsWebShow",
+        InStr(src23, 'A_TrayMenu.Insert("1&", "Settings", (*) => SettingsWebShow())') > 0)
+    Assert("23b: Tray не содержит отдельного пункта Settings (WebView2)",
+        InStr(src23, "Settings (WebView2)") = 0)
+    Assert("23c: Tray не регистрирует параллельный native Settings",
+        InStr(src23, 'A_TrayMenu.Insert("1&", "Settings", (*) => SettingsShow())') = 0)
+    Assert("23d: Legacy SettingsShow сохраняется в кодовой базе как fallback",
+        InStr(src23, "SettingsShow() {") > 0)
+    Assert("23e: SettingsWebHost активирует существующий HWND при повторном вызове",
+        InStr(hostSrc, 'WinActivate("ahk_id " webHwnd)') > 0)
+    Assert("23f: SettingsWebHost сбрасывает stale-адаптер если окно закрыто вне обработчика",
+        InStr(hostSrc, 'try webAdapter.Destroy("stale")') > 0)
+}
+
 out := ""
 allOk := true
 for r in results {

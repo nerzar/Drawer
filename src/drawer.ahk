@@ -403,12 +403,10 @@ HANDLE_SYNC  := 4
 OnMessage(0x0201, HandleClick)      ; WM_LBUTTONDOWN
 
 ; Собственные пункты меню трея. Хоткея у настроек нет намеренно: клавиши
-; заданы номером слота и не используются для настроек. Native-окно стоит
-; первым и остаётся полноценным путём: WebView пока умеет только General,
-; и подменять им рабочий инструмент рано.
-A_TrayMenu.Insert("1&", "Settings", (*) => SettingsShow())
-A_TrayMenu.Insert("2&", "Settings (WebView2)", (*) => SettingsWebShow())
-A_TrayMenu.Insert("3&", "Нашёл баг…", (*) => BugReportShow())
+; заданы номером слота и не используются для настроек. Пункт Settings
+; открывает единый WebView2-интерфейс (SettingsWebShow).
+A_TrayMenu.Insert("1&", "Settings", (*) => SettingsWebShow())
+A_TrayMenu.Insert("2&", "Нашёл баг…", (*) => BugReportShow())
 
 OnExit(Cleanup)
 ; Единственное уведомление, которое ящик показывает сам по себе. Здесь же

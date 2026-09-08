@@ -1,4 +1,4 @@
-﻿# Узкий end-to-end smoke General и read-only Slots через WebView:
+# Узкий end-to-end smoke General и read-only Slots через WebView:
 #   getInitialState -> правка полей -> Apply -> SettingsApplyPlan ->
 #   канонический state обратно во Vue -> Отмена с dirty-подтверждением.
 #
@@ -49,9 +49,9 @@ try {
     $driverName = if ($Picker) { 'picker-slice.js' } else { 'webview-slice.js' }
     Copy-Item (Join-Path $PSScriptRoot $driverName) (Join-Path $dir "webview-slice.js")
 
-    $marker = 'A_TrayMenu.Insert("2&", "Settings (WebView2)", (*) => SettingsWebShow())'
+    $marker = 'A_TrayMenu.Insert("1&", "Settings", (*) => SettingsWebShow())'
     $src = [IO.File]::ReadAllText((Join-Path $repo "src\drawer.ahk"))
-    if ($src.IndexOf($marker) -lt 0) { throw "Не нашёл пункт трея WebView2 — копия для smoke не собрана" }
+    if ($src.IndexOf($marker) -lt 0) { throw "Не нашёл пункт трея Settings — копия для smoke не собрана" }
 
     # Подмена активного окна живёт ЗДЕСЬ, в копии, а не в production:
     # bind обязан брать окно у WinExist("A"), и держать в отгружаемом exe

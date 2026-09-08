@@ -1,4 +1,4 @@
-﻿<#
+<#
 Прогон стенда Drawer.
 
     powershell -ExecutionPolicy Bypass -File test\run.ps1
@@ -170,7 +170,7 @@ foreach ($s in $want) {
             # У Settings нет намеренно своего хоткея (Р16) — в бою это пункт
             # трея. Тестовые хоткеи и дамп ListView-ячейки вшиваются только в
             # эту копию исходника, как notify вшивает лог TrayTip для quiet.
-            $marker = 'A_TrayMenu.Insert("1&", "Settings", (*) => SettingsShow())'
+            $marker = 'A_TrayMenu.Insert("1&", "Settings", (*) => SettingsWebShow())'
             if ($txt.IndexOf($marker) -lt 0) { Write-Error "Не нашёл пункт трея Settings — сборка для набора setstat не получилась." }
             $ins = @'
 Hotkey("$^!+F12", (*) => SettingsShow())        ; только для теста

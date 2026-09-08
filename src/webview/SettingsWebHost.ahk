@@ -28,9 +28,15 @@ SettingsWebShow() {
 
 SettingsWebOpen() {
     global webAdapter, webBridge, webHwnd
-    if (IsObject(webAdapter) && webHwnd && WinExist("ahk_id " webHwnd)) {
-        WinActivate("ahk_id " webHwnd)
-        return
+    if (IsObject(webAdapter)) {
+        if (webHwnd && WinExist("ahk_id " webHwnd)) {
+            WinActivate("ahk_id " webHwnd)
+            return
+        }
+        try webAdapter.Destroy("stale")
+        webAdapter := 0
+        webBridge := 0
+        webHwnd := 0
     }
 
     ; Рантайм проверяем до создания окружения: иначе вместо понятного
