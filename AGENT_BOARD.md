@@ -15,7 +15,7 @@
 
 - `CODEX` — архитектор/оркестратор; сложные решения и неоднозначное продуктовое поведение.
 - `MUSE` — repo-only анализ, небольшие исправления и одномониторные runtime/GUI-проверки в готовой VM.
-- `GEMINI` — владелец VM-инфраструктуры и исполнитель отдельных runtime/GUI-проверок. Production-разработку не выполняет.
+- `GEMINI` — владелец VM-инфраструктуры и исполнитель ограниченных product changes, которым полезна собственная runtime/GUI-проверка.
 
 Готовность VM для `MUSE` подтверждена smoke-проверкой владельца: `VM_READY`, `GUEST_READY`, screenshots, tray, `OpenSettings`, `ActivateWindow`, `SendKeys` и `RunAhk` работают. Multi-monitor в этой VM не проверяем.
 
@@ -30,14 +30,18 @@
 
 1. [`RUN-20260908-MUSE-SETTINGS-CONFIG-PATH-01`](docs/agent-tasks/RUN-20260908-MUSE-SETTINGS-CONFIG-PATH-01.md) — реализовать показ настоящего пути `config.ini` и «Копировать путь» в WebView2 Settings, base `12c45e4a7fb59642e42318f4b8a8ef4b4db0343b`.
 2. [`RUN-20260908-MUSE-SETTINGS-USER-FACING-CONTROLS-01`](docs/agent-tasks/RUN-20260908-MUSE-SETTINGS-USER-FACING-CONTROLS-01.md) — убрать из обычного UI технические `activateOnShow`/`blurCheckMs` и привести подпись размера панели к контракту, base `12c45e4a7fb59642e42318f4b8a8ef4b4db0343b`.
+3. [`RUN-20260908-MUSE-SETTINGS-ANIMATION-PRESETS-01`](docs/agent-tasks/RUN-20260908-MUSE-SETTINGS-ANIMATION-PRESETS-01.md) — оставить пользователю пресеты анимации без прямого редактирования `animMs`/`animSteps`, base `12c45e4a7fb59642e42318f4b8a8ef4b4db0343b`.
+4. [`RUN-20260908-MUSE-TRAY-MODULE-EXTRACT-01`](docs/agent-tasks/RUN-20260908-MUSE-TRAY-MODULE-EXTRACT-01.md) — после готового tray fix вынести только регистрацию tray и её callbacks из `drawer.ahk`, base `bbae7aaab110aa0ab995a796292a58d0ae3ec382`.
 
 Один сеанс `MUSE` выполняет задачи по порядку и останавливается после каждой. Runtime acceptance входит в задачу реализации и не создаёт отдельный Run.
 
 ### GEMINI — по порядку
 
-1. [`RUN-20260908-GEMINI-WEBVIEW-SETTINGS-TRAY-01`](docs/agent-tasks/RUN-20260908-GEMINI-WEBVIEW-SETTINGS-TRAY-01.md) — сделать WebView2 единственным пользовательским Settings в tray и исключить два параллельных редактора, base `c68929c6adf2a6b7291af4b8c829b863c00754ca`.
+- [`RUN-20260908-GEMINI-WEBVIEW-SETTINGS-TRAY-01`](docs/agent-tasks/RUN-20260908-GEMINI-WEBVIEW-SETTINGS-TRAY-01.md) — BLOCKED на guest VM acceptance: реализация и AHK-проверки выполнены в `gemini/webview-settings-tray` (Code SHA: `bbae7aaab110aa0ab995a796292a58d0ae3ec382`), на хосте отсутствует `$env:DRAWER_VM_PASSWORD`.
+- [`RUN-20260908-GEMINI-SETTINGS-MONITOR-PICKER-01`](docs/agent-tasks/RUN-20260908-GEMINI-SETTINGS-MONITOR-PICKER-01.md) — READY: заменить ввод номера монитора на список «номер + разрешение», base `c68929c6adf2a6b7291af4b8c829b863c00754ca`.
+- [`RUN-20260908-GEMINI-FAST-HIDE-ANIMATION-01`](docs/agent-tasks/RUN-20260908-GEMINI-FAST-HIDE-ANIMATION-01.md) — READY: сделать Hide заметно быстрее Show без новой пользовательской настройки, base `12c45e4a7fb59642e42318f4b8a8ef4b4db0343b`.
 
-`GEMINI` реализует изменение и завершает его короткой runtime/GUI-проверкой в готовой VM. Отдельной smoke-задачи для этого нет.
+`GEMINI` пропускает BLOCKED acceptance и берёт READY-задачи по порядку; возврат к tray acceptance — после восстановления VM credentials.
 
 ## Acceptance без отдельной READY-задачи
 
@@ -50,7 +54,8 @@
 - Попытка динамически назначить окно из постоянного слота должна получить отказ и Windows-уведомление с номером постоянного слота; решение владельца принято, но отдельную задачу сейчас не создаём.
 - Инвариант «одно окно — один слот» позже проверяется отдельно и сейчас не считается подтверждённым багом.
 - Поведение при недоступном закреплённом мониторе требует отдельного решения владельца.
-- Удаление остальных технических полей из Settings и сведение размеров кромки к одному параметру не выдаём без уточнения миграции существующих значений.
+- Сведение трёх размеров кромки к одному пользовательскому параметру не выдаём без уточнения правила пересчёта существующих значений.
+- Полное context-menu parity для кромки пока не READY: нужно сначала определить, выполняются ли destructive actions немедленно или открывают Settings с черновиком.
 - Новые модульные выносы из `drawer.ahk`, расширение числа слотов, installer и autostart не входят в ближайший фронт стабилизации.
 
 ## Общие ограничения READY-задач
