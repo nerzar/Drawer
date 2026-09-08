@@ -16,10 +16,14 @@ global webTrace   := ""    ; путь файла трассировки мост
 ; Ошибка в настройках не должна ронять ящик — та же защита, что у
 ; native SettingsShow() и у хоткеев.
 SettingsWebShow() {
-    try
+    DebugLog("[SETTINGS-WEB] SettingsWebShow entered")
+    try {
         SettingsWebOpen()
-    catch as e
+        DebugLog("[SETTINGS-WEB] SettingsWebOpen returned")
+    } catch as e {
+        OnDrawerException(e, "SettingsWebShow")
         Notify("WebView-настройки не открылись: " e.Message, "Ящик", 3)
+    }
 }
 
 SettingsWebOpen() {
