@@ -21,6 +21,11 @@ import {
   slotIcon,
   statusFor,
 } from '../bridge/slots'
+import {
+  buildMonitorOptions,
+  currentMonitorValue,
+  setMonitorValue,
+} from '../bridge/monitors'
 
 const props = defineProps({
   selectedSlot: {
@@ -92,6 +97,25 @@ watch(
   },
   { immediate: true },
 )
+
+const monitors = computed(() => settings.canonical?.monitors ?? [])
+
+const slotMonitorOptions = computed(() => {
+  if (!draft.value) return []
+  return buildMonitorOptions(
+    monitors.value,
+    draft.value,
+    'Следовать за курсором',
+    draft.value.monitorRaw ? `Некорректное значение: ${draft.value.monitorRaw} — выберите монитор` : undefined
+  )
+})
+
+const selectedSlotMonitor = computed({
+  get: () => (draft.value ? currentMonitorValue(draft.value) : 'cursor'),
+  set: (v) => {
+    if (draft.value) setMonitorValue(draft.value, v)
+  },
+})
 
 // Какие значения временный слот держит своими, а какие берёт из
 // General. Подпись следует за черновиком, чтобы Reset сразу давал
@@ -430,29 +454,19 @@ async function resetBoundSlot() {
                   id="slot-monitor"
                   class="dd"
                   data-testid="edit-monitorKind"
-                  :class="{ narrow: draft.monitorKind === 'number', 'field-bad': bad('monitor') }"
-                  :aria-invalid="bad('monitor') ? 'true' : undefined"
-                  v-model="draft.monitorKind"
+                  :class="{ 'field-bad': bad('monitor') || bad('monitor.number') }"
+                  :aria-invalid="bad('monitor') || bad('monitor.number') ? 'true' : undefined"
+                  v-model="selectedSlotMonitor"
                 >
-                  <option value="cursor">Под курсором</option>
-                  <option value="number">Номер монитора</option>
-                  <!-- Значение из файла, которого не бывает у контролов.
-                       Пункт есть, пока его не заменили: подставить cursor
-                       значило бы поменять настройку молча. -->
-                  <option v-if="draft.monitorKind === 'invalid'" value="invalid">
-                    Некорректное значение: {{ draft.monitorRaw }} — выберите монитор
+                  <option
+                    v-for="opt in slotMonitorOptions"
+                    :key="opt.value"
+                    :value="opt.value"
+                    :disabled="opt.disabled"
+                  >
+                    {{ opt.label }}
                   </option>
                 </select>
-                <input
-                  v-if="draft.monitorKind === 'number'"
-                  class="num-sm"
-                  type="text"
-                  aria-label="Номер монитора"
-                  data-testid="edit-monitorNumber"
-                  :class="{ 'field-bad': bad('monitor.number') }"
-                  :aria-invalid="bad('monitor.number') ? 'true' : undefined"
-                  v-model="draft.monitorNumber"
-                />
               </div>
             </div>
             <div class="row">
@@ -549,26 +563,19 @@ async function resetBoundSlot() {
                   id="dyn-monitor"
                   class="dd"
                   data-testid="edit-monitorKind"
-                  :class="{ narrow: draft.monitorKind === 'number', 'field-bad': bad('monitor') }"
-                  :aria-invalid="bad('monitor') ? 'true' : undefined"
-                  v-model="draft.monitorKind"
+                  :class="{ 'field-bad': bad('monitor') || bad('monitor.number') }"
+                  :aria-invalid="bad('monitor') || bad('monitor.number') ? 'true' : undefined"
+                  v-model="selectedSlotMonitor"
                 >
-                  <option value="cursor">Под курсором</option>
-                  <option value="number">Номер монитора</option>
-                  <option v-if="draft.monitorKind === 'invalid'" value="invalid">
-                    Некорректное значение: {{ draft.monitorRaw }} — выберите монитор
+                  <option
+                    v-for="opt in slotMonitorOptions"
+                    :key="opt.value"
+                    :value="opt.value"
+                    :disabled="opt.disabled"
+                  >
+                    {{ opt.label }}
                   </option>
                 </select>
-                <input
-                  v-if="draft.monitorKind === 'number'"
-                  class="num-sm"
-                  type="text"
-                  aria-label="Номер монитора"
-                  data-testid="edit-monitorNumber"
-                  :class="{ 'field-bad': bad('monitor.number') }"
-                  :aria-invalid="bad('monitor.number') ? 'true' : undefined"
-                  v-model="draft.monitorNumber"
-                />
               </div>
             </div>
             <div class="row">

@@ -479,7 +479,35 @@ class DrawerSettingsPort {
         return Map(
             "protocolVersion", DrawerSettingsPort.PROTOCOL_VERSION,
             "general", this._GeneralDto(snap.general),
-            "slots", slots)
+            "slots", slots,
+            "monitors", this._MonitorsDto())
+    }
+
+    _MonitorsDto() {
+        monitors := []
+        count := 0
+        try count := MonitorGetCount()
+        Loop count {
+            n := A_Index
+            wl := 0, wt := 0, wr := 0, wb := 0
+            w := 0, h := 0
+            try {
+                if MonitorGetWorkArea(n, &wl, &wt, &wr, &wb) {
+                    w := wr - wl
+                    h := wb - wt
+                } else if MonitorGet(n, &wl, &wt, &wr, &wb) {
+                    w := wr - wl
+                    h := wb - wt
+                }
+            } catch {
+                w := 0, h := 0
+            }
+            monitors.Push(Map(
+                "number", n,
+                "width", this._Num(w, 0),
+                "height", this._Num(h, 0)))
+        }
+        return monitors
     }
 
     ; accent — шесть hex-цифр без «#», ровно как в config.ini и как их

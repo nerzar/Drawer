@@ -55,9 +55,7 @@ test('G06: GeneralView binds labels with for/id, adds aria-invalid, and preserve
 
   assert.match(generalSource, /<label for="general-monitor-kind">Монитор<\/label>/)
   assert.match(generalSource, /id="general-monitor-kind"/)
-  assert.match(generalSource, /id="general-monitor-number"/)
-  assert.match(generalSource, /aria-label="Номер монитора"/)
-  assert.match(generalSource, /:aria-invalid="bad\('general\.dynamicDefaults\.monitor\.number'\) \? 'true' : undefined"/)
+  assert.match(generalSource, /:aria-invalid="bad\('general\.dynamicDefaults\.monitor'\) \|\| bad\('general\.dynamicDefaults\.monitor\.number'\) \? 'true' : undefined"/)
 
   assert.match(generalSource, /<label for="general-accent">Цвет акцента<\/label>/)
   assert.match(generalSource, /id="general-accent"/)
@@ -96,11 +94,9 @@ test('G06: SlotsView accessible names for pickers, help description, and aria-in
   assert.match(slotsSource, /id="slot-class-tip"/)
   assert.match(slotsSource, /role="note"/)
   assert.match(slotsSource, /aria-label="Справка о признаке окна"/)
-  assert.match(slotsSource, /aria-label="Номер монитора"/)
   assert.match(slotsSource, /:aria-invalid="bad\('name'\) \? 'true' : undefined"/)
   assert.match(slotsSource, /:aria-invalid="bad\('executable'\) \? 'true' : undefined"/)
-  assert.match(slotsSource, /:aria-invalid="bad\('monitor'\) \? 'true' : undefined"/)
-  assert.match(slotsSource, /:aria-invalid="bad\('monitor\.number'\) \? 'true' : undefined"/)
+  assert.match(slotsSource, /:aria-invalid="bad\('monitor'\) \|\| bad\('monitor\.number'\) \? 'true' : undefined"/)
   assert.match(slotsSource, /:aria-invalid="bad\('widthPercent'\) \? 'true' : undefined"/)
   assert.match(slotsSource, /:aria-invalid="bad\('hotkey'\) \? 'true' : undefined"/)
 })

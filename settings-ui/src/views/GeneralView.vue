@@ -8,6 +8,11 @@ import {
   animPreset,
   applyAnimPreset,
 } from '../bridge/general'
+import {
+  buildMonitorOptions,
+  currentMonitorValue,
+  setMonitorValue,
+} from '../bridge/monitors'
 
 // Форма правит только черновик. Значения в нём — из canonical state
 // AHK, и вернуться туда они могут единственным путём: Применить/ОК.
@@ -47,6 +52,26 @@ function triggerCustomColor() {
   if (saving.value) return
   customColorInput.value?.click()
 }
+
+const monitors = computed(() => settings.canonical?.monitors ?? [])
+
+const monitorOptions = computed(() => {
+  if (!d.value) return []
+  return buildMonitorOptions(
+    monitors.value,
+    d.value,
+    'Следовать за курсором',
+    d.value.monitorRaw ? `в файле: ${d.value.monitorRaw}` : undefined
+  )
+})
+
+const selectedMonitor = computed({
+  get: () => (d.value ? currentMonitorValue(d.value) : 'cursor'),
+  set: (v) => {
+    if (saving.value) return
+    if (d.value) setMonitorValue(d.value, v)
+  },
+})
 </script>
 
 <template>
@@ -91,32 +116,21 @@ function triggerCustomColor() {
             <select
               id="general-monitor-kind"
               class="dd"
-              :class="{ narrow: d.monitorKind === 'number' }"
               data-testid="monitorKind"
               :disabled="saving"
-              v-model="d.monitorKind"
+              :class="{ 'field-bad': bad('general.dynamicDefaults.monitor') || bad('general.dynamicDefaults.monitor.number') }"
+              :aria-invalid="bad('general.dynamicDefaults.monitor') || bad('general.dynamicDefaults.monitor.number') ? 'true' : undefined"
+              v-model="selectedMonitor"
             >
-              <option value="cursor">Следовать за курсором</option>
-              <option value="number">Номер монитора</option>
-              <!-- Значение из файла, которого не бывает у контролов.
-                   Пункт есть, пока его не заменили: подменить его на
-                   cursor значило бы поменять настройку молча. -->
-              <option v-if="d.monitorKind === 'invalid'" value="invalid">
-                в файле: {{ d.monitorRaw }}
+              <option
+                v-for="opt in monitorOptions"
+                :key="opt.value"
+                :value="opt.value"
+                :disabled="opt.disabled"
+              >
+                {{ opt.label }}
               </option>
             </select>
-            <input
-              v-if="d.monitorKind === 'number'"
-              id="general-monitor-number"
-              class="num-sm"
-              :class="{ 'field-bad': bad('general.dynamicDefaults.monitor.number') }"
-              :aria-invalid="bad('general.dynamicDefaults.monitor.number') ? 'true' : undefined"
-              type="text"
-              aria-label="Номер монитора"
-              data-testid="monitorNumber"
-              :disabled="saving"
-              v-model="d.monitorNumber"
-            />
           </div>
         </div>
         <label class="check-row">

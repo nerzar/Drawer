@@ -86,10 +86,17 @@ export type SlotState =
       status: SlotStatus
     }
 
+export type MonitorDescriptor = {
+  number: number
+  width: number
+  height: number
+}
+
 export type SettingsState = {
   protocolVersion: 1
   general: GeneralSettings
   slots: SlotState[]
+  monitors?: MonitorDescriptor[]
 }
 
 // Правка слота. Род на wire — тот, каким слот должен стать: постоянный
