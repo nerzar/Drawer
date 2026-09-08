@@ -2,7 +2,7 @@
 
 Это рабочая доска, а не архив. Поведение определяется `docs/PRODUCT_SPEC.md` и свежими решениями владельца; общий порядок — `docs/05-план-работ.md`.
 
-**Доску ведёт архитектор. Исполнители не меняют приоритеты и не берут следующую задачу без новой команды.**
+**Доску ведёт архитектор. Запущенный агент берёт только назначенные ему READY-задачи в указанном порядке и не меняет приоритеты.**
 
 ## База и незавершённая интеграция
 
@@ -15,21 +15,31 @@
 
 - `CODEX` — архитектор/оркестратор; сложные решения и неоднозначное продуктовое поведение.
 - `MUSE` — repo-only анализ, небольшие исправления и одномониторные runtime/GUI-проверки в готовой VM.
-- `GEMINI` — владелец VM-инфраструктуры; подключается к runtime, когда задача требует инфраструктурной работы. Production-разработку не выполняет.
+- `GEMINI` — владелец VM-инфраструктуры и исполнитель отдельных runtime/GUI-проверок. Production-разработку не выполняет.
 
 Готовность VM для `MUSE` подтверждена smoke-проверкой владельца: `VM_READY`, `GUEST_READY`, screenshots, tray, `OpenSettings`, `ActivateWindow`, `SendKeys` и `RunAhk` работают. Multi-monitor в этой VM не проверяем.
 
 ## Кто сейчас работает
 
-Никто. Задачи ниже подготовлены, но не запущены.
+- `MUSE` — запущена и забирает свою READY-очередь.
+- `GEMINI` — запущен и забирает свою READY-очередь.
 
 ## READY
 
-1. [`RUN-20260908-MUSE-FULL-RESET-VM-01`](docs/agent-tasks/RUN-20260908-MUSE-FULL-RESET-VM-01.md) — `MUSE`, runtime-приёмка физического `Ctrl+Alt+Shift+0`, base `12c45e4a7fb59642e42318f4b8a8ef4b4db0343b`.
-2. [`RUN-20260908-MUSE-SETTINGS-CONFIG-PATH-01`](docs/agent-tasks/RUN-20260908-MUSE-SETTINGS-CONFIG-PATH-01.md) — `MUSE`, показать реальный `config.ini` и копировать путь из WebView2 Settings, base `12c45e4a7fb59642e42318f4b8a8ef4b4db0343b`.
-3. [`RUN-20260908-MUSE-SETTINGS-SLOT-RESET-VM-01`](docs/agent-tasks/RUN-20260908-MUSE-SETTINGS-SLOT-RESET-VM-01.md) — `MUSE`, проверить одну операцию «Сбросить слот» для постоянного и динамического слотов, base `c68929c6adf2a6b7291af4b8c829b863c00754ca`.
+### MUSE — по порядку
+
+1. [`RUN-20260908-MUSE-FULL-RESET-VM-01`](docs/agent-tasks/RUN-20260908-MUSE-FULL-RESET-VM-01.md) — runtime-приёмка физического `Ctrl+Alt+Shift+0`, base `12c45e4a7fb59642e42318f4b8a8ef4b4db0343b`.
+2. [`RUN-20260908-MUSE-SETTINGS-CONFIG-PATH-01`](docs/agent-tasks/RUN-20260908-MUSE-SETTINGS-CONFIG-PATH-01.md) — показать реальный `config.ini` и копировать путь из WebView2 Settings, base `12c45e4a7fb59642e42318f4b8a8ef4b4db0343b`.
+3. [`RUN-20260908-MUSE-SETTINGS-SLOT-RESET-VM-01`](docs/agent-tasks/RUN-20260908-MUSE-SETTINGS-SLOT-RESET-VM-01.md) — проверить одну операцию «Сбросить слот» для постоянного и динамического слотов, base `c68929c6adf2a6b7291af4b8c829b863c00754ca`.
 
 Одному сеансу `MUSE` выполнять задачи по порядку и останавливаться после каждой. Если подключены независимые сеансы `MUSE`, repo-only задачу № 2 можно выполнять параллельно с runtime-проверкой № 1; две VM-задачи одновременно не запускать.
+
+### GEMINI — по порядку
+
+1. [`RUN-20260908-GEMINI-SETTINGS-CONVERSION-VM-01`](docs/agent-tasks/RUN-20260908-GEMINI-SETTINGS-CONVERSION-VM-01.md) — проверить конверсию постоянного слота во временный и обратно, base `c68929c6adf2a6b7291af4b8c829b863c00754ca`.
+2. [`RUN-20260908-GEMINI-SETTINGS-PICKERS-VM-01`](docs/agent-tasks/RUN-20260908-GEMINI-SETTINGS-PICKERS-VM-01.md) — проверить выбор приложения/окна и отсутствие stale `windowClass`, base `c68929c6adf2a6b7291af4b8c829b863c00754ca`.
+
+`GEMINI` выполняет одну VM-задачу за раз. Эти сценарии не включают full reset и «Сбросить слот», уже назначенные `MUSE`.
 
 ## Не READY / сознательно не трогаем
 
