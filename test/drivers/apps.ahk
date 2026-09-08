@@ -9,9 +9,11 @@ MouseMove(960, 500)
 
 ; Регрессия на настоящих приложениях: VS Code (постоянный слот 1),
 ; Telegram, Steam, браузер. Плюс контекстное меню Telegram.
-; Аргументы: <logfile>
+; Аргументы: <logfile> <pid ящика>
 
 dest := A_Args[1]
+pid  := Integer(A_Args[2])
+#Include DrawerControl.ahk
 OnError(Boom)
 Boom(e, m) {
     global dest
@@ -206,7 +208,7 @@ Check("после быстрых переключений все окна жив
       WinExist("ahk_id " code) && WinExist("ahk_id " tg) && (!third || WinExist("ahk_id " third)))
 
 ; --- выход возвращает окна ---
-Send("^!+0")
+DrawerExit(pid)
 Sleep(2500)
 allBack := true, bad := ""
 for h, o in orig {

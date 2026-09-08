@@ -16,6 +16,7 @@ CoordMode("Mouse", "Screen")
 dest := A_Args[1]
 pid  := Integer(A_Args[2])
 dir  := A_Args[3]
+#Include DrawerControl.ahk
 cmd  := FileExist(dir "\launch.txt")
         ? Trim(FileRead(dir "\launch.txt", "UTF-8"), " `t`r`n") : ""
 
@@ -183,7 +184,7 @@ Check("и снова припарковал", !OnScreen(g.Hwnd), "x=" PosOf(g.Hw
 ; Главное: выход не должен отправить окно ещё дальше за экран. Исходные
 ; координаты у брошенного окна были за пределами мониторов, и записывать
 ; их как «место возврата» нельзя.
-Send("^!+0")
+DrawerExit(pid)
 Sleep(2500)
 Check("после выхода окно оказалось НА ЭКРАНЕ, а не за его пределами",
       OnScreen(g.Hwnd), "x=" PosOf(g.Hwnd).x " " PosOf(g.Hwnd).w "x" PosOf(g.Hwnd).h)
@@ -207,7 +208,7 @@ if (dir != "" && FileExist(dir "\config.ini")) {
     Sleep(1200)
     Check("курсор у края ничего не вызвал", Count() = 0, Nums())
     Away()
-    Send("^!+0")
+    DrawerExit(pid)
     Sleep(2000)
 
     IniWrite("true", dir "\config.ini", "general", "handles")

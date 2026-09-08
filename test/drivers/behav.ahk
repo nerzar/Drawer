@@ -8,9 +8,11 @@ CoordMode("Mouse", "Screen")
 MouseMove(960, 500)          ; monitor=cursor -> основной
 
 ; Регрессия поведения: слоты, фокус, быстрые переключения, выход.
-; Аргументы: <logfile>
+; Аргументы: <logfile> <pid ящика>
 
 dest := A_Args[1]
+pid  := Integer(A_Args[2])
+#Include DrawerControl.ahk
 OnError(Boom)
 Boom(e, m) {
     global dest
@@ -201,7 +203,7 @@ Check("после Ctrl+Alt+0 хоткей слота ничего не двиг�
 ; --- 10. выход возвращает все окна
 WinActivate("ahk_id " A), Sleep(200), Send("^!+4"), Sleep(300)
 Send("^!4"), WaitOn(A, true, 3000), Sleep(400)
-Send("^!+0")                                  ; штатный выход
+DrawerExit(pid)                               ; штатный выход через OnExit(Cleanup)
 Sleep(1800)
 Check("выход: окно A вернулось на исходное место",
       Abs(PosOf(A).x - origA.x) <= 4 && Abs(PosOf(A).y - origA.y) <= 4,

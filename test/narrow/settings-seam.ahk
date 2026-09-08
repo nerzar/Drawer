@@ -2088,7 +2088,7 @@ if FileExist(drawerPath) {
     src25 := FileRead(drawerPath, "UTF-8")
 
     pHide := InStr(src25, "Hide(hwnd, st) {")
-    pHideEnd := InStr(src25, "StateOf(hwnd) {")
+    pHideEnd := InStr(src25, "WindowManaged(hwnd) {")
     codeHide := (pHide > 0 && pHideEnd > pHide) ? SubStr(src25, pHide, pHideEnd - pHide) : ""
 
     pShow := InStr(src25, "Show(hwnd, cfg, st,")

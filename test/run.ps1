@@ -70,6 +70,9 @@ function Run-Ahk([string[]]$ahkArgs, [int]$timeoutMs = 60000) {
 function Send-Hotkey([string]$hk) {
     Run-Ahk @("`"$here\sendhk.ahk`"", $hk) 8000 | Out-Null
 }
+function Stop-Drawer([int]$drawerPid) {
+    return Run-Ahk @("`"$here\close-drawer.ahk`"", "$drawerPid") 8000
+}
 function New-Dir([string]$p) {
     if (Test-Path $p) { Remove-Item $p -Recurse -Force }
     New-Item -ItemType Directory -Path $p -Force | Out-Null
@@ -93,19 +96,19 @@ if ($lay -ne 0) {
 }
 
 # ---------- 3. чужой ящик не должен мешать ----------
-Send-Hotkey "^!+0"
-Start-Sleep -Milliseconds 900
-Get-Process Drawer -ErrorAction SilentlyContinue | ForEach-Object {
-    Write-Host "Drawer.exe не вышел по хоткею (pid $($_.Id)) — снимаю" -ForegroundColor Yellow
-    try { $_.Kill() } catch {}
+# Ctrl+Alt+Shift+0 — полный сброс, а не Exit. Никогда не посылаем его
+# неизвестному экземпляру: это удалило бы пользовательский config.ini.
+$existingDrawer = @(Get-Process Drawer -ErrorAction SilentlyContinue)
+if ($existingDrawer.Count) {
+    Write-Error ("Перед тестом закройте запущенный Drawer.exe: PID " + (($existingDrawer | ForEach-Object { $_.Id }) -join ", "))
 }
 
 # ---------- 4. наборы ----------
 $all = @(
     @{ n="geom";    bench="main";    drv="geom.ahk";    kind="safe"; paint=$true  }
-    @{ n="behav";   bench="main";    drv="behav.ahk";   kind="safe"; paint=$true  }
+    @{ n="behav";   bench="main";    drv="behav.ahk";   kind="safe"; paint=$true; pid=$true }
     @{ n="invar";   bench="main";    drv="invar.ahk";   kind="safe"; paint=$true  }
-    @{ n="quiet";   bench="quiet";   drv="quiet.ahk";   kind="safe"; paint=$true; notify=$true }
+    @{ n="quiet";   bench="quiet";   drv="quiet.ahk";   kind="safe"; paint=$true; pid=$true; notify=$true }
     @{ n="kromka";  bench="kromka";  drv="kromka.ahk";  kind="safe"; paint=$true; pid=$true }
     @{ n="extra";   bench="kromka2"; drv="extra.ahk";   kind="safe"; pid=$true }
     @{ n="off";     bench="off";     drv="off.ahk";     kind="safe"; paint=$true; pid=$true }
@@ -115,8 +118,8 @@ $all = @(
     @{ n="restart"; bench="kromka";  drv="restart.ahk"; kind="safe"; paint=$true; pid=$true; cmdline=$true }
     @{ n="ghost";   bench="kromka";  drv="ghost.ahk";   kind="safe"; pid=$true }
     @{ n="setstat"; bench="main";    drv="setstat.ahk"; kind="safe"; paint=$true; pid=$true; settingsHk=$true; notify=$true }
-    @{ n="apps";    bench="apps";    drv="apps.ahk";    kind="apps" }
-    @{ n="browser"; bench="apps";    drv="browser.ahk"; kind="apps" }
+    @{ n="apps";    bench="apps";    drv="apps.ahk";    kind="apps"; pid=$true }
+    @{ n="browser"; bench="apps";    drv="browser.ahk"; kind="apps"; pid=$true }
 )
 $want = switch ($Suites) {
     "safe" { $all | Where-Object { $_.kind -eq "safe" } }
@@ -220,10 +223,10 @@ SettingsTestDump() {
         try { $t.Kill() } catch {}
     }
 
-    Send-Hotkey "^!+0"
-    Start-Sleep -Milliseconds 1500
+    $closeCode = Stop-Drawer $drawer.Id
+    Start-Sleep -Milliseconds 500
     if (-not $drawer.HasExited) {
-        Write-Host "ящик не вышел по хоткею — снимаю (окна могли остаться за экраном)" -ForegroundColor Yellow
+        Write-Host "ящик не закрылся через hidden main window (код $closeCode) — снимаю точный PID $($drawer.Id)" -ForegroundColor Yellow
         try { $drawer.Kill() } catch {}
     }
 

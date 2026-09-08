@@ -11,10 +11,12 @@ MouseMove(960, 500)
 ; пишет в notify.log ровно то, что показал бы пользователю. Прогоняем
 ; обычную работу и смотрим, что в логе.
 ;
-; Аргументы: <logfile> <notify.log ящика>
+; Аргументы: <logfile> <pid ящика> <notify.log ящика>
 
 dest := A_Args[1]
-nlog := A_Args[2]
+pid  := Integer(A_Args[2])
+nlog := A_Args[3]
+#Include DrawerControl.ahk
 OnError(Boom)
 Boom(e, m) {
     global dest
@@ -148,7 +150,7 @@ for l in got
 
 ; --- 5. выход молчит ---
 m := Mark()
-Send("^!+0"), Sleep(1800)
+DrawerExit(pid), Sleep(1800)
 got := Since(m)
 Check("выход молчит", got.Length = 0, got.Length " уведомлений")
 

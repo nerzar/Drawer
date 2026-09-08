@@ -11,9 +11,11 @@ MouseMove(960, 500)
 ; Полноэкранное окно YouTube сюда не годится — оно само возвращает свою
 ; геометрию и не двигается ни этой версией, ни версией до правок.
 ;
-; Аргументы: <logfile>
+; Аргументы: <logfile> <pid ящика>
 
 dest := A_Args[1]
+pid  := Integer(A_Args[2])
+#Include DrawerControl.ahk
 Out(s) {
     global dest
     FileAppend(s "`n", dest, "UTF-8")
@@ -124,7 +126,7 @@ Sleep(500)
 Check("браузер: уборка с анимацией", moved2 > 4, "разных позиций " moved2)
 Check("браузер: убрано за пределы экранов", !OnScreen(target), "x=" PosOf(target).x)
 
-Send("^!+0")                       ; выход возвращает окно
+DrawerExit(pid)                    ; выход возвращает окно через OnExit(Cleanup)
 Sleep(2000)
 back := PosOf(target)
 Check("после выхода браузер вернулся на экран", OnScreen(target),

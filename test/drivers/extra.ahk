@@ -12,6 +12,7 @@ CoordMode("Mouse", "Screen")
 
 dest := A_Args[1]
 pid  := Integer(A_Args[2])
+#Include DrawerControl.ahk
 
 Out(s) {
     global dest
@@ -148,7 +149,7 @@ Check("G3. перед выходом живы две кромки", WaitCount(2)
 Check("G3b. оба окна припаркованы", !OnScreen(gB.Hwnd) && !OnScreen(gC.Hwnd),
       "B x=" PosOf(gB.Hwnd).x " C x=" PosOf(gC.Hwnd).x)
 
-Send("^!+0")                       ; выход ящика
+DrawerExit(pid)                    ; выход ящика через OnExit(Cleanup)
 Sleep(2000)
 Check("G4. окно B вернулось на исходное место",
       OnScreen(gB.Hwnd) && Abs(PosOf(gB.Hwnd).x - 200) <= 8, "x=" PosOf(gB.Hwnd).x)
