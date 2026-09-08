@@ -1,0 +1,68 @@
+﻿2026-09-08 16:12:16.060 [STARTUP] Drawer v0.1.2 starting (PID 2452)
+2026-09-08 16:12:16.060 [STARTUP] Directory: C:\fullreset-test\src, Config: C:\fullreset-test\src\config.ini
+2026-09-08 16:12:16.071 [STARTUP] Monitors detected: 1
+2026-09-08 16:12:16.076 [CONFIG] LoadConfig reading C:\fullreset-test\src\config.ini
+2026-09-08 16:12:16.083 [CONFIG] LoadConfig done: 1 permanent slot(s), 1 override(s)
+2026-09-08 16:12:16.085 [CONFIG] ConfigApply: animMs=260 animSteps=20 blurMs=500 handles=true accent=2A2E35
+2026-09-08 16:12:16.088 [SLOTS] Slots.Apply starting (boot)
+2026-09-08 16:12:16.093 [SLOTS] Slot 1 [dyn]: showHideHotkey='^!1' override=no
+2026-09-08 16:12:16.099 [SLOTS] Slot 2 [dyn]: showHideHotkey='^!F2' override=no
+2026-09-08 16:12:16.104 [SLOTS] Slot 3 [perm]: name='PermTest' exe='definitely-not-running-app.exe' cls='' showHideHotkey='^!3'
+2026-09-08 16:12:16.109 [SLOTS] Slot 4 [dyn]: showHideHotkey='^!4' override=yes
+2026-09-08 16:12:16.140 [SLOTS] Slot 5 [dyn]: showHideHotkey='^!5' override=no
+2026-09-08 16:12:16.145 [SLOTS] Slot 6 [dyn]: showHideHotkey='^!6' override=no
+2026-09-08 16:12:16.151 [SLOTS] Slot 7 [dyn]: showHideHotkey='^!7' override=no
+2026-09-08 16:12:16.155 [SLOTS] Slot 8 [dyn]: showHideHotkey='^!8' override=no
+2026-09-08 16:12:16.159 [SLOTS] Slot 9 [dyn]: showHideHotkey='^!9' override=no
+2026-09-08 16:12:16.167 [SLOTS] Slots.Apply completed
+2026-09-08 16:12:16.172 [HOTKEY] Registered $^!1 for Slot 1 (Show/Hide)
+2026-09-08 16:12:16.177 [HOTKEY] Registered $^!+1 for Slot 1 (Bind)
+2026-09-08 16:12:16.182 [HOTKEY] Registered $^!F2 for Slot 2 (Show/Hide)
+2026-09-08 16:12:16.187 [HOTKEY] Registered $^!+2 for Slot 2 (Bind)
+2026-09-08 16:12:16.192 [HOTKEY] Registered $^!3 for Slot 3 (Show/Hide)
+2026-09-08 16:12:16.197 [HOTKEY] Registered $^!+3 for Slot 3 (Bind)
+2026-09-08 16:12:16.204 [HOTKEY] Registered $^!4 for Slot 4 (Show/Hide)
+2026-09-08 16:12:16.208 [HOTKEY] Registered $^!+4 for Slot 4 (Bind)
+2026-09-08 16:12:16.213 [HOTKEY] Registered $^!5 for Slot 5 (Show/Hide)
+2026-09-08 16:12:16.219 [HOTKEY] Registered $^!+5 for Slot 5 (Bind)
+2026-09-08 16:12:16.225 [HOTKEY] Registered $^!6 for Slot 6 (Show/Hide)
+2026-09-08 16:12:16.232 [HOTKEY] Registered $^!+6 for Slot 6 (Bind)
+2026-09-08 16:12:16.237 [HOTKEY] Registered $^!7 for Slot 7 (Show/Hide)
+2026-09-08 16:12:16.242 [HOTKEY] Registered $^!+7 for Slot 7 (Bind)
+2026-09-08 16:12:16.247 [HOTKEY] Registered $^!8 for Slot 8 (Show/Hide)
+2026-09-08 16:12:16.252 [HOTKEY] Registered $^!+8 for Slot 8 (Bind)
+2026-09-08 16:12:16.259 [HOTKEY] Registered $^!9 for Slot 9 (Show/Hide)
+2026-09-08 16:12:16.264 [HOTKEY] Registered $^!+9 for Slot 9 (Bind)
+2026-09-08 16:12:16.269 [HOTKEY] Registered $^!0 (Clear dynamic slots)
+2026-09-08 16:12:16.275 [HOTKEY] Registered $^!+0 (Full reset)
+2026-09-08 16:12:16.283 [HOTKEY] Total live hotkeys registered: 20
+2026-09-08 16:12:16.287 [FIND] FindWindow searching for exe='definitely-not-running-app.exe' cls=''
+2026-09-08 16:12:16.294 [FIND] FindWindow exe='definitely-not-running-app.exe' cls='' -> not found
+2026-09-08 16:17:20.553 [HOTKEY] Pressed ^!0 (Clear slots)
+2026-09-08 16:17:20.553 [RELEASE] SlotClearDynamic: clearing all dynamic slots
+2026-09-08 16:18:27.255 [HOTKEY] Pressed ^!+1 (Bind Slot 1)
+2026-09-08 16:18:27.280 [BIND] Slot 1 bound to hwnd=590008 ('*All text cleared !!!! — Блокнот')
+2026-09-08 16:18:43.784 [HOTKEY] Pressed ^!+0 (Full reset)
+2026-09-08 16:18:43.868 [RELEASE] SlotClearAll: clearing all slots
+2026-09-08 16:18:43.871 [RELEASE] Slot 1 fully reset hwnd=590008
+2026-09-08 16:18:43.876 [RELEASE] Release(hwnd=590008)
+2026-09-08 16:18:43.876 [SETTINGS] SettingsReconcileRuntime starting
+2026-09-08 16:18:43.881 [CONFIG] LoadConfig reading C:\fullreset-test\src\config.ini
+2026-09-08 16:18:43.895 [CONFIG] LoadConfig done: 0 permanent slot(s), 0 override(s)
+2026-09-08 16:18:43.895 [CONFIG] ConfigApply: animMs=160 animSteps=14 blurMs=250 handles=true accent=2A2E35
+2026-09-08 16:18:43.900 [SLOTS] Slots.Apply starting (reconcile)
+2026-09-08 16:18:43.908 [SLOTS] Slot 1 [dyn]: showHideHotkey='^!1' override=no
+2026-09-08 16:18:43.913 [SLOTS] Slot 2 [dyn]: showHideHotkey='^!2' override=no
+2026-09-08 16:18:43.917 [SLOTS] Slot 3 [dyn]: showHideHotkey='^!3' override=no
+2026-09-08 16:18:43.925 [SLOTS] Slot 4 [dyn]: showHideHotkey='^!4' override=no
+2026-09-08 16:18:43.930 [SLOTS] Slot 5 [dyn]: showHideHotkey='^!5' override=no
+2026-09-08 16:18:43.937 [SLOTS] Slot 6 [dyn]: showHideHotkey='^!6' override=no
+2026-09-08 16:18:43.942 [SLOTS] Slot 7 [dyn]: showHideHotkey='^!7' override=no
+2026-09-08 16:18:43.950 [SLOTS] Slot 8 [dyn]: showHideHotkey='^!8' override=no
+2026-09-08 16:18:43.955 [SLOTS] Slot 9 [dyn]: showHideHotkey='^!9' override=no
+2026-09-08 16:18:43.959 [SLOTS] Slots.Apply completed
+2026-09-08 16:18:43.966 [HOTKEY] Re-registered $^!2 for Slot 2 (Show/Hide)
+2026-09-08 16:18:43.973 [SETTINGS] SettingsReconcileRuntime completed
+2026-09-08 16:18:43.979 [RESET] Full reset completed
+2026-09-08 16:19:55.206 [HOTKEY] Pressed ^!0 (Clear slots)
+2026-09-08 16:19:55.206 [RELEASE] SlotClearDynamic: clearing all dynamic slots
