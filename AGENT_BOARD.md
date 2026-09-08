@@ -7,49 +7,44 @@ Blackboard между архитектором ChatGPT и coding agents.
 ## Critical Git ref hygiene
 Read shared state from `refs/remotes/dev/wip/slots-parity`; shared docs push only to `HEAD:refs/heads/wip/slots-parity`. Never create local `dev/...` refs or use ambiguous `dev/wip/slots-parity`. Public `origin` stays untouched.
 
-The shared docs branch may advance with docs-only commits. Do **not** treat its moving HEAD as the runtime Code SHA. Runtime work must name an explicit Code SHA; the accepted runtime baseline remains the SHA listed below until deliberately changed.
+The shared docs branch may advance with docs-only commits. Do **not** treat its moving HEAD as the runtime Code SHA. Runtime work must name an explicit Code SHA.
 
-A number of historical remote `analysis/*`, `fix/*`, `refactor/*`, `diag/*`, `integration/*` branches still exist. They are **dormant evidence/history, not active task branches and not promotion candidates** unless a future task names one explicitly by full ref + Code SHA. Do not infer work from branch names.
+Historical remote `analysis/*`, `fix/*`, `refactor/*`, `diag/*`, `integration/*` branches are dormant evidence/history, not active task branches or promotion candidates unless a future task names one explicitly by full ref + Code SHA. Do not infer work from branch names.
 
-## Source of truth / locked behavior
-- Accepted production baseline: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`.
-- Dedicated manual-baseline branch: `recovery/known-good-6bfa010` -> exactly `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`.
-- User manually re-verified exact baseline on real setup: edge handles follow cursor across monitors; managed windows follow the cursor-selected monitor as expected; Settings works.
-- Failed integrated candidate `cd6dc00b3d58c6abea709687618ea3702432bc45`: rejected / do not use.
-- Rejected monitor-pinning fix `073a9e649bb85b4766acec33e49f975d5444a140`: rejected / do not use.
-- Rejected recovery candidate `71d67845467893f7dfe82267289cd7ea5dd95886`: rejected / do not use.
-- Existing user-visible behavior is immutable unless the user explicitly requests a change.
-- In particular `monitor: cursor` remains dynamic exactly as accepted production.
+## Source of truth / product contract
+- `docs/PRODUCT_SPEC.md` plus explicit owner decisions define desired Drawer behavior.
+- `master` is the current most stable working version, but **not an oracle of correctness** and may contain known or unknown bugs.
+- If desired behavior is missing, ambiguous, or conflicts with current implementation/history, stop and ask the owner rather than choosing a product behavior independently.
+- `recovery/known-good-6bfa010` preserves historical recovery baseline `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`; it is evidence/fallback, not the current product contract.
+- Rejected candidates `cd6dc00b3d58c6abea709687618ea3702432bc45`, `073a9e649bb85b4766acec33e49f975d5444a140`, and `71d67845467893f7dfe82267289cd7ea5dd95886` remain rejected / do not promote.
+- `monitor: cursor` remains dynamic. Explicit monitor pinning is allowed only when selected by the user.
+- Visual reference screenshots are still pending; do not infer unspecified visual styling. Ask the owner if a visual reference becomes necessary.
 
-## Product contract
-- `docs/PRODUCT_SPEC.md` has been owner-edited and its textual behavior decisions are now **owner-confirmed** as of docs commit `71f3a137cf632759c57ce3d04bbb630d212ee113`.
-- Visual reference screenshots are still pending and therefore visual styling/appearance must not be inferred beyond the explicit text.
-- The product contract deliberately overrides baseline behavior only where it says so; for existing behavior not redefined there, trusted runtime baseline `6bfa010...` remains the reference.
-- Newly confirmed product changes are **not permission to implement yet** while the recovery/Claude diagnosis gate below is active.
-
-## Recovery policy
-The night-wave is treated as suspect. Do not salvage arbitrary subsets by assumption.
-Future code must start from the known-good baseline and be reintroduced one bounded unit at a time. Any slice that can affect runtime behavior must go to immediate user manual verification before another such slice is stacked on top.
+## Working policy after recovery wave
+- Do not reintroduce the failed night-wave wholesale.
+- Develop/fix in small reviewable units and keep Git simple and clean.
+- Runtime-sensitive behavior (real windows, focus, animation, edge handles, multi-monitor) should go to short owner manual verification when that is faster/more reliable than additional agent test loops.
+- Do not start chains of extra refactors, cross-agent reviews, or tests without a concrete reason.
+- After a failed manual check, localize the observed regression and make the smallest justified correction before stacking further changes.
 
 ## Completed maintenance
 ### Reset repository around known-good baseline and clean superseded refs
 - Status: `DONE`
 - Eligible: `ANTIGRAVITY`
-- Run ID: `RUN-20260907-AUTO-ANTIGRAVITY-RESET-TO-KNOWN-GOOD-CLEANUP-01`
 - Verdict: `CLEAN_BASELINE_READY`
-- Baseline: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
+- Historical baseline: `6bfa010fbf0ca7e1b47e856b7c13a450ff54b1fa`
 - Baseline branch: `recovery/known-good-6bfa010`
-- Final docs commit observed: `3d40a2cb069bbfc28e06346c243d0828ffca86a8`
-- Result: 22 redundant/superseded local branches removed, one redundant remote branch removed, rejected RECOVERY-06 worktree removed, public `origin` untouched, known-good baseline preserved.
-- Important unresolved local-state note: Antigravity reported an uncommitted user-generated `src/config.ini` modification in `drawer-settings-integration` and stashed it to obtain a clean tree. Do not drop/overwrite/auto-apply that stash. User should decide whether those manual-test settings need restoring.
-- Claim/report bookkeeping finalized by architect; no scarce model run used.
+- Result: 22 redundant/superseded local branches removed, one redundant remote branch removed, rejected RECOVERY-06 worktree removed, public `origin` untouched, baseline preserved.
+- Important unresolved local-state note: Antigravity reported an uncommitted user-generated `src/config.ini` modification in `drawer-settings-integration` and stashed it to obtain a clean tree. Do not drop/overwrite/auto-apply that stash. User decides whether those manual-test settings need restoring.
 - Maintenance branch `maintenance/reset-known-good-cleanup-20260907` is completed evidence/history, not an active task branch.
 
 ## AUTONOMOUS QUEUE — OPENCODE / MUSE
-No READY tasks. Muse remains disabled by user directive.
+No READY tasks. Muse is available 24/7; its previous pause was temporary and is not a model-availability restriction.
 
 ## AUTONOMOUS QUEUE — ANTIGRAVITY
-No READY tasks. STOP after fresh fetch.
+No READY tasks.
 
-## Next gate
-Do not reintroduce night-wave code yet. User plans to hand the failure context directly to Claude after model limits recover and wants an independent diagnosis rather than architect-led salvage. Until then, preserve `6bfa010...` as the only trusted runtime baseline. No cleanup, refactor, merge, promotion, or implementation tasks are READY.
+## Current gate
+No autonomous implementation task is justified yet. The project has just moved to a clean architect-session + durable-memory workflow, and the next known technical topic is the adjacent-monitor appearance/animation problem. Keep agents idle until that problem is researched/decomposed into a bounded task or the owner explicitly chooses another implementation slice.
+
+Before creating the next runtime task, read current `docs/architect/ARCHITECT_BOOTSTRAP.md`, `docs/architect/PROJECT_STATE.md`, `docs/architect/ORCHESTRATION_RULES.md`, and `docs/PRODUCT_SPEC.md`; do not reconstruct product intent from historical task/report files.
