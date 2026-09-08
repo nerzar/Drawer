@@ -1,10 +1,12 @@
 # RUN-20260908-ANTIGRAVITY-DWM-THUMBNAIL-POC-01
 
-Status: READY
+Status: DRAFT
 Agent: ANTIGRAVITY
 Session: NEW
 Code SHA: `38c6daa586c86394733a09f1968c4de3f6351e13`
 Task branch: `poc/dwm-thumbnail-animation-antigravity`
+
+Это кандидат на следующую исследовательскую задачу, а не автоматически запущенная работа. Архитектор должен сначала оценить текущее состояние проекта и только потом при необходимости перевести задачу в READY и добавить её на `AGENT_BOARD.md`.
 
 ## Цель
 
