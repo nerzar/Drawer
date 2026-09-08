@@ -28,18 +28,21 @@
 
 ### MUSE — по порядку
 
-1. [`RUN-20260908-MUSE-FULL-RESET-VM-01`](docs/agent-tasks/RUN-20260908-MUSE-FULL-RESET-VM-01.md) — runtime-приёмка физического `Ctrl+Alt+Shift+0`, base `12c45e4a7fb59642e42318f4b8a8ef4b4db0343b`.
-2. [`RUN-20260908-MUSE-SETTINGS-CONFIG-PATH-01`](docs/agent-tasks/RUN-20260908-MUSE-SETTINGS-CONFIG-PATH-01.md) — показать реальный `config.ini` и копировать путь из WebView2 Settings, base `12c45e4a7fb59642e42318f4b8a8ef4b4db0343b`.
-3. [`RUN-20260908-MUSE-SETTINGS-SLOT-RESET-VM-01`](docs/agent-tasks/RUN-20260908-MUSE-SETTINGS-SLOT-RESET-VM-01.md) — проверить одну операцию «Сбросить слот» для постоянного и динамического слотов, base `c68929c6adf2a6b7291af4b8c829b863c00754ca`.
+1. [`RUN-20260908-MUSE-SETTINGS-CONFIG-PATH-01`](docs/agent-tasks/RUN-20260908-MUSE-SETTINGS-CONFIG-PATH-01.md) — реализовать показ настоящего пути `config.ini` и «Копировать путь» в WebView2 Settings, base `12c45e4a7fb59642e42318f4b8a8ef4b4db0343b`.
+2. [`RUN-20260908-MUSE-SETTINGS-USER-FACING-CONTROLS-01`](docs/agent-tasks/RUN-20260908-MUSE-SETTINGS-USER-FACING-CONTROLS-01.md) — убрать из обычного UI технические `activateOnShow`/`blurCheckMs` и привести подпись размера панели к контракту, base `12c45e4a7fb59642e42318f4b8a8ef4b4db0343b`.
 
-Одному сеансу `MUSE` выполнять задачи по порядку и останавливаться после каждой. Если подключены независимые сеансы `MUSE`, repo-only задачу № 2 можно выполнять параллельно с runtime-проверкой № 1; две VM-задачи одновременно не запускать.
+Один сеанс `MUSE` выполняет задачи по порядку и останавливается после каждой. Runtime acceptance входит в задачу реализации и не создаёт отдельный Run.
 
 ### GEMINI — по порядку
 
-1. [`RUN-20260908-GEMINI-SETTINGS-CONVERSION-VM-01`](docs/agent-tasks/RUN-20260908-GEMINI-SETTINGS-CONVERSION-VM-01.md) — проверить конверсию постоянного слота во временный и обратно, base `c68929c6adf2a6b7291af4b8c829b863c00754ca`.
-2. [`RUN-20260908-GEMINI-SETTINGS-PICKERS-VM-01`](docs/agent-tasks/RUN-20260908-GEMINI-SETTINGS-PICKERS-VM-01.md) — проверить выбор приложения/окна и отсутствие stale `windowClass`, base `c68929c6adf2a6b7291af4b8c829b863c00754ca`.
+1. [`RUN-20260908-GEMINI-WEBVIEW-SETTINGS-TRAY-01`](docs/agent-tasks/RUN-20260908-GEMINI-WEBVIEW-SETTINGS-TRAY-01.md) — сделать WebView2 единственным пользовательским Settings в tray и исключить два параллельных редактора, base `c68929c6adf2a6b7291af4b8c829b863c00754ca`.
 
-`GEMINI` выполняет одну VM-задачу за раз. Эти сценарии не включают full reset и «Сбросить слот», уже назначенные `MUSE`.
+`GEMINI` реализует изменение и завершает его короткой runtime/GUI-проверкой в готовой VM. Отдельной smoke-задачи для этого нет.
+
+## Acceptance без отдельной READY-задачи
+
+- Для full reset из `12c45e4a7fb59642e42318f4b8a8ef4b4db0343b` перед интеграцией один раз проверить в disposable config физический `Ctrl+Alt+Shift+0`: Drawer остаётся запущен, bindings и настройки сброшены. Автоматические проверки уже пройдены.
+- «Сбросить слот», конверсии и picker не образуют отдельный фронт проверки. Если конкретный runtime-сценарий выявит дефект, архитектор создаст узкую fix-задачу с воспроизведением.
 
 ## Не READY / сознательно не трогаем
 
@@ -52,8 +55,9 @@
 
 ## Общие ограничения READY-задач
 
+- По умолчанию READY-задача изменяет продукт; проверка входит в её acceptance criteria. Verification-only Run допустим только когда новый runtime-факт необходим, чтобы понять, какое изменение делать.
 - Fresh fetch и проверка точного base SHA перед началом.
 - Одна task-ветка и один логический результат; никаких соседних рефакторингов.
-- Runtime-задачи используют готовую одномониторную VM и уже подтверждённый `drawer-vm` workflow. Если стенд перестал быть готов, вернуть конкретный инфраструктурный blocker для `GEMINI` и не чинить VMware внутри продуктовой задачи.
-- Repo-only задача не запускает Drawer и не меняет VM.
+- Реализация сопровождается repo-проверками и коротким runtime acceptance в готовой одномониторной VM, когда изменение затрагивает GUI/runtime.
+- Если стенд перестал быть готов, вернуть конкретный инфраструктурный blocker и не превращать product task в ремонт VMware.
 - При расхождении с `PRODUCT_SPEC.md` или неоднозначности остановиться и вернуть вопрос архитектору.
