@@ -963,7 +963,7 @@ Hide(hwnd, st) {
     ; На внутреннем крае уезжаем сразу на парковку, минуя карман: он лежит
     ; на территории соседнего монитора.
     if g.slide
-        Slide(hwnd, g.sx, g.sy, g.hx, g.hy, g.w, g.h)
+        Slide(hwnd, g.sx, g.sy, g.hx, g.hy, g.w, g.h, Round(animMs * 0.4))
     WinMove(g.px, g.py, g.w, g.h, "ahk_id " hwnd)   ; парковка вне всех мониторов
     if wasActive
         RestoreFocus(hwnd)
@@ -1205,13 +1205,14 @@ FindWindow(a) {
     return best
 }
 
-Slide(hwnd, fromX, fromY, toX, toY, w, h) {
+Slide(hwnd, fromX, fromY, toX, toY, w, h, duration := -1) {
     global animSteps, animMs
     if (animSteps < 1) {
         try WinMove(toX, toY, w, h, "ahk_id " hwnd)
         return
     }
-    delay := Max(1, animMs // animSteps)
+    dur := (duration >= 0) ? duration : animMs
+    delay := Max(1, dur // animSteps)
     Loop animSteps {
         t := A_Index / animSteps
         e := 1 - (1 - t) ** 3

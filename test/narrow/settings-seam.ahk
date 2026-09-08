@@ -2056,7 +2056,7 @@ if FileExist(drawerPath) {
 ; Gate 24: config path actions (RUN-20260908-MUSE-SETTINGS-CONFIG-PATH-01).
 ; About shows the real config.ini path from host; copy is done by host
 ; clipboard, never by browser. Source assertions only: executing the port
-; needs a running Drawer (VM acceptance covers it).
+; needs a running Drawer; runtime acceptance belongs to the integrated build.
 bridgePath := A_ScriptDir "\..\..\src\webview\SettingsJsonBridge.ahk"
 portPath := A_ScriptDir "\..\..\src\webview\SettingsPort.ahk"
 if FileExist(bridgePath) && FileExist(portPath) {
@@ -2079,6 +2079,36 @@ if FileExist(bridgePath) && FileExist(portPath) {
      && InStr(portSrc, "A_Clipboard := configPath") > 0)
 } else {
     Assert("24: webview bridge/port sources present", false)
+}
+
+; ---------------------------------------------------------------------
+; Точка 25: быстрая анимация скрытия (Hide ~40% от animMs)
+; ---------------------------------------------------------------------
+if FileExist(drawerPath) {
+    src25 := FileRead(drawerPath, "UTF-8")
+
+    pHide := InStr(src25, "Hide(hwnd, st) {")
+    pHideEnd := InStr(src25, "StateOf(hwnd) {")
+    codeHide := (pHide > 0 && pHideEnd > pHide) ? SubStr(src25, pHide, pHideEnd - pHide) : ""
+
+    pShow := InStr(src25, "Show(hwnd, cfg, st,")
+    pShowEnd := InStr(src25, "Hide(hwnd, st) {")
+    codeShow := (pShow > 0 && pShowEnd > pShow) ? SubStr(src25, pShow, pShowEnd - pShow) : ""
+
+    pSlide := InStr(src25, "Slide(hwnd, fromX, fromY, toX, toY, w, h, duration := -1) {")
+    pSlideEnd := InStr(src25, "Cleanup(*) {")
+    codeSlide := (pSlide > 0 && pSlideEnd > pSlide) ? SubStr(src25, pSlide, pSlideEnd - pSlide) : ""
+
+    Assert("25a: Slide принимает опциональный параметр duration",
+        pSlide > 0)
+    Assert("25b: Slide использует animMs по умолчанию, если duration < 0",
+        InStr(codeSlide, "dur := (duration >= 0) ? duration : animMs") > 0)
+    Assert("25c: Show вызывает Slide без duration (используется animMs)",
+        InStr(codeShow, "Slide(hwnd, g.hx, g.hy, g.sx, g.sy, g.w, g.h)") > 0)
+    Assert("25d: Hide вызывает Slide с 40% от animMs (Round(animMs * 0.4))",
+        InStr(codeHide, "Slide(hwnd, g.sx, g.sy, g.hx, g.hy, g.w, g.h, Round(animMs * 0.4))") > 0)
+    Assert("25e: Slide корректно отрабатывает animSteps < 1 без анимации",
+        InStr(codeSlide, "if (animSteps < 1) {") > 0)
 }
 
 out := ""
