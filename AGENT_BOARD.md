@@ -39,7 +39,7 @@
 
 - [`RUN-20260908-GEMINI-WEBVIEW-SETTINGS-TRAY-01`](docs/agent-tasks/RUN-20260908-GEMINI-WEBVIEW-SETTINGS-TRAY-01.md) — BLOCKED на guest VM acceptance: реализация и AHK-проверки выполнены в `gemini/webview-settings-tray` (Code SHA: `bbae7aaab110aa0ab995a796292a58d0ae3ec382`), на хосте отсутствует `$env:DRAWER_VM_PASSWORD`.
 - [`RUN-20260908-GEMINI-SETTINGS-MONITOR-PICKER-01`](docs/agent-tasks/RUN-20260908-GEMINI-SETTINGS-MONITOR-PICKER-01.md) — BLOCKED на guest VM acceptance: реализация, типы, Vue UI и тесты выполнены в `gemini/settings-monitor-picker` (Code SHA: `a9a101f018c8044565ef5ffb835f480387334ded`), на хосте отсутствует `$env:DRAWER_VM_PASSWORD`.
-- [`RUN-20260908-GEMINI-FAST-HIDE-ANIMATION-01`](docs/agent-tasks/RUN-20260908-GEMINI-FAST-HIDE-ANIMATION-01.md) — READY: сделать Hide заметно быстрее Show без новой пользовательской настройки, base `12c45e4a7fb59642e42318f4b8a8ef4b4db0343b`.
+- [`RUN-20260908-GEMINI-FAST-HIDE-ANIMATION-01`](docs/agent-tasks/RUN-20260908-GEMINI-FAST-HIDE-ANIMATION-01.md) — BLOCKED на guest VM acceptance: реализация и seam-проверки выполнены в `gemini/fast-hide-animation` (Code SHA: `8c6863e52b04f9635dffee5e567ac6fd7e8087d9`), на хосте отсутствует `$env:DRAWER_VM_PASSWORD`.
 
 `GEMINI` пропускает BLOCKED acceptance и берёт READY-задачи по порядку; возврат к tray acceptance — после восстановления VM credentials.
 

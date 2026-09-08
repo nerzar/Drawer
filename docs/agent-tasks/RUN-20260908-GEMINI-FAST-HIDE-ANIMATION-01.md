@@ -2,7 +2,7 @@
 
 - Run ID: `RUN-20260908-GEMINI-FAST-HIDE-ANIMATION-01`
 - Agent: `GEMINI`
-- Status: `READY`
+- Status: `BLOCKED` (реализация и seam тесты готовы в `gemini/fast-hide-animation`, Code SHA `8c6863e52b04f9635dffee5e567ac6fd7e8087d9`, VM acceptance заблокирован отсутствием `$env:DRAWER_VM_PASSWORD`)
 - Session: `NEW`
 - Base SHA: `12c45e4a7fb59642e42318f4b8a8ef4b4db0343b`
 - Task branch: `gemini/fast-hide-animation`
