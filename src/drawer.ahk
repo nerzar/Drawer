@@ -1539,6 +1539,12 @@ AnimationDwmOpen(hwnd, mi) {
         if (scene.sw < 1 || scene.sh < 1)
             throw Error("DWM thumbnail source has empty size")
         AnimationDwmVisible(scene, false)
+        ; scene.gui — новое +AlwaysOnTop окно во весь монитор; Windows
+        ; ставит его выше уже существующих topmost-окон, включая кромку.
+        ; На время анимации кромка кликнутого слота оказывается под ней и
+        ; моргает, когда сцена закрывается в конце. Возвращаем кромки
+        ; наверх сразу после появления сцены — до начала кадров.
+        HandlesTopmostAll()
         return scene
     } catch as e {
         AnimationDwmClose(scene)
@@ -2007,9 +2013,10 @@ HandleDestroy(n) {
     handles.Delete(n)
 }
 
-; Слот выдвигается — его кромка должна исчезнуть до того, как окно
-; поедет. Кромки остальных слотов остаются на местах: с них и берётся
-; переход мышью на соседнее припаркованное окно.
+; Снести все кромки разом: полный выход (Cleanup) и выключение кромок в
+; config.ini (HandlesSync при !handlesOn). Показ/скрытие одного слота сюда
+; не заходит — его кромка при выезде остаётся на месте (см. заголовок
+; раздела «КРОМКА» и HandlesSync).
 HandlesDestroyAll() {
     global handles
     for n, hd in handles.Clone()
