@@ -969,34 +969,23 @@ Show(hwnd, cfg, st, forceActivate := false, prev := 0) {
     g := st.geom
     activate := WindowFocusShouldActivate(cfg, forceActivate)
     if (animationStyle = "classic") {
-        ; На внутреннем крае ставим окно сразу на место: заход через карман
-        ; (hx) хотя бы на кадр показал бы его на соседнем мониторе.
-        WinMove(g.slide ? g.hx : g.sx, g.slide ? g.hy : g.sy, g.w, g.h, "ahk_id " hwnd)
-        if activate
-            WinActivate("ahk_id " hwnd)
-        else
-            WinMoveTop("ahk_id " hwnd)   ; наверх, но фокус остаётся у пользователя
-        if g.slide
+        if g.slide {
+            WinMove(g.hx, g.hy, g.w, g.h, "ahk_id " hwnd)
+            if activate
+                WinActivate("ahk_id " hwnd)
+            else
+                WinMoveTop("ahk_id " hwnd)   ; наверх, но фокус остаётся у пользователя
             Slide(hwnd, g.hx, g.hy, g.sx, g.sy, g.w, g.h)
+        } else {
+            ; На внутреннем крае classic не может пройти через карман (hx) —
+            ; хотя бы на кадр показал бы окно на соседнем мониторе. Раньше
+            ; здесь был мгновенный перенос без анимации; по решению
+            ; владельца classic на этой стороне молча подменяется на
+            ; reveal — тот же приём, что доступен как отдельный вид.
+            ShowReveal(hwnd, g, activate)
+        }
     } else if (animationStyle = "reveal") {
-        ; Обрезаем окно до нулевого кадра ДО того, как оно станет видимым
-        ; и активным: иначе между WinMove/Activate и первым SetWindowRgn
-        ; проходит кадр, где на экране мелькает полное окно (виден
-        ; заголовок) — и только потом reveal начинает его открывать.
-        revealOriginal := ""
-        try {
-            revealOriginal := AnimationCaptureRegion(hwnd)
-            AnimationRevealFrame(hwnd, g, AnimationMotionAt(0, true, "reveal").position, revealOriginal)
-        } catch as e
-            DebugLog("[ANIMATION] reveal prepare fallback: " e.Message)
-        WinMove(g.sx, g.sy, g.w, g.h, "ahk_id " hwnd)
-        if activate
-            WinActivate("ahk_id " hwnd)
-        else
-            WinMoveTop("ahk_id " hwnd)
-        try AnimationReveal(hwnd, g, true, animMs, revealOriginal)
-        catch as e
-            DebugLog("[ANIMATION] reveal show fallback: " e.Message)
+        ShowReveal(hwnd, g, activate)
     } else {
         try AnimationDwmShow(hwnd, g, mi, animationStyle, animMs, activate)
         catch as e {
@@ -1026,16 +1015,18 @@ Hide(hwnd, st) {
     DebugLog("[HIDE] Hiding hwnd=" hwnd " ('" title "') wasActive=" (wasActive ? "1" : "0"))
     g := st.geom
     if (animationStyle = "classic") {
-        ; На внутреннем крае уезжаем сразу на парковку, минуя карман: он лежит
-        ; на территории соседнего монитора.
-        if g.slide
+        if g.slide {
+            ; На внутреннем крае уезжаем сразу на парковку, минуя карман: он лежит
+            ; на территории соседнего монитора.
             Slide(hwnd, g.sx, g.sy, g.hx, g.hy, g.w, g.h, Round(animMs * 0.4))
-        WinMove(g.px, g.py, g.w, g.h, "ahk_id " hwnd)
+            WinMove(g.px, g.py, g.w, g.h, "ahk_id " hwnd)
+        } else {
+            ; Тот же перевод на reveal, что и в Show() — уходим тем же
+            ; приёмом, которым и появлялись, а не мгновенным переносом.
+            HideReveal(hwnd, g)
+        }
     } else if (animationStyle = "reveal") {
-        try AnimationReveal(hwnd, g, false, Round(animMs * 0.4))
-        catch as e
-            DebugLog("[ANIMATION] reveal hide fallback: " e.Message)
-        WinMove(g.px, g.py, g.w, g.h, "ahk_id " hwnd)
+        HideReveal(hwnd, g)
     } else {
         try AnimationDwmHide(hwnd, g, animationStyle, Round(animMs * 0.4))
         catch as e {
@@ -1338,10 +1329,45 @@ AnimationSoftPhase(t, start, finish) {
     return u * u * u * (u * (6 * u - 15) + 10)
 }
 
+; Общий Show/Hide для reveal — вызывается и напрямую при animationStyle=
+; reveal, и как fallback classic на внутреннем крае (см. Show()/Hide()):
+; там, где classic не может пройти через карман, не показывая окно на
+; соседнем мониторе, вместо мгновенного переноса без анимации подменяем
+; его на reveal целиком, а не только на кусок кривой.
+ShowReveal(hwnd, g, activate) {
+    global animMs
+    ; Обрезаем окно до нулевого кадра ДО того, как оно станет видимым
+    ; и активным: иначе между WinMove/Activate и первым SetWindowRgn
+    ; проходит кадр, где на экране мелькает полное окно (виден
+    ; заголовок) — и только потом reveal начинает его открывать.
+    revealOriginal := ""
+    try {
+        revealOriginal := AnimationCaptureRegion(hwnd)
+        AnimationRevealFrame(hwnd, g, AnimationMotionAt(0, true, "reveal").position, revealOriginal)
+    } catch as e
+        DebugLog("[ANIMATION] reveal prepare fallback: " e.Message)
+    WinMove(g.sx, g.sy, g.w, g.h, "ahk_id " hwnd)
+    if activate
+        WinActivate("ahk_id " hwnd)
+    else
+        WinMoveTop("ahk_id " hwnd)
+    try AnimationReveal(hwnd, g, true, animMs, revealOriginal)
+    catch as e
+        DebugLog("[ANIMATION] reveal show fallback: " e.Message)
+}
+
+HideReveal(hwnd, g) {
+    global animMs
+    try AnimationReveal(hwnd, g, false, Round(animMs * 0.4))
+    catch as e
+        DebugLog("[ANIMATION] reveal hide fallback: " e.Message)
+    WinMove(g.px, g.py, g.w, g.h, "ahk_id " hwnd)
+}
+
 ; original — регион, уже захваченный и применённый вызывающим ДО показа
-; окна (см. Show(): reveal должен появиться уже обрезанным, а не мигнуть
-; полным кадром между WinMove/Activate и первым SetWindowRgn). "" — сам
-; захватывает и накладывает нулевой кадр, как раньше делал Hide.
+; окна (см. ShowReveal(): reveal должен появиться уже обрезанным, а не
+; мигнуть полным кадром между WinMove/Activate и первым SetWindowRgn).
+; "" — сам захватывает и накладывает нулевой кадр, как раньше делал Hide.
 AnimationReveal(hwnd, g, show, duration, original := "") {
     global animSteps
     if (animSteps < 1)

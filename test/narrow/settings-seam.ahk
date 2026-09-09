@@ -2218,6 +2218,30 @@ if FileExist(drawerPath) {
      && posPark28 < posActivate28 && posActivate28 < posOpen28)
 }
 
+; ---------------------------------------------------------------------
+; Точка 29: classic на внутреннем крае (сосед со стороны edge) молча
+; подменяется на reveal вместо мгновенного переноса без анимации —
+; решение владельца по итогам ручной проверки на двух мониторах.
+; ---------------------------------------------------------------------
+if FileExist(drawerPath) {
+    src29 := FileRead(drawerPath, "UTF-8")
+
+    Assert("29a: обычный classic (g.slide) по-прежнему уезжает через карман Slide()",
+        InStr(src29, "if g.slide {") > 0
+     && InStr(src29, "Slide(hwnd, g.hx, g.hy, g.sx, g.sy, g.w, g.h)") > 0
+     && InStr(src29, "Slide(hwnd, g.sx, g.sy, g.hx, g.hy, g.w, g.h, Round(animMs * 0.4))") > 0)
+    Assert("29b: classic без g.slide (сосед блокирует карман) подменяется на reveal",
+        InStr(src29, "ShowReveal(hwnd, g, activate)") > 0
+     && InStr(src29, "HideReveal(hwnd, g)") > 0)
+    ; ShowReveal/HideReveal должны использоваться и явным style=reveal, и
+    ; classic-фоллбеком — иначе это два разных пути с разным поведением.
+    ; По одному определению плюс по два вызова (classic-фоллбек и явный
+    ; reveal) на каждую функцию — три вхождения подстроки.
+    Assert("29c: явный reveal и classic-фоллбек используют одну и ту же реализацию",
+        (StrSplit(src29, "ShowReveal(hwnd, g, activate)").Length - 1) = 3
+     && (StrSplit(src29, "HideReveal(hwnd, g)").Length - 1) = 3)
+}
+
 out := ""
 allOk := true
 for r in results {
