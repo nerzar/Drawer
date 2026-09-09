@@ -2136,7 +2136,7 @@ if FileExist(drawerPath) {
      && InStr(src26, "Slide(hwnd, g.hx, g.hy, g.sx, g.sy, g.w, g.h)") > 0
      && InStr(src26, "Slide(hwnd, g.sx, g.sy, g.hx, g.hy, g.w, g.h, Round(animMs * 0.4))") > 0)
     Assert("26e: reveal использует SetWindowRgn и восстанавливает исходный регион",
-        InStr(src26, 'AnimationReveal(hwnd, g, true, animMs)') > 0
+        InStr(src26, 'AnimationReveal(hwnd, g, true, animMs, revealOriginal)') > 0
      && InStr(src26, '"user32\SetWindowRgn"') > 0
      && InStr(src26, "AnimationRestoreRegion(hwnd, original)") > 0)
     Assert("26f: DWM эффекты регистрируют, обновляют и освобождают thumbnail",
@@ -2184,6 +2184,38 @@ if FileExist(drawerPath) {
     Assert("27c: ForegroundWork проверяет потерявшее фокус watched-окно сразу",
         InStr(src27, "if (prev && prev != hwnd && WindowWatched(prev))") > 0
      && InStr(src27, "WatchBlurCheck(prev)") > 0)
+}
+
+; ---------------------------------------------------------------------
+; Точка 28: заголовок не мигает при показе reveal/DWM-эффектов —
+; обрезка/активация происходят ДО того, как окно станет видимым, а не
+; после (иначе между появлением окна и первым кадром анимации виден
+; кадр с полным/неактивным заголовком).
+; ---------------------------------------------------------------------
+if FileExist(drawerPath) {
+    src28 := FileRead(drawerPath, "UTF-8")
+
+    ; 28a: reveal накладывает нулевой регион ДО вызова полной анимации
+    ; (которая уже идёт после WinMove/Activate на целевую позицию).
+    posPrepare28 := InStr(src28, "revealOriginal := AnimationCaptureRegion(hwnd)")
+    posRunCall28 := InStr(src28, "AnimationReveal(hwnd, g, true, animMs, revealOriginal)")
+    Assert("28a: reveal накладывает нулевой регион до показа окна",
+        posPrepare28 > 0 && posRunCall28 > 0 && posPrepare28 < posRunCall28)
+
+    ; 28b: внутри AnimationDwmShow активация идёт сразу после парковки
+    ; окна за краем экрана, а не после всей анимации — раньше заголовок
+    ; всю анимацию оставался неактивным и перекрашивался ровно в
+    ; момент, когда thumbnail уступает место настоящему окну.
+    dwmShowStart28 := InStr(src28, 'AnimationDwmShow(hwnd, g, mi, style, duration, activate) {')
+    dwmHideStart28 := InStr(src28, 'AnimationDwmHide(hwnd, g, style, duration) {')
+    dwmShowBody28 := (dwmShowStart28 > 0 && dwmHideStart28 > dwmShowStart28)
+        ? SubStr(src28, dwmShowStart28, dwmHideStart28 - dwmShowStart28) : ""
+    posPark28 := InStr(dwmShowBody28, 'WinMove(g.px, g.py, g.w, g.h, "ahk_id " hwnd)')
+    posActivate28 := InStr(dwmShowBody28, 'WinActivate("ahk_id " hwnd)')
+    posOpen28 := InStr(dwmShowBody28, "AnimationDwmOpen(hwnd, mi)")
+    Assert("28b: DWM show активирует окно сразу после парковки, до открытия сцены",
+        posPark28 > 0 && posActivate28 > 0 && posOpen28 > 0
+     && posPark28 < posActivate28 && posActivate28 < posOpen28)
 }
 
 out := ""

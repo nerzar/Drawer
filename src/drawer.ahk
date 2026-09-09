@@ -979,20 +979,33 @@ Show(hwnd, cfg, st, forceActivate := false, prev := 0) {
         if g.slide
             Slide(hwnd, g.hx, g.hy, g.sx, g.sy, g.w, g.h)
     } else if (animationStyle = "reveal") {
+        ; Обрезаем окно до нулевого кадра ДО того, как оно станет видимым
+        ; и активным: иначе между WinMove/Activate и первым SetWindowRgn
+        ; проходит кадр, где на экране мелькает полное окно (виден
+        ; заголовок) — и только потом reveal начинает его открывать.
+        revealOriginal := ""
+        try {
+            revealOriginal := AnimationCaptureRegion(hwnd)
+            AnimationRevealFrame(hwnd, g, AnimationMotionAt(0, true, "reveal").position, revealOriginal)
+        } catch as e
+            DebugLog("[ANIMATION] reveal prepare fallback: " e.Message)
         WinMove(g.sx, g.sy, g.w, g.h, "ahk_id " hwnd)
         if activate
             WinActivate("ahk_id " hwnd)
         else
             WinMoveTop("ahk_id " hwnd)
-        try AnimationReveal(hwnd, g, true, animMs)
+        try AnimationReveal(hwnd, g, true, animMs, revealOriginal)
         catch as e
             DebugLog("[ANIMATION] reveal show fallback: " e.Message)
     } else {
-        try AnimationDwmShow(hwnd, g, mi, animationStyle, animMs)
+        try AnimationDwmShow(hwnd, g, mi, animationStyle, animMs, activate)
         catch as e {
             DebugLog("[ANIMATION] " animationStyle " show fallback: " e.Message)
             WinMove(g.sx, g.sy, g.w, g.h, "ahk_id " hwnd)
         }
+        ; Успешный путь уже активировал окно за краем экрана, пока никто
+        ; его не видел (см. AnimationDwmShow). Здесь — подстраховка на
+        ; случай fallback выше и на animSteps=0, где активации ещё не было.
         if activate
             WinActivate("ahk_id " hwnd)
         else
@@ -1325,14 +1338,21 @@ AnimationSoftPhase(t, start, finish) {
     return u * u * u * (u * (6 * u - 15) + 10)
 }
 
-AnimationReveal(hwnd, g, show, duration) {
+; original — регион, уже захваченный и применённый вызывающим ДО показа
+; окна (см. Show(): reveal должен появиться уже обрезанным, а не мигнуть
+; полным кадром между WinMove/Activate и первым SetWindowRgn). "" — сам
+; захватывает и накладывает нулевой кадр, как раньше делал Hide.
+AnimationReveal(hwnd, g, show, duration, original := "") {
     global animSteps
     if (animSteps < 1)
         return
-    original := AnimationCaptureRegion(hwnd)
+    capture := (original == "")
+    if capture
+        original := AnimationCaptureRegion(hwnd)
     delay := Max(1, duration // animSteps)
     try {
-        AnimationRevealFrame(hwnd, g, AnimationMotionAt(0, show, "reveal").position, original)
+        if capture
+            AnimationRevealFrame(hwnd, g, AnimationMotionAt(0, show, "reveal").position, original)
         Loop animSteps {
             t := A_Index / animSteps
             AnimationRevealFrame(hwnd, g, AnimationMotionAt(t, show, "reveal").position, original)
@@ -1393,15 +1413,21 @@ AnimationRestoreRegion(hwnd, original) {
     DllCall("user32\SetWindowRgn", "Ptr", hwnd, "Ptr", 0, "Int", true, "Int")
 }
 
-AnimationDwmShow(hwnd, g, mi, style, duration) {
+AnimationDwmShow(hwnd, g, mi, style, duration, activate) {
     global animSteps
     if (animSteps < 1) {
         WinMove(g.sx, g.sy, g.w, g.h, "ahk_id " hwnd)
         return
     }
     ; Настоящее окно остаётся за пределами всех мониторов; внутри
-    ; рабочей области движется только DWM thumbnail.
+    ; рабочей области движется только DWM thumbnail. Активируем его
+    ; здесь же, пока оно ещё не видно: WinActivate за краем экрана не
+    ; создаёт кадра. Иначе заголовок весь показ стоял бы неактивным
+    ; (таким, каким окно было до Show) и мигал бы в активный цвет ровно
+    ; в момент, когда thumbnail уступает место настоящему окну.
     WinMove(g.px, g.py, g.w, g.h, "ahk_id " hwnd)
+    if activate
+        WinActivate("ahk_id " hwnd)
     scene := AnimationDwmOpen(hwnd, mi)
     try {
         AnimationDwmRun(scene, g, style, true, duration)
