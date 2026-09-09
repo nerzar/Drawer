@@ -84,6 +84,7 @@ try DebugLog("[STARTUP] Monitors detected: " MonitorGetCount())
 iconUriCache := Map()   ; hwnd -> data-URI иконки окна (см. SlotIconUri)
 animMs       := 160
 animSteps    := 14
+animationStyle := "classic"
 blurMs       := 250
 handlesOn    := true
 HANDLE_BG    := "2A2E35"
@@ -119,6 +120,12 @@ LoadConfig(path, &diags) {
 
     animMs    := IniRead(path, "general", "animMs", 160)
     animSteps := IniRead(path, "general", "animSteps", 14)
+    animationStyle := IniRead(path, "general", "animationStyle", "classic")
+    if !AnimationStyleValid(animationStyle) {
+        diags.Push("config.ini: [general] animationStyle=" animationStyle
+            " — ожидается classic, reveal, dwmSlide, dwmSlideFade или dwmShrink; взято classic")
+        animationStyle := "classic"
+    }
     blurMs    := IniRead(path, "general", "blurMs", 250)
     handleWidth := IniRead(path, "general", "handleWidth", 22)
     handleHeight := IniRead(path, "general", "handleHeight", 34)
@@ -196,10 +203,21 @@ LoadConfig(path, &diags) {
     }
 
     DebugLog("[CONFIG] LoadConfig done: " perm.Count " permanent slot(s), " overrides.Count " override(s)")
-    return { animMs: animMs, animSteps: animSteps, blurMs: blurMs,
+    return { animMs: animMs, animSteps: animSteps, animationStyle: animationStyle, blurMs: blurMs,
              handleWidth: handleWidth, handleHeight: handleHeight, handleGap: handleGap,
              handlesOn: handlesOn, accent: handleBg,
              perm: perm, dynamic: dynamic, overrides: overrides, hotkeys: hotkeys }
+}
+
+AnimationStyles() {
+    return ["classic", "reveal", "dwmSlide", "dwmSlideFade", "dwmShrink"]
+}
+
+AnimationStyleValid(value) {
+    for style in AnimationStyles()
+        if (value = style)
+            return true
+    return false
 }
 
 ; "true"/"false" — единственный ожидаемый формат. Непустая строка "false"
@@ -226,10 +244,11 @@ ConfigDiagShow(diags) {
 ; входят: их проекция — Slots.Apply(), и она отдельная, потому что
 ; реконсиляции после Save нужен ещё и снимок постоянных привязок.
 ConfigApply(cfg) {
-    global animMs, animSteps, blurMs, handleWidth, handleHeight, handleGap, handlesOn, HANDLE_BG
+    global animMs, animSteps, animationStyle, blurMs, handleWidth, handleHeight, handleGap, handlesOn, HANDLE_BG
     global HANDLE_REST, HANDLE_NEAR, HANDLE_HOVER, HANDLE_LEN, HANDLE_GAP
     animMs       := cfg.animMs
     animSteps    := cfg.animSteps
+    animationStyle := cfg.animationStyle
     blurMs       := cfg.blurMs
     handleWidth  := cfg.handleWidth
     handleHeight := cfg.handleHeight
@@ -241,7 +260,9 @@ ConfigApply(cfg) {
     HANDLE_GAP   := handleGap
     handlesOn    := cfg.handlesOn
     HANDLE_BG    := cfg.accent
-    DebugLog("[CONFIG] ConfigApply: animMs=" animMs " animSteps=" animSteps " blurMs=" blurMs " handles=" (handlesOn ? "true" : "false") " accent=" HANDLE_BG)
+    DebugLog("[CONFIG] ConfigApply: animMs=" animMs " animSteps=" animSteps
+        " animationStyle=" animationStyle " blurMs=" blurMs
+        " handles=" (handlesOn ? "true" : "false") " accent=" HANDLE_BG)
 }
 
 ; Слоты: модель, реестр и общие операции над ними. Всё, что программа
@@ -564,6 +585,7 @@ FullResetDefaultWrites() {
     return [
         { sec: "general", key: "animMs", val: "160" },
         { sec: "general", key: "animSteps", val: "14" },
+        { sec: "general", key: "animationStyle", val: "classic" },
         { sec: "general", key: "blurMs", val: "250" },
         { sec: "general", key: "handles", val: "true" },
         { sec: "dynamic", key: "name", val: "Слот" },
@@ -922,6 +944,7 @@ StateOf(hwnd) {
 ; событию активации: там окно уже стало активным само, и спрашивать об
 ; этом Windows поздно.
 Show(hwnd, cfg, st, forceActivate := false, prev := 0) {
+    global animationStyle
     title := ""
     try title := WinGetTitle("ahk_id " hwnd)
     DebugLog("[SHOW] Showing hwnd=" hwnd " ('" title "') forceActivate=" (forceActivate ? "1" : "0") " prev=" prev)
@@ -935,18 +958,37 @@ Show(hwnd, cfg, st, forceActivate := false, prev := 0) {
 
     st.geom := ComputeGeom(cfg, mi)
     g := st.geom
-    ; На внутреннем крае ставим окно сразу на место: заход через карман
-    ; (hx) хотя бы на кадр показал бы его на соседнем мониторе.
-    WinMove(g.slide ? g.hx : g.sx, g.slide ? g.hy : g.sy, g.w, g.h, "ahk_id " hwnd)
-
     activate := WindowFocusShouldActivate(cfg, forceActivate)
-    if activate
-        WinActivate("ahk_id " hwnd)
-    else
-        WinMoveTop("ahk_id " hwnd)   ; наверх, но фокус остаётся у пользователя
-
-    if g.slide
-        Slide(hwnd, g.hx, g.hy, g.sx, g.sy, g.w, g.h)
+    if (animationStyle = "classic") {
+        ; На внутреннем крае ставим окно сразу на место: заход через карман
+        ; (hx) хотя бы на кадр показал бы его на соседнем мониторе.
+        WinMove(g.slide ? g.hx : g.sx, g.slide ? g.hy : g.sy, g.w, g.h, "ahk_id " hwnd)
+        if activate
+            WinActivate("ahk_id " hwnd)
+        else
+            WinMoveTop("ahk_id " hwnd)   ; наверх, но фокус остаётся у пользователя
+        if g.slide
+            Slide(hwnd, g.hx, g.hy, g.sx, g.sy, g.w, g.h)
+    } else if (animationStyle = "reveal") {
+        WinMove(g.sx, g.sy, g.w, g.h, "ahk_id " hwnd)
+        if activate
+            WinActivate("ahk_id " hwnd)
+        else
+            WinMoveTop("ahk_id " hwnd)
+        try AnimationReveal(hwnd, g, true, animMs)
+        catch as e
+            DebugLog("[ANIMATION] reveal show fallback: " e.Message)
+    } else {
+        try AnimationDwmShow(hwnd, g, mi, animationStyle, animMs)
+        catch as e {
+            DebugLog("[ANIMATION] " animationStyle " show fallback: " e.Message)
+            WinMove(g.sx, g.sy, g.w, g.h, "ahk_id " hwnd)
+        }
+        if activate
+            WinActivate("ahk_id " hwnd)
+        else
+            WinMoveTop("ahk_id " hwnd)
+    }
     if activate
         Watch(hwnd, cfg)
     HandlesTopmostAll()
@@ -954,17 +996,31 @@ Show(hwnd, cfg, st, forceActivate := false, prev := 0) {
 }
 
 Hide(hwnd, st) {
+    global animationStyle
     WatchForget(hwnd)
     wasActive := WinActive("ahk_id " hwnd) ? true : false
     title := ""
     try title := WinGetTitle("ahk_id " hwnd)
     DebugLog("[HIDE] Hiding hwnd=" hwnd " ('" title "') wasActive=" (wasActive ? "1" : "0"))
     g := st.geom
-    ; На внутреннем крае уезжаем сразу на парковку, минуя карман: он лежит
-    ; на территории соседнего монитора.
-    if g.slide
-        Slide(hwnd, g.sx, g.sy, g.hx, g.hy, g.w, g.h, Round(animMs * 0.4))
-    WinMove(g.px, g.py, g.w, g.h, "ahk_id " hwnd)   ; парковка вне всех мониторов
+    if (animationStyle = "classic") {
+        ; На внутреннем крае уезжаем сразу на парковку, минуя карман: он лежит
+        ; на территории соседнего монитора.
+        if g.slide
+            Slide(hwnd, g.sx, g.sy, g.hx, g.hy, g.w, g.h, Round(animMs * 0.4))
+        WinMove(g.px, g.py, g.w, g.h, "ahk_id " hwnd)
+    } else if (animationStyle = "reveal") {
+        try AnimationReveal(hwnd, g, false, Round(animMs * 0.4))
+        catch as e
+            DebugLog("[ANIMATION] reveal hide fallback: " e.Message)
+        WinMove(g.px, g.py, g.w, g.h, "ahk_id " hwnd)
+    } else {
+        try AnimationDwmHide(hwnd, g, animationStyle, Round(animMs * 0.4))
+        catch as e {
+            DebugLog("[ANIMATION] " animationStyle " hide fallback: " e.Message)
+            WinMove(g.px, g.py, g.w, g.h, "ahk_id " hwnd)
+        }
+    }
     if wasActive
         RestoreFocus(hwnd)
     ; История предыдущего фокуса нужна была только для RestoreFocus выше;
@@ -1062,21 +1118,18 @@ ComputeGeom(a, mi) {
     ; помещается в монитор целиком только в одной позиции — уже
     ; выдвинутой, — поэтому «проехать хотя бы часть пути» невозможно.
     ;
-    ; Значит выбор бинарный: либо окно видно на соседе, либо анимации
-    ; нет. Инвариант важнее: на внутреннем крае показ и уборка идут
-    ; мгновенным переносом, минуя карман. Окно при этом никогда не
-    ; отображается за пределами своего монитора.
+    ; Для classic выбор бинарный: либо окно видно на соседе, либо
+    ; анимации нет. Поэтому его показ и уборка на внутреннем крае идут
+    ; мгновенным переносом, минуя карман.
     ;
     ; Проверять достаточно полностью убранное положение: за время
     ; анимации окно занимает объединение от sx до hx+w, и часть, выходящая
     ; за монитор, — это ровно прямоугольник (hx, hy, w, h).
     ;
-    ; Обрезка окна регионом (SetWindowRgn) позволила бы анимировать и
-    ; здесь, но замерено: 14 обновлений региона стоят 218 мс при бюджете
-    ; анимации 160 мс, а если процесс умрёт посреди анимации, чужое окно
-    ; останется обрезанным навсегда. Цена выше пользы.
+    ; Reveal и DWM-эффекты не двигают настоящее окно через карман и
+    ; поэтому этот флаг не используют.
     return { sx: sx, sy: sy, hx: hx, hy: hy, px: px, py: py, w: w, h: h,
-             slide: !HitsMonitor(hx, hy, w, h, mi) }
+             edge: a.edge, monitor: mi, slide: !HitsMonitor(hx, hy, w, h, mi) }
 }
 
 ; Пересекается ли прямоугольник хоть с одним монитором. skip — номер
@@ -1221,6 +1274,269 @@ Slide(hwnd, fromX, fromY, toX, toY, w, h, duration := -1) {
         Sleep(delay)
     }
     try WinMove(toX, toY, w, h, "ahk_id " hwnd)
+}
+
+; Нормализованные кривые и последовательность каналов — из проверенного
+; playground. Их темп задают существующие animMs/animSteps; отдельного
+; motion framework и новых пресетов здесь нет.
+AnimationMotionAt(t, show, style) {
+    if show {
+        position := AnimationEase(t, 0.12, 0.28)
+        scale := style = "dwmShrink" ? 0.18 + 0.82 * AnimationSoftPhase(t, 0.05, 0.90) : 1
+        opacity := (style = "dwmSlideFade" || style = "dwmShrink")
+            ? AnimationSoftPhase(t, 0, 0.64) : 1
+    } else {
+        departure := AnimationEase(style = "reveal" ? t ** 1.12 : t, 0.62, 0.90)
+        position := 1 - departure
+        scale := style = "dwmShrink" ? 1 - 0.82 * AnimationSoftPhase(t, 0.18, 0.90) : 1
+        opacity := style = "dwmShrink" ? 1 - AnimationSoftPhase(t, 0.66, 0.96)
+            : style = "dwmSlideFade" ? 1 - AnimationSoftPhase(departure, 0.36, 0.97) : 1
+    }
+    return { position: position, scale: scale, opacity: opacity }
+}
+
+AnimationEase(t, x1, x2) {
+    if (t <= 0 || t >= 1)
+        return Max(0, Min(1, t))
+    lo := 0, hi := 1
+    Loop 16 {
+        u := (lo + hi) / 2
+        bx := 3 * (1 - u) ** 2 * u * x1 + 3 * (1 - u) * u * u * x2 + u ** 3
+        if (bx < t)
+            lo := u
+        else
+            hi := u
+    }
+    u := (lo + hi) / 2
+    return u * u * (3 - 2 * u)
+}
+
+AnimationSoftPhase(t, start, finish) {
+    u := Max(0, Min(1, (t - start) / (finish - start)))
+    return u * u * u * (u * (6 * u - 15) + 10)
+}
+
+AnimationReveal(hwnd, g, show, duration) {
+    global animSteps
+    if (animSteps < 1)
+        return
+    original := AnimationCaptureRegion(hwnd)
+    delay := Max(1, duration // animSteps)
+    try {
+        AnimationRevealFrame(hwnd, g, AnimationMotionAt(0, show, "reveal").position, original)
+        Loop animSteps {
+            t := A_Index / animSteps
+            AnimationRevealFrame(hwnd, g, AnimationMotionAt(t, show, "reveal").position, original)
+            Sleep(delay)
+        }
+    } finally {
+        ; При Hide сначала убираем настоящее окно за виртуальный стол и
+        ; только затем возвращаем его исходный регион: полного кадра на
+        ; целевом мониторе между этими операциями быть не должно.
+        if !show
+            try WinMove(g.px, g.py, g.w, g.h, "ahk_id " hwnd)
+        AnimationRestoreRegion(hwnd, original)
+    }
+}
+
+AnimationCaptureRegion(hwnd) {
+    region := DllCall("gdi32\CreateRectRgn", "Int", 0, "Int", 0, "Int", 0, "Int", 0, "Ptr")
+    if !region
+        throw OSError(A_LastError, "CreateRectRgn(original)")
+    kind := DllCall("user32\GetWindowRgn", "Ptr", hwnd, "Ptr", region, "Int")
+    if kind {
+        return region
+    }
+    DllCall("gdi32\DeleteObject", "Ptr", region)
+    return 0
+}
+
+AnimationRevealFrame(hwnd, g, progress, original) {
+    w := Round(g.w * progress), h := Round(g.h * progress)
+    switch g.edge {
+    case "right": l := g.w - w, t := 0, r := g.w, b := g.h
+    case "left": l := 0, t := 0, r := w, b := g.h
+    case "top": l := 0, t := 0, r := g.w, b := h
+    case "bottom": l := 0, t := g.h - h, r := g.w, b := g.h
+    }
+    clip := DllCall("gdi32\CreateRectRgn", "Int", l, "Int", t, "Int", r, "Int", b, "Ptr")
+    if !clip
+        throw OSError(A_LastError, "CreateRectRgn(reveal)")
+    if original && !DllCall("gdi32\CombineRgn", "Ptr", clip, "Ptr", clip,
+                            "Ptr", original, "Int", 1, "Int") {
+        DllCall("gdi32\DeleteObject", "Ptr", clip)
+        throw OSError(A_LastError, "CombineRgn(reveal)")
+    }
+    if !DllCall("user32\SetWindowRgn", "Ptr", hwnd, "Ptr", clip, "Int", true, "Int") {
+        code := A_LastError
+        DllCall("gdi32\DeleteObject", "Ptr", clip)
+        throw OSError(code, "SetWindowRgn(reveal)")
+    }
+    ; После успешного SetWindowRgn регионом владеет Windows.
+}
+
+AnimationRestoreRegion(hwnd, original) {
+    if original {
+        if !DllCall("user32\SetWindowRgn", "Ptr", hwnd, "Ptr", original, "Int", true, "Int")
+            DllCall("gdi32\DeleteObject", "Ptr", original)
+        return
+    }
+    DllCall("user32\SetWindowRgn", "Ptr", hwnd, "Ptr", 0, "Int", true, "Int")
+}
+
+AnimationDwmShow(hwnd, g, mi, style, duration) {
+    global animSteps
+    if (animSteps < 1) {
+        WinMove(g.sx, g.sy, g.w, g.h, "ahk_id " hwnd)
+        return
+    }
+    ; Настоящее окно остаётся за пределами всех мониторов; внутри
+    ; рабочей области движется только DWM thumbnail.
+    WinMove(g.px, g.py, g.w, g.h, "ahk_id " hwnd)
+    scene := AnimationDwmOpen(hwnd, mi)
+    try {
+        AnimationDwmRun(scene, g, style, true, duration)
+        WinMove(g.sx, g.sy, g.w, g.h, "ahk_id " hwnd)
+        AnimationDwmFlush()
+    } finally AnimationDwmClose(scene)
+}
+
+AnimationDwmHide(hwnd, g, style, duration) {
+    global animSteps
+    if (animSteps < 1) {
+        WinMove(g.px, g.py, g.w, g.h, "ahk_id " hwnd)
+        return
+    }
+    scene := AnimationDwmOpen(hwnd, g.monitor)
+    try {
+        ; Полная копия уже лежит над настоящим окном до его парковки.
+        AnimationDwmDraw(scene, g, style, 0, false)
+        AnimationDwmFlush()
+        WinMove(g.px, g.py, g.w, g.h, "ahk_id " hwnd)
+        AnimationDwmRun(scene, g, style, false, duration)
+    } finally AnimationDwmClose(scene)
+}
+
+AnimationDwmOpen(hwnd, mi) {
+    scene := { gui: 0, thumb: 0 }
+    try {
+        enabled := 0
+        AnimationHResult(DllCall("dwmapi\DwmIsCompositionEnabled", "Int*", &enabled, "Int"),
+            "DwmIsCompositionEnabled")
+        if !enabled
+            throw Error("DWM composition disabled")
+
+        MonitorGetWorkArea(mi, &l, &t, &r, &b)
+        scene.x := l, scene.y := t, scene.w := r - l, scene.h := b - t
+        scene.gui := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale +E0x08000020", "")
+        scene.gui.BackColor := "000000"
+        ServiceWindowAdd(scene.gui.Hwnd)
+        scene.gui.Show("NA x" l " y" t " w" scene.w " h" scene.h)
+
+        ; Стеклянная клиентская область оставляет desktop прозрачным, а
+        ; DWM thumbnail рисуется поверх неё без фоновой сцены playground.
+        margins := Buffer(16, 0)
+        NumPut("Int", -1, "Int", -1, "Int", -1, "Int", -1, margins, 0)
+        AnimationHResult(DllCall("dwmapi\DwmExtendFrameIntoClientArea", "Ptr", scene.gui.Hwnd,
+            "Ptr", margins, "Int"), "DwmExtendFrameIntoClientArea")
+
+        handle := 0
+        AnimationHResult(DllCall("dwmapi\DwmRegisterThumbnail", "Ptr", scene.gui.Hwnd,
+            "Ptr", hwnd, "Ptr*", &handle, "Int"), "DwmRegisterThumbnail")
+        scene.thumb := handle
+        size := Buffer(8, 0)
+        AnimationHResult(DllCall("dwmapi\DwmQueryThumbnailSourceSize", "Ptr", handle,
+            "Ptr", size, "Int"), "DwmQueryThumbnailSourceSize")
+        scene.sw := NumGet(size, 0, "Int"), scene.sh := NumGet(size, 4, "Int")
+        if (scene.sw < 1 || scene.sh < 1)
+            throw Error("DWM thumbnail source has empty size")
+        AnimationDwmVisible(scene, false)
+        return scene
+    } catch as e {
+        AnimationDwmClose(scene)
+        throw e
+    }
+}
+
+AnimationDwmRun(scene, g, style, show, duration) {
+    global animSteps
+    delay := Max(1, duration // animSteps)
+    AnimationDwmDraw(scene, g, style, 0, show)
+    Loop animSteps {
+        AnimationDwmDraw(scene, g, style, A_Index / animSteps, show)
+        Sleep(delay)
+    }
+}
+
+AnimationDwmDraw(scene, g, style, t, show) {
+    motion := AnimationMotionAt(t, show, style)
+    p := motion.position
+    fw := g.w, fh := g.h
+    fx := g.sx - scene.x, fy := g.sy - scene.y
+    w := Max(1, Round(fw * motion.scale)), h := Max(1, Round(fh * motion.scale))
+    hiddenScale := style = "dwmShrink" ? 0.18 : 1
+    cx := fx + fw / 2, cy := fy + fh / 2
+    switch g.edge {
+    case "right": cx := cx * p + (scene.w + fw * hiddenScale / 2) * (1 - p)
+    case "left": cx := cx * p - fw * hiddenScale / 2 * (1 - p)
+    case "top": cy := cy * p - fh * hiddenScale / 2 * (1 - p)
+    case "bottom": cy := cy * p + (scene.h + fh * hiddenScale / 2) * (1 - p)
+    }
+    x := Round(cx - w / 2), y := Round(cy - h / 2)
+    l := Max(0, x), t := Max(0, y), r := Min(scene.w, x + w), b := Min(scene.h, y + h)
+    if (p <= 0 || r <= l || b <= t) {
+        AnimationDwmVisible(scene, false)
+        return
+    }
+
+    ; Destination и source обрезаются в одной пропорции: иначе DWM
+    ; сжимает целое окно в видимую полоску у границы монитора.
+    sl := Round((l - x) * scene.sw / w), st := Round((t - y) * scene.sh / h)
+    sr := Round((r - x) * scene.sw / w), sb := Round((b - y) * scene.sh / h)
+    if (sr <= sl || sb <= st) {
+        AnimationDwmVisible(scene, false)
+        return
+    }
+    props := Buffer(48, 0)
+    NumPut("UInt", 0x1F, props, 0)
+    NumPut("Int", l, "Int", t, "Int", r, "Int", b, props, 4)
+    NumPut("Int", sl, "Int", st, "Int", sr, "Int", sb, props, 20)
+    NumPut("UChar", Round(255 * motion.opacity), props, 36)
+    NumPut("Int", 1, props, 40)
+    NumPut("Int", 0, props, 44)
+    AnimationHResult(DllCall("dwmapi\DwmUpdateThumbnailProperties", "Ptr", scene.thumb,
+        "Ptr", props, "Int"), "DwmUpdateThumbnailProperties")
+}
+
+AnimationDwmVisible(scene, visible) {
+    props := Buffer(48, 0)
+    NumPut("UInt", 0x8, props, 0)
+    NumPut("Int", visible, props, 40)
+    AnimationHResult(DllCall("dwmapi\DwmUpdateThumbnailProperties", "Ptr", scene.thumb,
+        "Ptr", props, "Int"), "DwmUpdateThumbnailProperties")
+}
+
+AnimationDwmFlush() {
+    AnimationHResult(DllCall("dwmapi\DwmFlush", "Int"), "DwmFlush")
+}
+
+AnimationDwmClose(scene) {
+    if !scene
+        return
+    if scene.HasOwnProp("thumb") && scene.thumb {
+        DllCall("dwmapi\DwmUnregisterThumbnail", "Ptr", scene.thumb, "Int")
+        scene.thumb := 0
+    }
+    if scene.HasOwnProp("gui") && scene.gui {
+        try ServiceWindowDrop(scene.gui.Hwnd)
+        try scene.gui.Destroy()
+        scene.gui := 0
+    }
+}
+
+AnimationHResult(hr, api) {
+    if hr < 0
+        throw Error(api " failed: " Format("0x{:08X}", hr & 0xFFFFFFFF))
 }
 
 ; При выходе возвращаем окна на исходные места, чтобы ничего
@@ -2359,6 +2675,26 @@ SettingsAnimPresets() {
             { name: "Обычная",  ms: 160, steps: 14 },
             { name: "Плавная",  ms: 260, steps: 20 }]
 }
+
+SettingsAnimationStyleItems() {
+    return ["Классический slide", "Reveal", "DWM slide", "DWM slide + fade", "DWM shrink-to-edge"]
+}
+
+SettingsAnimationStylePick(ddl, current) {
+    for i, style in AnimationStyles() {
+        if (current = style) {
+            ddl.Choose(i)
+            return
+        }
+    }
+    ddl.Choose(1)
+}
+
+SettingsAnimationStyleVal(ddl) {
+    return (ddl.Value >= 1 && ddl.Value <= AnimationStyles().Length)
+        ? AnimationStyles()[ddl.Value] : "classic"
+}
+
 SettingsAnimItems() {
     out := ["Без анимации"]
     for p in SettingsAnimPresets()
@@ -2843,7 +3179,7 @@ SettingsSlotRowSelect(ui, idx, *) {
 
 SettingsOpen() {
     global setGui, setUI, VERSION, configPath
-    global animMs, animSteps, blurMs, handlesOn, HANDLE_BG
+    global animMs, animSteps, animationStyle, blurMs, handlesOn, HANDLE_BG
     dynamic := SlotDefaults()
 
     ; Окно одно. Повторный вызов из трея поднимает уже открытое, а не
@@ -2992,9 +3328,15 @@ SettingsOpen() {
     panelGeneral.Push(g.Add("Text", "x" handleX " y" (handleY + 9) " w" handleW " h16 Center BackgroundTrans", "›"))
     g.SetFont("s9 norm cEDEDEF")
 
-    ; -- Анимация: два ключа, но выбирается одним списком --
+    ; -- Анимация: вид отдельно от существующего пресета темпа --
     SettingsCard(g, panelGeneral, c3x, c3y, cardW, cardH, "Анимация")
     rowY := c3y + 56
+    panelGeneral.Push(g.Add("Text", "x" (c3x + pad) " y" rowY " w150 h20", "Вид"))
+    ui.animationStyle := SettingsMk(panelGeneral, g.Add("DropDownList", "-E0x200 x" (c3x + 182)
+        " y" (rowY - 3) " w184 h28", SettingsAnimationStyleItems()))
+    SettingsAnimationStylePick(ui.animationStyle, animationStyle)
+
+    rowY += 34
     panelGeneral.Push(g.Add("Text", "x" (c3x + pad) " y" rowY " w150 h20", "Плавность"))
     ui.anim := SettingsMk(panelGeneral, g.Add("DropDownList", "-E0x200 x" (c3x + 182) " y" (rowY - 3) " w184 h28", SettingsAnimItems()))
 
@@ -3340,6 +3682,15 @@ SettingsEdgeIn(v, label, req, &err) {
     return SettingsBad(label ": ожидается left, right, top или bottom", &err)
 }
 
+SettingsAnimationStyleIn(v, label, &err) {
+    if (err != "")
+        return ""
+    v := String(v)
+    if AnimationStyleValid(v)
+        return v
+    return SettingsBad(label ": ожидается classic, reveal, dwmSlide, dwmSlideFade или dwmShrink", &err)
+}
+
 SettingsMonitorIn(v, label, req, &err) {
     if (err != "")
         return ""
@@ -3610,6 +3961,7 @@ SettingsGeneralPlan(input, &err) {
     ms := noAnim ? 0
         : SettingsNum(input.animMs, 0, 5000, "Длительность анимации", &err)
     steps := SettingsNum(input.animSteps, 0, 200, "Шагов анимации", &err)
+    style := SettingsAnimationStyleIn(input.animationStyle, "Вид анимации", &err)
     b := SettingsNum(input.blurMs, 10, 60000, "Проверка потери фокуса", &err)
     edge := SettingsEdgeIn(input.edge, "Край", false, &err)
     mon := SettingsMonitorIn(input.monitor, "Монитор", false, &err)
@@ -3635,6 +3987,7 @@ SettingsGeneralPlan(input, &err) {
     if !noAnim
         cand.Push({ sec: "general", key: "animMs",     val: String(ms) })
     cand.Push({ sec: "general", key: "animSteps",      val: String(steps) })
+    cand.Push({ sec: "general", key: "animationStyle", val: style })
     cand.Push({ sec: "general", key: "blurMs",         val: String(b) })
     cand.Push({ sec: "general", key: "accent",         val: accent })
     cand.Push({ sec: "general", key: "handleWidth",  val: String(hw) })
@@ -3681,6 +4034,7 @@ SettingsCollect(&err) {
         noAnim: (ui.anim.Value = 1),
         animMs: ui.animMs.Value,
         animSteps: ui.animSteps.Value,
+        animationStyle: SettingsAnimationStyleVal(ui.animationStyle),
         blurMs: ui.blurMs.Value,
         accent: ui.accentVal,
         handleWidth: handleWidth,
@@ -3695,7 +4049,7 @@ SettingsCollect(&err) {
 ; меняли, остаётся ненаписанным сам собой — умолчания живут в
 ; LoadConfig, и дублировать их здесь не приходится.
 SettingsLive(sec, key) {
-    global animMs, animSteps, blurMs, handlesOn, HANDLE_BG, handleWidth, handleHeight, handleGap
+    global animMs, animSteps, animationStyle, blurMs, handlesOn, HANDLE_BG, handleWidth, handleHeight, handleGap
     if (sec = "dynamic") {
         v := Opt(SlotDefaults(), key, "")
         return (key = "activateOnShow" || key = "hideOnBlur")
@@ -3704,6 +4058,7 @@ SettingsLive(sec, key) {
     switch key {
     case "animMs":       return String(animMs)
     case "animSteps":    return String(animSteps)
+    case "animationStyle": return animationStyle
     case "blurMs":       return String(blurMs)
     case "handles":      return handlesOn ? "true" : "false"
     case "accent":       return HANDLE_BG
@@ -4220,7 +4575,7 @@ SettingsBehaviorCopy(cfg) {
 ; перевод в имена wire (executable/windowClass/widthPercent, MonitorRef)
 ; — работа порта, здесь ей не место.
 SettingsStateSnapshot() {
-    global animMs, animSteps, blurMs, handleWidth, handleHeight, handleGap, handlesOn, HANDLE_BG
+    global animMs, animSteps, animationStyle, blurMs, handleWidth, handleHeight, handleGap, handlesOn, HANDLE_BG
     slots := []
     Loop 9 {
         n := A_Index
@@ -4240,7 +4595,7 @@ SettingsStateSnapshot() {
     }
     return { general: { dynamicDefaults: SettingsBehaviorCopy(SlotDefaults()),
                         handlesEnabled: handlesOn, animMs: animMs,
-                        animSteps: animSteps, blurMs: blurMs,
+                        animSteps: animSteps, animationStyle: animationStyle, blurMs: blurMs,
                         handleWidth: handleWidth, handleHeight: handleHeight, handleGap: handleGap,
                         accent: HANDLE_BG },
              slots: slots }
@@ -4380,7 +4735,7 @@ SettingsSnapshot() {
         return ""
     s := ui.width.Value "|" ui.edge.Value "|" ui.mon.Value "|"
        . ui.act.Value "|" ui.blur.Value "|" ui.handles.Value "|"
-       . ui.anim.Value "|" ui.animMs.Value "|" ui.animSteps.Value "|"
+       . ui.animationStyle.Value "|" ui.anim.Value "|" ui.animMs.Value "|" ui.animSteps.Value "|"
        . ui.blurMs.Value "|" ui.accentVal
     ; Буфер правок Slots — та же строка-снимок, только по номерам
     ; слотов: dirty должен видеть и незаписанную правку постоянного слота.

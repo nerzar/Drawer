@@ -8,7 +8,7 @@
 // Никаких умолчаний Ящика здесь нет по построению: черновик заводится
 // только из canonical state, пришедшего от AHK.
 
-import type { Edge, GeneralSettings, MonitorRef } from './protocol'
+import type { AnimationStyle, Edge, GeneralSettings, MonitorRef } from './protocol'
 
 export type MonitorKind = 'cursor' | 'number' | 'invalid'
 
@@ -24,6 +24,7 @@ export type GeneralDraft = {
   activateOnShow: boolean
   hideOnBlur: boolean
   handlesEnabled: boolean
+  animationStyle: AnimationStyle
   animMs: string
   animSteps: string
   animCustom?: boolean
@@ -49,6 +50,14 @@ export const ANIM_PRESETS = [
   { id: 'normal', label: 'Обычная', ms: 160, steps: 14 },
   { id: 'smooth', label: 'Плавная', ms: 260, steps: 20 },
 ] as const
+
+export const ANIMATION_STYLE_OPTIONS: { value: AnimationStyle; label: string }[] = [
+  { value: 'classic', label: 'Классический slide' },
+  { value: 'reveal', label: 'Reveal' },
+  { value: 'dwmSlide', label: 'DWM slide' },
+  { value: 'dwmSlideFade', label: 'DWM slide + fade' },
+  { value: 'dwmShrink', label: 'DWM shrink-to-edge' },
+]
 
 export const ACCENT_PALETTE = [
   '2A2E35',
@@ -80,6 +89,7 @@ export function draftFromState(g: GeneralSettings): GeneralDraft {
     activateOnShow: g.dynamicDefaults.activateOnShow,
     hideOnBlur: g.dynamicDefaults.hideOnBlur,
     handlesEnabled: g.handlesEnabled,
+    animationStyle: g.animation.style,
     animMs,
     animSteps,
     animCustom: isCustomAnim(animMs, animSteps),
@@ -101,7 +111,7 @@ export function draftToWire(d: GeneralDraft): GeneralSettings {
       hideOnBlur: d.hideOnBlur,
     },
     handlesEnabled: d.handlesEnabled,
-    animation: { durationMs: num(d.animMs), steps: num(d.animSteps) },
+    animation: { style: d.animationStyle, durationMs: num(d.animMs), steps: num(d.animSteps) },
     blurCheckMs: num(d.blurCheckMs),
     accent: d.accent,
     handle: { width: num(d.handleWidth), height: num(d.handleHeight), gap: num(d.handleGap) },

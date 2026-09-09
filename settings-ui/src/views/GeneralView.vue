@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { settings } from '../bridge/settings'
 import {
   ACCENT_PALETTE,
+  ANIMATION_STYLE_OPTIONS,
   ANIM_PRESETS,
   EDGE_OPTIONS,
   animPreset,
@@ -246,8 +247,22 @@ const selectedMonitor = computed({
       <div class="card">
         <h3>Анимация</h3>
         <p class="hint">
-          Плавность — способ показа тех же двух чисел. «Своя» открывает их для правки.
+          Вид задаёт эффект, плавность — его существующий темп. «Своя» открывает числа для правки.
         </p>
+        <div class="row">
+          <label for="general-animation-style">Вид</label>
+          <select
+            id="general-animation-style"
+            class="dd"
+            data-testid="animationStyle"
+            :disabled="saving"
+            v-model="d.animationStyle"
+          >
+            <option v-for="o in ANIMATION_STYLE_OPTIONS" :key="o.value" :value="o.value">
+              {{ o.label }}
+            </option>
+          </select>
+        </div>
         <div class="row">
           <label for="general-anim-preset">Плавность</label>
           <select id="general-anim-preset" class="dd" data-testid="animPreset" :disabled="saving" v-model="preset">

@@ -59,6 +59,10 @@
 ; Точка 12 (C5): статическая проверка, что LoadConfig и IniBool окон не
 ; открывают, замечания уходят вызывающему, а планы валидируют вход, а не
 ; передают его в запись как есть.
+;
+; Точка 26: production-интеграция пяти animationStyle. Проверяет enum,
+; default/full reset, Settings wire и наличие только выбранных WinAPI-
+; механизмов без демонстрационного UI playground.
 
 drawerPath := A_ScriptDir "\..\..\src\drawer.ahk"
 slotsPath  := A_ScriptDir "\..\..\src\Slots.ahk"
@@ -2109,6 +2113,56 @@ if FileExist(drawerPath) {
         InStr(codeHide, "Slide(hwnd, g.sx, g.sy, g.hx, g.hy, g.w, g.h, Round(animMs * 0.4))") > 0)
     Assert("25e: Slide корректно отрабатывает animSteps < 1 без анимации",
         InStr(codeSlide, "if (animSteps < 1) {") > 0)
+}
+
+; ---------------------------------------------------------------------
+; Точка 26: animationStyle и перенос playground effects
+; ---------------------------------------------------------------------
+if FileExist(drawerPath) {
+    src26 := FileRead(drawerPath, "UTF-8")
+    portPath26 := A_ScriptDir "\..\..\src\webview\SettingsPort.ahk"
+    port26 := FileExist(portPath26) ? FileRead(portPath26, "UTF-8") : ""
+    viewPath26 := A_ScriptDir "\..\..\settings-ui\src\views\GeneralView.vue"
+    view26 := FileExist(viewPath26) ? FileRead(viewPath26, "UTF-8") : ""
+
+    Assert("26a: LoadConfig использует classic при отсутствующем animationStyle",
+        InStr(src26, 'IniRead(path, "general", "animationStyle", "classic")') > 0)
+    Assert("26b: enum содержит ровно пять утверждённых значений",
+        InStr(src26, 'return ["classic", "reveal", "dwmSlide", "dwmSlideFade", "dwmShrink"]') > 0)
+    Assert("26c: full reset явно возвращает animationStyle=classic",
+        InStr(src26, '{ sec: "general", key: "animationStyle", val: "classic" }') > 0)
+    Assert("26d: classic сохраняет прежние Show/Hide Slide вызовы и тайминг",
+        InStr(src26, 'if (animationStyle = "classic")') > 0
+     && InStr(src26, "Slide(hwnd, g.hx, g.hy, g.sx, g.sy, g.w, g.h)") > 0
+     && InStr(src26, "Slide(hwnd, g.sx, g.sy, g.hx, g.hy, g.w, g.h, Round(animMs * 0.4))") > 0)
+    Assert("26e: reveal использует SetWindowRgn и восстанавливает исходный регион",
+        InStr(src26, 'AnimationReveal(hwnd, g, true, animMs)') > 0
+     && InStr(src26, '"user32\SetWindowRgn"') > 0
+     && InStr(src26, "AnimationRestoreRegion(hwnd, original)") > 0)
+    Assert("26f: DWM эффекты регистрируют, обновляют и освобождают thumbnail",
+        InStr(src26, '"dwmapi\DwmRegisterThumbnail"') > 0
+     && InStr(src26, '"dwmapi\DwmUpdateThumbnailProperties"') > 0
+     && InStr(src26, '"dwmapi\DwmUnregisterThumbnail"') > 0)
+    Assert("26g: DWM кадр совместно обрезает destination и source",
+        InStr(src26, "sl := Round((l - x) * scene.sw / w)") > 0
+     && InStr(src26, "sr := Round((r - x) * scene.sw / w)") > 0)
+    Assert("26g2: кривые и пороги Smooth перенесены без изменения",
+        InStr(src26, "AnimationEase(t, 0.12, 0.28)") > 0
+     && InStr(src26, 't ** 1.12') > 0
+     && InStr(src26, "AnimationSoftPhase(t, 0.05, 0.90)") > 0
+     && InStr(src26, "AnimationSoftPhase(t, 0.66, 0.96)") > 0
+     && InStr(src26, "AnimationSoftPhase(departure, 0.36, 0.97)") > 0)
+    Assert("26h: Settings port раздельно передаёт style и существующий timing",
+        InStr(port26, '"style", String(Opt(g, "animationStyle", "classic"))') > 0
+     && InStr(port26, 'this._Text(anim, "style", "general.animation.style"') > 0
+     && InStr(port26, 'this._Int(anim, "durationMs", "general.animation.durationMs"') > 0)
+    Assert("26i: production Settings содержит один selector вида без fade checkbox",
+        InStr(view26, 'data-testid="animationStyle"') > 0
+     && InStr(view26, 'data-testid="fade"') = 0)
+    Assert("26j: demo compare/replay/slow controls не перенесены в production",
+        InStr(src26, "Сравнить 1–4") = 0
+     && InStr(src26, "Замедлить ×4") = 0
+     && InStr(src26, "Повторять цикл") = 0)
 }
 
 out := ""

@@ -323,8 +323,9 @@ SmokeWatch() {
 
     # --- сам файл ----------------------------------------------------
     $after = [IO.File]::ReadAllText($cfg, [Text.Encoding]::Unicode)
-    Check "5a: в [general] записались blurMs, handles и пресет анимации" `
+    Check "5a: в [general] записались blurMs, handles, вид и пресет анимации" `
         (($after -match '(?m)^blurMs=300\s*$') -and ($after -match '(?m)^handles=false\s*$') `
+         -and ($after -match '(?m)^animationStyle=dwmSlideFade\s*$') `
          -and ($after -match '(?m)^animMs=100\s*$') -and ($after -match '(?m)^animSteps=10\s*$'))
     Check "5b: accent появился ключом, которого в файле не было" ($after -match '(?m)^accent=332A35\s*$')
     Check "5c: в [dynamic] записался width=80, соседние ключи целы" `

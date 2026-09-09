@@ -110,6 +110,7 @@
       eq('widthPercent', '70')
       eq('edge', 'right')
       eq('monitorKind', 'cursor')
+      eq('animationStyle', 'classic')
       eq('animPreset', 'normal')
       eq('animMs', '160')
       eq('animSteps', '14')
@@ -353,10 +354,11 @@
       await apply(() => /допустимо от 5 до 100/.test(text('status')))
       post('smoke.range-error')
 
-      // 4. Правка четырёх полей разом: число, цвет, пресет анимации и
-      //    чекбокс. Все они уезжают одним settings.apply.
+      // 4. Вид и темп анимации остаются независимыми полями и уезжают
+      //    вместе с остальными правками одним settings.apply.
       setText('widthPercent', '80')
       setText('blurCheckMs', '300')
+      setPick('animationStyle', 'dwmSlideFade')
       setPick('animPreset', 'fast')
       setCheck('handlesEnabled', false)
       q('swatch-332A35').click()
@@ -366,6 +368,7 @@
       await wait(() => /300/.test(text('blurApplied')), 5000)
       eq('animMs', '100')
       eq('animSteps', '10')
+      eq('animationStyle', 'dwmSlideFade')
       post('smoke.saved')
       tab('Slots')
       await wait(() => q('slot-9') && watching, 5000)

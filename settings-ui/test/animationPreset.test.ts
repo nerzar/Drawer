@@ -27,7 +27,7 @@ function makeGeneralSettings(durationMs = 160, steps = 14): GeneralSettings {
       hideOnBlur: true,
     },
     handlesEnabled: true,
-    animation: { durationMs, steps },
+    animation: { style: 'classic', durationMs, steps },
     blurCheckMs: 250,
     accent: '2A2E35',
   }
@@ -81,13 +81,14 @@ test('во время текущего unsaved edit-session явный выбо�
 })
 
 test('ручная правка уходит в wire DTO через существующий save path', () => {
-  const draft = draftFromState(makeGeneralSettings(160, 14))
+    const draft = draftFromState(makeGeneralSettings(160, 14))
+  draft.animationStyle = 'dwmSlideFade'
   applyAnimPreset(draft, 'custom')
   draft.animMs = '220'
   draft.animSteps = '18'
 
   const wire = draftToWire(draft)
-  assert.deepEqual(wire.animation, { durationMs: 220, steps: 18 })
+  assert.deepEqual(wire.animation, { style: 'dwmSlideFade', durationMs: 220, steps: 18 })
   // Проверяем, что animCustom не протекает в wire DTO
   assert.equal('animCustom' in (wire as unknown as Record<string, unknown>), false)
 })

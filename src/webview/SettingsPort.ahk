@@ -13,9 +13,9 @@
 ; SettingsApplyPlan. Второй persistence не появляется — это условие
 ; принятого gate, а не стилистика.
 ;
-; Через порт проходит вся вкладка General: те же десять ключей, что
+; Через порт проходит вся вкладка General: те же ключи, что
 ; правит native ([dynamic] width/edge/monitor/activateOnShow/hideOnBlur и
-; [general] handles/animMs/animSteps/blurMs/accent), а также существующие
+; [general] handles/animMs/animSteps/animationStyle/blurMs/accent), а также существующие
 ; permanent Slots через SettingsSlotsPlan и общий native picker.
 ; Bind/release подключаются через SlotBind/SlotRelease к рантайму; conversion отклоняется в slotEdits.
 
@@ -308,6 +308,7 @@ class DrawerSettingsPort {
             noAnim:         false,
             animMs:         this._Int(anim, "durationMs", "general.animation.durationMs", &err, &field),
             animSteps:      this._Int(anim, "steps", "general.animation.steps", &err, &field),
+            animationStyle: this._Text(anim, "style", "general.animation.style", &err, &field),
             blurMs:         this._Int(g, "blurCheckMs", "general.blurCheckMs", &err, &field),
             accent:         this._Text(g, "accent", "general.accent", &err, &field),
             handleWidth:    this._Int(JsonGet(g, "handle", 0), "width", "general.handle.width", &err, &field),
@@ -339,6 +340,7 @@ class DrawerSettingsPort {
             "general.handlesEnabled",                 "кромки у края экрана",
             "general.animation.durationMs",           "длительность анимации",
             "general.animation.steps",                "шаги анимации",
+            "general.animation.style",                "вид анимации",
             "general.blurCheckMs",                    "проверка потери фокуса",
             "general.accent",                         "цвет акцента",
             "general.handle.width",                   "размер кромки",
@@ -517,7 +519,8 @@ class DrawerSettingsPort {
         return Map(
             "dynamicDefaults", this._BehaviorDto(g.dynamicDefaults),
             "handlesEnabled", JsonB(g.handlesEnabled),
-            "animation", Map("durationMs", this._Num(g.animMs, 160),
+            "animation", Map("style", String(Opt(g, "animationStyle", "classic")),
+                             "durationMs", this._Num(g.animMs, 160),
                              "steps", this._Num(g.animSteps, 14)),
             "blurCheckMs", this._Num(g.blurMs, 250),
             "accent", String(Opt(g, "accent", "2A2E35")),

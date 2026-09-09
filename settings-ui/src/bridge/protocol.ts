@@ -20,6 +20,7 @@ export type ErrorCode = (typeof ERROR_CODES)[number]
 
 export type SlotNumber = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
 export type Edge = 'left' | 'right' | 'top' | 'bottom'
+export type AnimationStyle = 'classic' | 'reveal' | 'dwmSlide' | 'dwmSlideFade' | 'dwmShrink'
 
 // invalid — значение из config.ini, которого не бывает у контролов:
 // AHK не притворяется, что там cursor, потому что показ такого слота
@@ -42,7 +43,7 @@ export type SlotBehavior = {
 export type GeneralSettings = {
   dynamicDefaults: SlotBehavior
   handlesEnabled: boolean
-  animation: { durationMs: number; steps: number }
+  animation: { style: AnimationStyle; durationMs: number; steps: number }
   blurCheckMs: number
   accent: string
   handle: { width: number; height: number; gap: number }
