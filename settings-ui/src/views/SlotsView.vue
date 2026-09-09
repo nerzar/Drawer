@@ -583,7 +583,6 @@ async function resetBoundSlot() {
   background: var(--bg-card);
   overflow: hidden;
   overflow-y: auto;
-  scrollbar-gutter: stable;
 }
 .slotrow {
   width: 100%;
@@ -673,7 +672,6 @@ async function resetBoundSlot() {
   overflow: hidden;
   overflow-y: auto;
   min-width: 0;
-  scrollbar-gutter: stable;
 }
 .detail-head {
   display: flex;
