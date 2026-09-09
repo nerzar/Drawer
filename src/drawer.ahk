@@ -1539,6 +1539,12 @@ AnimationDwmOpen(hwnd, mi) {
         if (scene.sw < 1 || scene.sh < 1)
             throw Error("DWM thumbnail source has empty size")
         AnimationDwmVisible(scene, false)
+        ; scene.gui — новое +AlwaysOnTop окно во весь монитор; Windows
+        ; ставит его выше уже существующих topmost-окон, включая кромку.
+        ; На время анимации кромка кликнутого слота оказывается под ней и
+        ; моргает, когда сцена закрывается в конце. Возвращаем кромки
+        ; наверх сразу после появления сцены — до начала кадров.
+        HandlesTopmostAll()
         return scene
     } catch as e {
         AnimationDwmClose(scene)
