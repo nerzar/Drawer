@@ -519,7 +519,7 @@ class DrawerSettingsPort {
         return Map(
             "dynamicDefaults", this._BehaviorDto(g.dynamicDefaults),
             "handlesEnabled", JsonB(g.handlesEnabled),
-            "animation", Map("style", String(Opt(g, "animationStyle", "classic")),
+            "animation", Map("style", String(Opt(g, "animationStyle", "dwmSlideFade")),
                              "durationMs", this._Num(g.animMs, 160),
                              "steps", this._Num(g.animSteps, 14)),
             "blurCheckMs", this._Num(g.blurMs, 250),

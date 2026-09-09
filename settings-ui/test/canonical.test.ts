@@ -60,7 +60,7 @@ function state(...slots: SlotState[]): SettingsState {
     general: {
       dynamicDefaults: behavior,
       handlesEnabled: true,
-      animation: { style: 'classic', durationMs: 160, steps: 14 },
+      animation: { style: 'classic', durationMs: 167, steps: 14 },
       blurCheckMs: 250,
       accent: '2A2E35',
     },
@@ -836,7 +836,7 @@ test('G03-1: in-flight save sets status=saving and adopt would discard mutations
         hideOnBlur: true,
       },
       handlesEnabled: true,
-      animation: { style: 'classic', durationMs: 160, steps: 14 },
+      animation: { style: 'classic', durationMs: 167, steps: 14 },
       blurCheckMs: 250,
       accent: '2A2E35',
     },

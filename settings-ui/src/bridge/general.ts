@@ -44,19 +44,24 @@ export const EDGE_OPTIONS: { value: Edge; label: string }[] = [
 
 // Те же три пары, что у native (SettingsAnimPresets). Пресет — способ
 // показа двух ключей, а не новая настройка: на wire уезжают ровно
-// durationMs и steps.
+// durationMs и steps. Значения — Windows/Fluent baseline: faster ≈ 83 мс,
+// fast ≈ 167 мс, normal ≈ 250 мс.
 export const ANIM_PRESETS = [
-  { id: 'fast', label: 'Быстрая', ms: 100, steps: 10 },
-  { id: 'normal', label: 'Обычная', ms: 160, steps: 14 },
-  { id: 'smooth', label: 'Плавная', ms: 260, steps: 20 },
+  { id: 'fast', label: 'Быстрая', ms: 83, steps: 8 },
+  { id: 'normal', label: 'Обычная', ms: 167, steps: 14 },
+  { id: 'smooth', label: 'Плавная', ms: 250, steps: 20 },
 ] as const
 
+// Те же пять пунктов, что у native (AnimationStyleMenu): dwmSlide не
+// показываем отдельно — вне заблокированного соседним монитором края он
+// неотличим от classic, а на этом крае classic сам подменяется на reveal.
+// Названия описывают эффект, не технологию — без слова "DWM".
 export const ANIMATION_STYLE_OPTIONS: { value: AnimationStyle; label: string }[] = [
-  { value: 'classic', label: 'Классический slide' },
-  { value: 'reveal', label: 'Reveal' },
-  { value: 'dwmSlide', label: 'DWM slide' },
-  { value: 'dwmSlideFade', label: 'DWM slide + fade' },
-  { value: 'dwmShrink', label: 'DWM shrink-to-edge' },
+  { value: 'classic', label: 'Выезд' },
+  { value: 'reveal', label: 'Раскрытие' },
+  { value: 'fade', label: 'Растворение' },
+  { value: 'dwmSlideFade', label: 'Плавное появление' },
+  { value: 'dwmShrink', label: 'Всплытие' },
 ]
 
 export const ACCENT_PALETTE = [

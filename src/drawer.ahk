@@ -82,9 +82,9 @@ DebugLog("[STARTUP] Directory: " A_ScriptDir ", Config: " configPath)
 try DebugLog("[STARTUP] Monitors detected: " MonitorGetCount())
 
 iconUriCache := Map()   ; hwnd -> data-URI иконки окна (см. SlotIconUri)
-animMs       := 160
+animMs       := 167
 animSteps    := 14
-animationStyle := "classic"
+animationStyle := "dwmSlideFade"
 blurMs       := 250
 handlesOn    := true
 HANDLE_BG    := "2A2E35"
@@ -118,13 +118,13 @@ LoadConfig(path, &diags) {
     diags := []
     DebugLog("[CONFIG] LoadConfig reading " path)
 
-    animMs    := IniRead(path, "general", "animMs", 160)
+    animMs    := IniRead(path, "general", "animMs", 167)
     animSteps := IniRead(path, "general", "animSteps", 14)
-    animationStyle := IniRead(path, "general", "animationStyle", "classic")
+    animationStyle := IniRead(path, "general", "animationStyle", "dwmSlideFade")
     if !AnimationStyleValid(animationStyle) {
         diags.Push("config.ini: [general] animationStyle=" animationStyle
-            " — ожидается classic, reveal, dwmSlide, dwmSlideFade или dwmShrink; взято classic")
-        animationStyle := "classic"
+            " — ожидается classic, reveal, fade, dwmSlide, dwmSlideFade или dwmShrink; взято dwmSlideFade")
+        animationStyle := "dwmSlideFade"
     }
     blurMs    := IniRead(path, "general", "blurMs", 250)
     handleWidth := IniRead(path, "general", "handleWidth", 22)
@@ -209,8 +209,11 @@ LoadConfig(path, &diags) {
              perm: perm, dynamic: dynamic, overrides: overrides, hotkeys: hotkeys }
 }
 
+; Валидные значения config.ini — включая dwmSlide: он больше не
+; предлагается в Settings (см. AnimationStyleMenu), но старый config.ini
+; с этим ключом должен продолжать работать, а не откатываться на default.
 AnimationStyles() {
-    return ["classic", "reveal", "dwmSlide", "dwmSlideFade", "dwmShrink"]
+    return ["classic", "reveal", "fade", "dwmSlide", "dwmSlideFade", "dwmShrink"]
 }
 
 AnimationStyleValid(value) {
@@ -218,6 +221,18 @@ AnimationStyleValid(value) {
         if (value = style)
             return true
     return false
+}
+
+; Список для Settings — value/label парами, а не значениями AnimationStyles()
+; один в один: dwmSlide не показываем отдельным пунктом, он неотличим от
+; Выезда вне заблокированного соседним монитором края (тот сам подменяется
+; на Раскрытие, см. Show()/Hide()). Названия описывают эффект, не технологию.
+AnimationStyleMenu() {
+    return [{ value: "classic",      label: "Выезд" },
+            { value: "reveal",       label: "Раскрытие" },
+            { value: "fade",         label: "Растворение" },
+            { value: "dwmSlideFade", label: "Плавное появление" },
+            { value: "dwmShrink",    label: "Всплытие" }]
 }
 
 ; "true"/"false" — единственный ожидаемый формат. Непустая строка "false"
@@ -583,9 +598,9 @@ OnFullResetHotkey(*) {
 
 FullResetDefaultWrites() {
     return [
-        { sec: "general", key: "animMs", val: "160" },
+        { sec: "general", key: "animMs", val: "167" },
         { sec: "general", key: "animSteps", val: "14" },
-        { sec: "general", key: "animationStyle", val: "classic" },
+        { sec: "general", key: "animationStyle", val: "dwmSlideFade" },
         { sec: "general", key: "blurMs", val: "250" },
         { sec: "general", key: "handles", val: "true" },
         { sec: "dynamic", key: "name", val: "Слот" },
@@ -1289,30 +1304,50 @@ Slide(hwnd, fromX, fromY, toX, toY, w, h, duration := -1) {
     try WinMove(toX, toY, w, h, "ahk_id " hwnd)
 }
 
-; Нормализованные кривые и последовательность каналов — из проверенного
-; playground. Их темп задают существующие animMs/animSteps; отдельного
-; motion framework и новых пресетов здесь нет.
+; Fluent baseline вместо самодельных per-preset кривых: один и тот же
+; прогресс на показе и на скрытии для всех каналов канала — Fast Out,
+; Slow In на входе, Slow Out, Fast In на выходе. Темп задают
+; существующие animMs/animSteps; отдельного набора пресетов кривой нет.
+;
+; progress: 0 — окно полностью спрятано, 1 — полностью показано, в обоих
+; направлениях (Show идёт 0→1, Hide — 1→0), чтобы каналы ниже не знали,
+; show сейчас или hide.
 AnimationMotionAt(t, show, style) {
-    if show {
-        position := AnimationEase(t, 0.12, 0.28)
-        scale := style = "dwmShrink" ? 0.18 + 0.82 * AnimationSoftPhase(t, 0.05, 0.90) : 1
-        opacity := (style = "dwmSlideFade" || style = "dwmShrink")
-            ? AnimationSoftPhase(t, 0, 0.64) : 1
-    } else {
-        departure := AnimationEase(style = "reveal" ? t ** 1.12 : t, 0.62, 0.90)
-        position := 1 - departure
-        scale := style = "dwmShrink" ? 1 - 0.82 * AnimationSoftPhase(t, 0.18, 0.90) : 1
-        opacity := style = "dwmShrink" ? 1 - AnimationSoftPhase(t, 0.66, 0.96)
-            : style = "dwmSlideFade" ? 1 - AnimationSoftPhase(departure, 0.36, 0.97) : 1
-    }
+    progress := show ? AnimationEaseShow(t) : (1 - AnimationEaseHide(t))
+    position := (style = "fade") ? 1 : progress
+    ; Всплытие — Fluent Pop: некрутой scale у самого края, не "минимизация".
+    scale := (style = "dwmShrink") ? (0.6 + 0.4 * progress) : 1
+    ; Растворение — чистый Fade, без движения. Плавное появление и
+    ; Всплытие уже приняты владельцем с прозрачностью, отстающей от
+    ; перевода/масштаба — сохраняю эту хореографию, пересчитывая
+    ; отставание от общего Fluent-прогресса, а не отдельной кривой.
+    opacity := 1
+    if (style = "fade")
+        opacity := progress
+    else if (style = "dwmSlideFade")
+        opacity := AnimationLag(progress, 0.35)
+    else if (style = "dwmShrink")
+        opacity := AnimationLag(progress, 0.2)
     return { position: position, scale: scale, opacity: opacity }
 }
 
-AnimationEase(t, x1, x2) {
+; Show: Fast Out, Slow In — cubic-bezier(0,0,0,1).
+AnimationEaseShow(t) {
+    return AnimationCubicBezier(t, 0, 0, 0, 1)
+}
+
+; Hide: Slow Out, Fast In — cubic-bezier(1,0,1,1).
+AnimationEaseHide(t) {
+    return AnimationCubicBezier(t, 1, 0, 1, 1)
+}
+
+; Тот же алгоритм, которым браузеры считают CSS cubic-bezier(): решаем
+; относительно параметра u по X (времени), затем берём Y по тому же u.
+AnimationCubicBezier(t, x1, y1, x2, y2) {
     if (t <= 0 || t >= 1)
         return Max(0, Min(1, t))
     lo := 0, hi := 1
-    Loop 16 {
+    Loop 20 {
         u := (lo + hi) / 2
         bx := 3 * (1 - u) ** 2 * u * x1 + 3 * (1 - u) * u * u * x2 + u ** 3
         if (bx < t)
@@ -1321,12 +1356,14 @@ AnimationEase(t, x1, x2) {
             hi := u
     }
     u := (lo + hi) / 2
-    return u * u * (3 - 2 * u)
+    return 3 * (1 - u) ** 2 * u * y1 + 3 * (1 - u) * u * u * y2 + u ** 3
 }
 
-AnimationSoftPhase(t, start, finish) {
-    u := Max(0, Min(1, (t - start) / (finish - start)))
-    return u * u * u * (u * (6 * u - 15) + 10)
+; Перевзводит уже посчитанный Fluent-прогресс так, чтобы канал начинал
+; меняться позже на долю lag (0..1) общего пути, но всё ещё доходил до
+; 0/1 к его концу — без отдельной кривой и порогов на пресет.
+AnimationLag(progress, lag) {
+    return Max(0, Min(1, (progress - lag) / (1 - lag)))
 }
 
 ; Общий Show/Hide для reveal — вызывается и напрямую при animationStyle=
@@ -1535,7 +1572,7 @@ AnimationDwmDraw(scene, g, style, t, show) {
     fw := g.w, fh := g.h
     fx := g.sx - scene.x, fy := g.sy - scene.y
     w := Max(1, Round(fw * motion.scale)), h := Max(1, Round(fh * motion.scale))
-    hiddenScale := style = "dwmShrink" ? 0.18 : 1
+    hiddenScale := style = "dwmShrink" ? 0.6 : 1   ; см. AnimationMotionAt: тот же минимальный scale Pop
     cx := fx + fw / 2, cy := fy + fh / 2
     switch g.edge {
     case "right": cx := cx * p + (scene.w + fw * hiddenScale / 2) * (1 - p)
@@ -2731,19 +2768,26 @@ SettingsMonPick(ddl, cur) {
 ; показа тех же двух ключей, новых настроек не появляется. Пара, не
 ; совпавшая ни с одним пресетом, показывается как «Своя» вместе с
 ; настоящими числами: молча округлять чужие значения нельзя.
+; Windows/Fluent baseline: faster ≈ 83 мс, fast ≈ 167 мс, normal ≈ 250 мс.
 SettingsAnimPresets() {
-    return [{ name: "Быстрая",  ms: 100, steps: 10 },
-            { name: "Обычная",  ms: 160, steps: 14 },
-            { name: "Плавная",  ms: 260, steps: 20 }]
+    return [{ name: "Быстрая",  ms: 83,  steps: 8 },
+            { name: "Обычная",  ms: 167, steps: 14 },
+            { name: "Плавная",  ms: 250, steps: 20 }]
 }
 
 SettingsAnimationStyleItems() {
-    return ["Классический slide", "Reveal", "DWM slide", "DWM slide + fade", "DWM shrink-to-edge"]
+    items := []
+    for entry in AnimationStyleMenu()
+        items.Push(entry.label)
+    return items
 }
 
+; Легаси-значение dwmSlide (не в меню) откатывается на первый пункт —
+; визуально оно совпадает с Выездом вне заблокированного соседним
+; монитором края, где Выезд и так подменяется на Раскрытие.
 SettingsAnimationStylePick(ddl, current) {
-    for i, style in AnimationStyles() {
-        if (current = style) {
+    for i, entry in AnimationStyleMenu() {
+        if (current = entry.value) {
             ddl.Choose(i)
             return
         }
@@ -2752,8 +2796,9 @@ SettingsAnimationStylePick(ddl, current) {
 }
 
 SettingsAnimationStyleVal(ddl) {
-    return (ddl.Value >= 1 && ddl.Value <= AnimationStyles().Length)
-        ? AnimationStyles()[ddl.Value] : "classic"
+    menu := AnimationStyleMenu()
+    return (ddl.Value >= 1 && ddl.Value <= menu.Length)
+        ? menu[ddl.Value].value : "classic"
 }
 
 SettingsAnimItems() {
@@ -3749,7 +3794,7 @@ SettingsAnimationStyleIn(v, label, &err) {
     v := String(v)
     if AnimationStyleValid(v)
         return v
-    return SettingsBad(label ": ожидается classic, reveal, dwmSlide, dwmSlideFade или dwmShrink", &err)
+    return SettingsBad(label ": ожидается classic, reveal, fade, dwmSlide, dwmSlideFade или dwmShrink", &err)
 }
 
 SettingsMonitorIn(v, label, req, &err) {

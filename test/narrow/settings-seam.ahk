@@ -2125,12 +2125,12 @@ if FileExist(drawerPath) {
     viewPath26 := A_ScriptDir "\..\..\settings-ui\src\views\GeneralView.vue"
     view26 := FileExist(viewPath26) ? FileRead(viewPath26, "UTF-8") : ""
 
-    Assert("26a: LoadConfig использует classic при отсутствующем animationStyle",
-        InStr(src26, 'IniRead(path, "general", "animationStyle", "classic")') > 0)
-    Assert("26b: enum содержит ровно пять утверждённых значений",
-        InStr(src26, 'return ["classic", "reveal", "dwmSlide", "dwmSlideFade", "dwmShrink"]') > 0)
-    Assert("26c: full reset явно возвращает animationStyle=classic",
-        InStr(src26, '{ sec: "general", key: "animationStyle", val: "classic" }') > 0)
+    Assert("26a: LoadConfig использует dwmSlideFade при отсутствующем animationStyle",
+        InStr(src26, 'IniRead(path, "general", "animationStyle", "dwmSlideFade")') > 0)
+    Assert("26b: enum содержит шесть утверждённых значений, включая fade",
+        InStr(src26, 'return ["classic", "reveal", "fade", "dwmSlide", "dwmSlideFade", "dwmShrink"]') > 0)
+    Assert("26c: full reset явно возвращает принятый владельцем default dwmSlideFade",
+        InStr(src26, '{ sec: "general", key: "animationStyle", val: "dwmSlideFade" }') > 0)
     Assert("26d: classic сохраняет прежние Show/Hide Slide вызовы и тайминг",
         InStr(src26, 'if (animationStyle = "classic")') > 0
      && InStr(src26, "Slide(hwnd, g.hx, g.hy, g.sx, g.sy, g.w, g.h)") > 0
@@ -2146,14 +2146,13 @@ if FileExist(drawerPath) {
     Assert("26g: DWM кадр совместно обрезает destination и source",
         InStr(src26, "sl := Round((l - x) * scene.sw / w)") > 0
      && InStr(src26, "sr := Round((r - x) * scene.sw / w)") > 0)
-    Assert("26g2: кривые и пороги Smooth перенесены без изменения",
-        InStr(src26, "AnimationEase(t, 0.12, 0.28)") > 0
-     && InStr(src26, 't ** 1.12') > 0
-     && InStr(src26, "AnimationSoftPhase(t, 0.05, 0.90)") > 0
-     && InStr(src26, "AnimationSoftPhase(t, 0.66, 0.96)") > 0
-     && InStr(src26, "AnimationSoftPhase(departure, 0.36, 0.97)") > 0)
+    Assert("26g2: Fluent baseline — Fast Out/Slow In на показе, Slow Out/Fast In на скрытии",
+        InStr(src26, "AnimationCubicBezier(t, 0, 0, 0, 1)") > 0
+     && InStr(src26, "AnimationCubicBezier(t, 1, 0, 1, 1)") > 0
+     && InStr(src26, "AnimationEaseShow(t)") > 0
+     && InStr(src26, "AnimationEaseHide(t)") > 0)
     Assert("26h: Settings port раздельно передаёт style и существующий timing",
-        InStr(port26, '"style", String(Opt(g, "animationStyle", "classic"))') > 0
+        InStr(port26, '"style", String(Opt(g, "animationStyle", "dwmSlideFade"))') > 0
      && InStr(port26, 'this._Text(anim, "style", "general.animation.style"') > 0
      && InStr(port26, 'this._Int(anim, "durationMs", "general.animation.durationMs"') > 0)
     Assert("26i: production Settings содержит один selector вида без fade checkbox",
@@ -2240,6 +2239,60 @@ if FileExist(drawerPath) {
     Assert("29c: явный reveal и classic-фоллбек используют одну и ту же реализацию",
         (StrSplit(src29, "ShowReveal(hwnd, g, activate)").Length - 1) = 3
      && (StrSplit(src29, "HideReveal(hwnd, g)").Length - 1) = 3)
+}
+
+; ---------------------------------------------------------------------
+; Точка 30: Fluent-редизайн — компактное меню без слова "DWM", свежий
+; default (dwmSlideFade), новый эффект fade и Windows/Fluent-длительности.
+; ---------------------------------------------------------------------
+if FileExist(drawerPath) {
+    src30 := FileRead(drawerPath, "UTF-8")
+    viewPath30 := A_ScriptDir "\..\..\settings-ui\src\bridge\general.ts"
+    view30 := FileExist(viewPath30) ? FileRead(viewPath30, "UTF-8") : ""
+
+    ; 30a: меню Settings — пять пунктов, ни один не называет технологию.
+    menuStart30 := InStr(src30, "AnimationStyleMenu() {")
+    menuEnd30 := InStr(src30, '; "true"/"false" — единственный ожидаемый формат')
+    menuBody30 := (menuStart30 > 0 && menuEnd30 > menuStart30)
+        ? SubStr(src30, menuStart30, menuEnd30 - menuStart30) : ""
+    ; Регистрозависимо: "DWM" — как оно писалось бы в подписи; строчный
+    ; "dwm" законно остаётся в служебных value (dwmSlideFade, dwmShrink,
+    ; dwmSlide) — они не видны пользователю, это внутренний ключ config.ini.
+    Assert("30a: меню анимации не упоминает DWM ни в одной подписи",
+        menuBody30 != "" && InStr(menuBody30, "DWM", true) = 0)
+    Assert("30b: Settings-дропдаун собран из AnimationStyleMenu, а не из полного enum",
+        InStr(src30, "for entry in AnimationStyleMenu()") > 0
+     && InStr(src30, "menu := AnimationStyleMenu()") > 0)
+
+    ; 30c: fade — валидный стиль и отдельная ветка в движке (чистая
+    ; прозрачность, без перевода/масштаба).
+    Assert("30c: fade — валидное значение enum",
+        InStr(src30, '["classic", "reveal", "fade", "dwmSlide", "dwmSlideFade", "dwmShrink"]') > 0)
+    Assert("30d: fade в AnimationMotionAt — без перевода, только opacity",
+        InStr(src30, '(style = "fade") ? 1 : progress') > 0
+     && InStr(src30, 'if (style = "fade")') > 0
+     && InStr(src30, "opacity := progress") > 0)
+
+    ; 30e: dwmSlideFade остаётся default — принят владельцем, не ухудшаем.
+    Assert("30e: dwmSlideFade — default и в LoadConfig, и в full reset",
+        InStr(src30, 'IniRead(path, "general", "animationStyle", "dwmSlideFade")') > 0
+     && InStr(src30, '{ sec: "general", key: "animationStyle", val: "dwmSlideFade" }') > 0)
+
+    ; 30f: длительности — Windows/Fluent baseline (faster/fast/normal).
+    Assert("30f: пресеты темпа — 83/167/250 мс (faster/fast/normal)",
+        InStr(src30, "ms: 83,  steps: 8") > 0
+     && InStr(src30, "ms: 167, steps: 14") > 0
+     && InStr(src30, "ms: 250, steps: 20") > 0)
+
+    if (view30 != "") {
+        optStart30 := InStr(view30, "export const ANIMATION_STYLE_OPTIONS")
+        optEnd30 := InStr(view30, "export const ACCENT_PALETTE")
+        optBody30 := (optStart30 > 0 && optEnd30 > optStart30)
+            ? SubStr(view30, optStart30, optEnd30 - optStart30) : ""
+        Assert("30g: WebView2-меню синхронно с native — без DWM, с fade",
+            optBody30 != "" && InStr(optBody30, "value: 'fade'") > 0
+         && InStr(optBody30, "DWM", true) = 0)
+    }
 }
 
 out := ""
