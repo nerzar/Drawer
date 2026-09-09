@@ -45,7 +45,7 @@ async function onCopyPath() {
     <div class="about-head">
       <AppLogo :size="52" />
       <div>
-        <h1 class="about-title">Drawer <span class="version-pill">0.1.2</span></h1>
+        <h1 class="about-title">Drawer <span class="version-pill">0.2.0</span></h1>
       </div>
     </div>
 

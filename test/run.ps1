@@ -3,7 +3,7 @@
 
     powershell -ExecutionPolicy Bypass -File test\run.ps1
     powershell -ExecutionPolicy Bypass -File test\run.ps1 -Suites all
-    powershell -ExecutionPolicy Bypass -File test\run.ps1 -Exe dist\Drawer-v0.1.2\Drawer.exe
+    powershell -ExecutionPolicy Bypass -File test\run.ps1 -Exe dist\Drawer-v0.2.0\Drawer.exe
 
 ВНИМАНИЕ: тесты двигают настоящие окна, мышь и фокус на том рабочем
 столе, где запущены. Работать за машиной во время прогона нельзя —

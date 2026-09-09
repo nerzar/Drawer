@@ -26,7 +26,7 @@ goes back — nothing minimised, nothing closed, the game keeps running.
 
 ## Quick Start
 
-1. Download `Drawer-v0.1.2-beta.zip` from **Releases**.
+1. Download the latest `Drawer-vX.Y.Z.zip` from **Releases**.
 2. Extract it anywhere.
 3. Edit `config.ini` if you want to customize the default setup.
 4. Run `Drawer.exe`.
