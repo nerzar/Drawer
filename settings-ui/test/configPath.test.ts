@@ -3,6 +3,7 @@
 // Запуск: npm test.
 
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 
 import { copyConfigPath, fetchConfigPath, isConfigPath } from '../src/bridge/about'
@@ -10,6 +11,12 @@ import { SettingsClient } from '../src/bridge/client'
 import type { SettingsTransport } from '../src/bridge/client'
 
 const HOST_PATH = 'C:\\fullreset-test\\src\\config.ini'
+const aboutSource = readFileSync(new URL('../src/views/AboutView.vue', import.meta.url), 'utf8')
+
+test('About компилирует типизированные ref как TypeScript', () => {
+  assert.match(aboutSource, /^<script setup lang="ts">/)
+  assert.match(aboutSource, /ref<string \| null>/)
+})
 
 // Минимальный транспорт: отвечает canned-результатом на два новых action,
 // остальные действия отклоняет как unsupported.
