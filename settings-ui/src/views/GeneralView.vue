@@ -133,8 +133,8 @@ const selectedMonitor = computed({
           </div>
         </div>
         <label class="check-row" style="margin-top: 20px;">
-          <input type="checkbox" data-testid="activateOnShow" :disabled="saving" v-model="d.activateOnShow" />
-          <span>Активировать окно при открытии</span>
+          <input type="checkbox" data-testid="handlesEnabled" :disabled="saving" v-model="d.handlesEnabled" />
+          <span>Кромки у края экрана</span>
         </label>
         <label class="check-row">
           <input type="checkbox" data-testid="hideOnBlur" :disabled="saving" v-model="d.hideOnBlur" />
@@ -144,11 +144,6 @@ const selectedMonitor = computed({
 
       <div class="card">
         <h3>Внешний вид</h3>
-        <label class="check-row" style="margin-bottom: 14px">
-          <input type="checkbox" data-testid="handlesEnabled" :disabled="saving" v-model="d.handlesEnabled" />
-          <span>Кромки у края экрана</span>
-        </label>
-
         <div class="row">
           <label>Размер кромки (px)</label>
           <div class="field">
