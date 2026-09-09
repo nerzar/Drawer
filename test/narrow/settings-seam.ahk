@@ -2165,6 +2165,27 @@ if FileExist(drawerPath) {
      && InStr(src26, "Повторять цикл") = 0)
 }
 
+; ---------------------------------------------------------------------
+; Точка 27: hideOnBlur уходит немедленно из foreground-хука, а не только
+; следующим тиком WatchBlur (мерцание "исчез -> всплыл -> уехал" на
+; DWM-эффектах при задержанном Hide).
+; ---------------------------------------------------------------------
+if FileExist(drawerPath) {
+    src27 := FileRead(drawerPath, "UTF-8")
+    focusPath27 := A_ScriptDir "\..\..\src\WindowFocus.ahk"
+    focus27 := FileExist(focusPath27) ? FileRead(focusPath27, "UTF-8") : ""
+
+    Assert("27a: WatchBlurCheck — общее тело проверки для одного watched-окна",
+        InStr(focus27, "WatchBlurCheck(hwnd)") > 0
+     && InStr(focus27, "try Hide(hwnd, st)") > 0)
+    Assert("27b: периодический WatchBlur делегирует в WatchBlurCheck, не дублирует Hide",
+        InStr(focus27, "for hwnd in watched.Clone()") > 0
+     && InStr(focus27, "WatchBlurCheck(hwnd)") > 0)
+    Assert("27c: ForegroundWork проверяет потерявшее фокус watched-окно сразу",
+        InStr(src27, "if (prev && prev != hwnd && WindowWatched(prev))") > 0
+     && InStr(src27, "WatchBlurCheck(prev)") > 0)
+}
+
 out := ""
 allOk := true
 for r in results {

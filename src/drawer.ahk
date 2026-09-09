@@ -662,6 +662,15 @@ ForegroundWork() {
     global state
     Critical()
     hwnd := WindowFocusGetFore(), prev := WindowFocusGetLastFore()
+    ; Слот с hideOnBlur уходит тем же событием, что забрало у него
+    ; передний план, а не следующим тиком WatchBlur (до blurMs мс
+    ; позже). Раньше эта задержка давала на новых видах анимации
+    ; заметное "исчез → всплыл → уехал": пользователь уже видел чужое
+    ; окно, а затем поверх него на миг всплывала полная DWM-копия перед
+    ; уходом. WatchBlur остаётся ниже как страховка для событий без
+    ; EVENT_SYSTEM_FOREGROUND (например, клик по пустому рабочему столу).
+    if (prev && prev != hwnd && WindowWatched(prev))
+        WatchBlurCheck(prev)
     if (!hwnd || !WinExist("ahk_id " hwnd))
         return
     ; EVENT_SYSTEM_FOREGROUND даёт lifecycle без polling: запущенное после

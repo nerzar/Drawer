@@ -121,20 +121,31 @@ Watch(hwnd, cfg) {
     SetTimer(WatchBlur, blurMs)
 }
 
-WatchBlur() {
+; Проверка и, если нужно, Hide для одного watched-окна — общее тело для
+; периодического WatchBlur и немедленного вызова из ForegroundWork при
+; потере переднего плана (см. её вызов там). Один и тот же lifecycle,
+; два триггера: событие даёт мгновенную реакцию, таймер остаётся
+; страховкой на случаи без EVENT_SYSTEM_FOREGROUND (например, клик по
+; пустому рабочему столу).
+WatchBlurCheck(hwnd) {
     global state
+    if !WindowFocusState.watched.Has(hwnd)
+        return
+    st := state.Has(hwnd) ? state[hwnd] : 0
+    if (!st || !WinExist("ahk_id " hwnd) || !IsDeployed(hwnd, st)) {
+        WatchForget(hwnd)
+        return
+    }
+    if StillFocused(hwnd)
+        return
+    try Hide(hwnd, st)
+}
+
+WatchBlur() {
     Critical()
     watched := WindowFocusState.watched
-    for hwnd in watched.Clone() {
-        st := state.Has(hwnd) ? state[hwnd] : 0
-        if (!st || !WinExist("ahk_id " hwnd) || !IsDeployed(hwnd, st)) {
-            WatchForget(hwnd)
-            continue
-        }
-        if StillFocused(hwnd)
-            continue
-        try Hide(hwnd, st)
-    }
+    for hwnd in watched.Clone()
+        WatchBlurCheck(hwnd)
     if !watched.Count
         SetTimer(WatchBlur, 0)
 }
