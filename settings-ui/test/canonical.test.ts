@@ -918,7 +918,6 @@ test('G03-2: GeneralView locks all save-participating inputs and actions during 
     'widthPercent',
     'edge',
     'monitorKind',
-    'activateOnShow',
     'hideOnBlur',
     'handlesEnabled',
     'accent',

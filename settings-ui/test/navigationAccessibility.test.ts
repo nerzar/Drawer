@@ -102,9 +102,9 @@ test('G06: CSS rules for contrast, focus-visible, scrollbars, and disabled opaci
   // Focus-visible treatment
   assert.match(stylesSource, /:focus-visible\s*\{[\s\S]*?outline:\s*2px solid var\(--accent-fg\);/)
 
-  // Scrollbar-gutter
-  assert.match(slotsSource, /\.list\s*\{[\s\S]*?scrollbar-gutter:\s*stable;/)
-  assert.match(slotsSource, /\.detail\s*\{[\s\S]*?scrollbar-gutter:\s*stable;/)
+  // Явный резерв под скроллбар убран — он давал лишний отступ, даже когда
+  // список слотов не скроллится.
+  assert.doesNotMatch(slotsSource, /scrollbar-gutter/)
 
   // Avoid compounded fieldset disabled opacity
   assert.match(slotsSource, /button\[disabled\],\s*input\[disabled\],\s*select\[disabled\]\s*\{\s*opacity:\s*0\.5;\s*\}/)
