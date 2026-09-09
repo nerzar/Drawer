@@ -52,17 +52,29 @@ export const ANIM_PRESETS = [
   { id: 'smooth', label: 'Плавная', ms: 250, steps: 20 },
 ] as const
 
-// Те же пять пунктов, что у native (AnimationStyleMenu): dwmSlide не
-// показываем отдельно — вне заблокированного соседним монитором края он
-// неотличим от classic, а на этом крае classic сам подменяется на reveal.
-// Названия описывают эффект, не технологию — без слова "DWM".
+// Те же четыре пункта, что у native (AnimationStyleMenu). classic снят
+// целиком (владелец решил не оставлять чистый slide реального окна),
+// dwmSlide не показываем отдельно — он не отличим от снятого classic
+// вне заблокированного соседним монитором края. Названия описывают
+// эффект, не технологию — без слова "DWM".
 export const ANIMATION_STYLE_OPTIONS: { value: AnimationStyle; label: string }[] = [
-  { value: 'classic', label: 'Выезд' },
   { value: 'reveal', label: 'Раскрытие' },
   { value: 'fade', label: 'Растворение' },
   { value: 'dwmSlideFade', label: 'Плавное появление' },
   { value: 'dwmShrink', label: 'Всплытие' },
 ]
+
+// Принятый владельцем default. Используется и как начальное состояние
+// черновика, и как откат для легаси/неизвестного значения (снятый
+// classic из старого config.ini, будущий незнакомый ключ) — молчаливый
+// пустой <select> хуже явного отката на то, что реально сейчас работает.
+export const DEFAULT_ANIMATION_STYLE: AnimationStyle = 'dwmSlideFade'
+
+export function normalizeAnimationStyle(style: unknown): AnimationStyle {
+  return ANIMATION_STYLE_OPTIONS.some((o) => o.value === style)
+    ? (style as AnimationStyle)
+    : DEFAULT_ANIMATION_STYLE
+}
 
 export const ACCENT_PALETTE = [
   '2A2E35',
@@ -70,7 +82,6 @@ export const ACCENT_PALETTE = [
   '2A352E',
   '2A3335',
   '332F2A',
-  '2E2E2E',
 ]
 
 export function isCustomAnim(animMs: string, animSteps: string): boolean {
@@ -94,7 +105,7 @@ export function draftFromState(g: GeneralSettings): GeneralDraft {
     activateOnShow: g.dynamicDefaults.activateOnShow,
     hideOnBlur: g.dynamicDefaults.hideOnBlur,
     handlesEnabled: g.handlesEnabled,
-    animationStyle: g.animation.style,
+    animationStyle: normalizeAnimationStyle(g.animation.style),
     animMs,
     animSteps,
     animCustom: isCustomAnim(animMs, animSteps),

@@ -29,7 +29,7 @@ const sharedBehavior: SlotBehavior = {
 const general: GeneralSettings = {
   dynamicDefaults: sharedBehavior,
   handlesEnabled: true,
-  animation: { style: 'classic', durationMs: 160, steps: 14 },
+  animation: { style: 'dwmSlideFade', durationMs: 167, steps: 14 },
   blurCheckMs: 120,
   accent: '2A2E35',
   handle: { width: 22, height: 34, gap: 8 },

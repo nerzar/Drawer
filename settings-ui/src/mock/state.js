@@ -8,7 +8,7 @@ import { reactive } from 'vue'
 // показывает им «унаследовано от [dynamic]». Уедет вместе со Slots.
 export const state = reactive({
   accent: '#2A2E35',
-  accentPalette: ['#2A2E35', '#332A35', '#2A352E', '#2A3335', '#332F2A', '#2E2E2E'],
+  accentPalette: ['#2A2E35', '#332A35', '#2A352E', '#2A3335', '#332F2A'],
 
   general: {
     sizePercent: 70,

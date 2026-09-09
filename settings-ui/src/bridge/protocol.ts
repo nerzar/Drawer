@@ -20,7 +20,7 @@ export type ErrorCode = (typeof ERROR_CODES)[number]
 
 export type SlotNumber = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
 export type Edge = 'left' | 'right' | 'top' | 'bottom'
-export type AnimationStyle = 'classic' | 'reveal' | 'fade' | 'dwmSlide' | 'dwmSlideFade' | 'dwmShrink'
+export type AnimationStyle = 'reveal' | 'fade' | 'dwmSlide' | 'dwmSlideFade' | 'dwmShrink'
 
 // invalid — значение из config.ini, которого не бывает у контролов:
 // AHK не притворяется, что там cursor, потому что показ такого слота

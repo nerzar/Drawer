@@ -7,12 +7,11 @@ import type { SlotDraft } from '../src/bridge/slotDraft'
 
 const source = readFileSync(new URL('../src/views/SlotsView.vue', import.meta.url), 'utf8')
 
-test('Slots UI explains temporary binding and separates release from reset', () => {
-  assert.match(source, /Слот свободен\./)
-  assert.match(source, /Ctrl \+ Alt \+ Shift \+ \{\{ selectedSlot\.number \}\}/)
+test('Slots UI keeps release action separate from the free-slot note and drops the retired override copy', () => {
   assert.match(source, /Сбросить слот/)
-  assert.match(source, /Вернуть общие настройки/)
-  assert.match(source, /привязанное окно останется/)
+  assert.match(source, /снова находил приложение после перезапуска, закрепите слот за приложением/)
+  assert.doesNotMatch(source, /Вернуть общие настройки/)
+  assert.doesNotMatch(source, /привязанное окно останется/)
 })
 
 test('Slots UI does not expose internal slot vocabulary in rendered copy', () => {
@@ -24,11 +23,11 @@ test('Slots UI does not expose internal slot vocabulary in rendered copy', () =>
   assert.match(template, /Сделать постоянным/)
 })
 
-test('narrow reset block removes label offset and permits wrapping', () => {
-  assert.match(source, /\.override-box \.hotkey-cap\s*\{\s*margin: 0;/)
-  assert.match(source, /\.override-box\s*\{[\s\S]*?flex-wrap: wrap;/)
+test('narrow detail-actions still wraps after the override-box block was removed', () => {
   assert.match(source, /\.detail-actions\s*\{[\s\S]*?flex-wrap: wrap;/)
-  assert.match(source, /\.btn-reset-override\s*\{[\s\S]*?white-space: normal;/)
+  assert.doesNotMatch(source, /\.override-box/)
+  assert.doesNotMatch(source, /\.btn-reset-override/)
+  assert.doesNotMatch(source, /\.hotkey-cap/)
 })
 
 const behavior = {

@@ -27,7 +27,7 @@ function makeGeneralSettings(durationMs = 167, steps = 14): GeneralSettings {
       hideOnBlur: true,
     },
     handlesEnabled: true,
-    animation: { style: 'classic', durationMs, steps },
+    animation: { style: 'dwmSlideFade', durationMs, steps },
     blurCheckMs: 250,
     accent: '2A2E35',
   }

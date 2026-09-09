@@ -63,12 +63,6 @@ test('G06: GeneralView binds labels with for/id, adds aria-invalid, and preserve
   assert.match(generalSource, /<label for="general-anim-preset">Плавность<\/label>/)
   assert.match(generalSource, /id="general-anim-preset"/)
 
-  assert.match(generalSource, /<label for="general-anim-ms">Длительность \(мс\)<\/label>/)
-  assert.match(generalSource, /id="general-anim-ms"/)
-
-  assert.match(generalSource, /<label for="general-anim-steps">Шагов<\/label>/)
-  assert.match(generalSource, /id="general-anim-steps"/)
-
   assert.match(generalSource, /<label for="general-blur-ms">Проверка потери фокуса \(мс\)<\/label>/)
   assert.match(generalSource, /id="general-blur-ms"/)
   assert.match(generalSource, /:aria-invalid="bad\('general\.blurCheckMs'\) \? 'true' : undefined"/)

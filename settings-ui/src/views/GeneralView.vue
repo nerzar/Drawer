@@ -34,8 +34,6 @@ const preset = computed({
     if (settings.draft) applyAnimPreset(settings.draft, v)
   },
 })
-const customAnim = computed(() => preset.value === 'custom')
-
 const accentCss = computed(() => '#' + (settings.draft?.accent ?? '2A2E35'))
 const customColorInput = ref(null)
 
@@ -134,7 +132,7 @@ const selectedMonitor = computed({
             </select>
           </div>
         </div>
-        <label class="check-row">
+        <label class="check-row" style="margin-top: 20px;">
           <input type="checkbox" data-testid="activateOnShow" :disabled="saving" v-model="d.activateOnShow" />
           <span>Активировать окно при открытии</span>
         </label>
@@ -247,7 +245,7 @@ const selectedMonitor = computed({
       <div class="card">
         <h3>Анимация</h3>
         <p class="hint">
-          Вид задаёт эффект, плавность — его существующий темп. «Своя» открывает числа для правки.
+          Вид задаёт эффект, плавность — его существующий темп.
         </p>
         <div class="row">
           <label for="general-animation-style">Вид</label>
@@ -268,38 +266,8 @@ const selectedMonitor = computed({
           <select id="general-anim-preset" class="dd" data-testid="animPreset" :disabled="saving" v-model="preset">
             <option value="none">Без анимации</option>
             <option v-for="o in ANIM_PRESETS" :key="o.id" :value="o.id">{{ o.label }}</option>
-            <option value="custom">Своя</option>
+            <option value="custom">Текущая нестандартная</option>
           </select>
-        </div>
-        <div class="row">
-          <label for="general-anim-ms">Длительность (мс)</label>
-          <div class="field">
-            <input
-              id="general-anim-ms"
-              class="num-sm"
-              :class="{ 'disabled-field': !customAnim || saving }"
-              type="text"
-              data-testid="animMs"
-              :disabled="!customAnim || saving"
-              v-model="d.animMs"
-              @input="d.animCustom = true"
-            />
-          </div>
-        </div>
-        <div class="row">
-          <label for="general-anim-steps">Шагов</label>
-          <div class="field">
-            <input
-              id="general-anim-steps"
-              class="num-sm"
-              :class="{ 'disabled-field': !customAnim || saving }"
-              type="text"
-              data-testid="animSteps"
-              :disabled="!customAnim || saving"
-              v-model="d.animSteps"
-              @input="d.animCustom = true"
-            />
-          </div>
         </div>
       </div>
 
@@ -524,8 +492,8 @@ select.dd.narrow {
   pointer-events: none;
 }
 .preview-box {
-  width: 88px;
-  height: 108px;
+  width: 75px;
+  height: 50px;
   border-radius: 8px;
   background: #dee0e4;
   border: 1px solid var(--border);
@@ -544,9 +512,6 @@ select.dd.narrow {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-.disabled-field {
-  opacity: 0.5;
 }
 .field-bad {
   border-color: #a04a45;

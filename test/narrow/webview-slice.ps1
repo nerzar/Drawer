@@ -326,7 +326,7 @@ SmokeWatch() {
     Check "5a: в [general] записались blurMs, handles, вид и пресет анимации" `
         (($after -match '(?m)^blurMs=300\s*$') -and ($after -match '(?m)^handles=false\s*$') `
          -and ($after -match '(?m)^animationStyle=dwmSlideFade\s*$') `
-         -and ($after -match '(?m)^animMs=100\s*$') -and ($after -match '(?m)^animSteps=10\s*$'))
+         -and ($after -match '(?m)^animMs=83\s*$') -and ($after -match '(?m)^animSteps=8\s*$'))
     Check "5b: accent появился ключом, которого в файле не было" ($after -match '(?m)^accent=332A35\s*$')
     Check "5c: в [dynamic] записался width=80, соседние ключи целы" `
         (($after -match '(?m)^width=80\s*$') -and ($after -match '(?m)^edge=right\s*$') `

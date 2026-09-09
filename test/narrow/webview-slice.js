@@ -110,10 +110,8 @@
       eq('widthPercent', '70')
       eq('edge', 'right')
       eq('monitorKind', 'cursor')
-      eq('animationStyle', 'classic')
+      eq('animationStyle', 'dwmSlideFade')
       eq('animPreset', 'normal')
-      eq('animMs', '160')
-      eq('animSteps', '14')
       eq('accent', '2A2E35')
       if (!q('handlesEnabled').checked) throw new Error('handles-off')
       await wait(() => /250/.test(text('blurApplied')), 5000)
@@ -158,9 +156,6 @@
       if (q('edit-name') || q('edit-executable')) throw new Error('dyn-has-name')
       if (!q('edit-edge') || !q('edit-activateOnShow')) throw new Error('dyn-not-editable')
       if (!q('make-permanent') || q('make-permanent').disabled) throw new Error('conversion-dyn')
-      // Подпись говорит, что у слота своё, а что он берёт из General.
-      if (!text('dyn-source').includes('своё в [dynamicSlot5]')) throw new Error('dyn-source-own')
-      if (!text('dyn-source').includes('монитор')) throw new Error('dyn-source-monitor')
       if (!q('edit-hotkey')) throw new Error('dyn-hotkey')
       q('slot-1').click()
       await wait(() => q('edit-name'), 5000)
@@ -366,8 +361,7 @@
       // Канонический state вернулся от AHK и заменил baseline: «применено
       // сейчас» меняется только из ответа, не локально.
       await wait(() => /300/.test(text('blurApplied')), 5000)
-      eq('animMs', '100')
-      eq('animSteps', '10')
+      eq('animPreset', 'fast')
       eq('animationStyle', 'dwmSlideFade')
       post('smoke.saved')
       tab('Slots')
@@ -418,7 +412,6 @@
       if (!text('slot-6').includes('Постоянный')) throw new Error('conversion-not-applied')
       q('slot-7').click()
       await wait(() => val('edit-widthPercent') === '33', 5000)
-      if (!text('dyn-source').includes('ширина')) throw new Error('override-not-own')
       post('smoke.converted')
 
       // Живое окно постоянного слота 6, ДО обращения в динамический.
@@ -460,8 +453,6 @@
       if (q('slot-6').dataset.status === 'empty') throw new Error('conversion-lost-window')
       q('slot-6').click()
       await wait(() => text('slot-title') === 'Slot six fixture', 5000)
-      q('slot-7').click()
-      await wait(() => text('dyn-source').includes('всё из [dynamic]'), 5000)
       post('smoke.reverted')
 
       // Окно ушло — привязка слота 6 не выдумана: статус возвращается в

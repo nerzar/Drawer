@@ -123,7 +123,7 @@ LoadConfig(path, &diags) {
     animationStyle := IniRead(path, "general", "animationStyle", "dwmSlideFade")
     if !AnimationStyleValid(animationStyle) {
         diags.Push("config.ini: [general] animationStyle=" animationStyle
-            " — ожидается classic, reveal, fade, dwmSlide, dwmSlideFade или dwmShrink; взято dwmSlideFade")
+            " — ожидается reveal, fade, dwmSlide, dwmSlideFade или dwmShrink; взято dwmSlideFade")
         animationStyle := "dwmSlideFade"
     }
     blurMs    := IniRead(path, "general", "blurMs", 250)
@@ -213,7 +213,7 @@ LoadConfig(path, &diags) {
 ; предлагается в Settings (см. AnimationStyleMenu), но старый config.ini
 ; с этим ключом должен продолжать работать, а не откатываться на default.
 AnimationStyles() {
-    return ["classic", "reveal", "fade", "dwmSlide", "dwmSlideFade", "dwmShrink"]
+    return ["reveal", "fade", "dwmSlide", "dwmSlideFade", "dwmShrink"]
 }
 
 AnimationStyleValid(value) {
@@ -228,8 +228,7 @@ AnimationStyleValid(value) {
 ; Выезда вне заблокированного соседним монитором края (тот сам подменяется
 ; на Раскрытие, см. Show()/Hide()). Названия описывают эффект, не технологию.
 AnimationStyleMenu() {
-    return [{ value: "classic",      label: "Выезд" },
-            { value: "reveal",       label: "Раскрытие" },
+    return [{ value: "reveal",       label: "Раскрытие" },
             { value: "fade",         label: "Растворение" },
             { value: "dwmSlideFade", label: "Плавное появление" },
             { value: "dwmShrink",    label: "Всплытие" }]
@@ -983,23 +982,7 @@ Show(hwnd, cfg, st, forceActivate := false, prev := 0) {
     st.geom := ComputeGeom(cfg, mi)
     g := st.geom
     activate := WindowFocusShouldActivate(cfg, forceActivate)
-    if (animationStyle = "classic") {
-        if g.slide {
-            WinMove(g.hx, g.hy, g.w, g.h, "ahk_id " hwnd)
-            if activate
-                WinActivate("ahk_id " hwnd)
-            else
-                WinMoveTop("ahk_id " hwnd)   ; наверх, но фокус остаётся у пользователя
-            Slide(hwnd, g.hx, g.hy, g.sx, g.sy, g.w, g.h)
-        } else {
-            ; На внутреннем крае classic не может пройти через карман (hx) —
-            ; хотя бы на кадр показал бы окно на соседнем мониторе. Раньше
-            ; здесь был мгновенный перенос без анимации; по решению
-            ; владельца classic на этой стороне молча подменяется на
-            ; reveal — тот же приём, что доступен как отдельный вид.
-            ShowReveal(hwnd, g, activate)
-        }
-    } else if (animationStyle = "reveal") {
+    if (animationStyle = "reveal") {
         ShowReveal(hwnd, g, activate)
     } else {
         try AnimationDwmShow(hwnd, g, mi, animationStyle, animMs, activate)
@@ -1029,18 +1012,7 @@ Hide(hwnd, st) {
     try title := WinGetTitle("ahk_id " hwnd)
     DebugLog("[HIDE] Hiding hwnd=" hwnd " ('" title "') wasActive=" (wasActive ? "1" : "0"))
     g := st.geom
-    if (animationStyle = "classic") {
-        if g.slide {
-            ; На внутреннем крае уезжаем сразу на парковку, минуя карман: он лежит
-            ; на территории соседнего монитора.
-            Slide(hwnd, g.sx, g.sy, g.hx, g.hy, g.w, g.h, Round(animMs * 0.4))
-            WinMove(g.px, g.py, g.w, g.h, "ahk_id " hwnd)
-        } else {
-            ; Тот же перевод на reveal, что и в Show() — уходим тем же
-            ; приёмом, которым и появлялись, а не мгновенным переносом.
-            HideReveal(hwnd, g)
-        }
-    } else if (animationStyle = "reveal") {
+    if (animationStyle = "reveal") {
         HideReveal(hwnd, g)
     } else {
         try AnimationDwmHide(hwnd, g, animationStyle, Round(animMs * 0.4))
@@ -1119,45 +1091,31 @@ ComputeGeom(a, mi) {
     switch a.edge {
     case "right":
         w := Integer((R - L) * pct / 100), h := B - T
-        sx := R - w, sy := T, hx := R, hy := T
+        sx := R - w, sy := T
         px := vL + vW + 20, py := T
     case "left":
         w := Integer((R - L) * pct / 100), h := B - T
-        sx := L, sy := T, hx := L - w, hy := T
+        sx := L, sy := T
         px := vL - w - 20, py := T
     case "bottom":
         w := R - L, h := Integer((B - T) * pct / 100)
-        sx := L, sy := B - h, hx := L, hy := B
+        sx := L, sy := B - h
         px := L, py := vT + vH + 20
     case "top":
         w := R - L, h := Integer((B - T) * pct / 100)
-        sx := L, sy := T, hx := L, hy := T - h
+        sx := L, sy := T
         px := L, py := vT - h - 20
     default:
         throw ValueError('edge: ожидается "left", "right", "top" или "bottom", задано: ' a.edge)
     }
 
-    ; Карман — место, откуда окно выезжает и куда уезжает: полоса шириной
-    ; в само окно сразу за выбранным краем монитора. У внешнего края там
-    ; пусто, и окно можно везти через неё на виду. У внутреннего края —
-    ; того, что смотрит на соседний монитор, — эта полоса физически
-    ; принадлежит соседу, и любой кадр анимации показал бы окно на чужом
-    ; экране. Своей территории для разгона там нет вовсе: окно шириной w
-    ; помещается в монитор целиком только в одной позиции — уже
-    ; выдвинутой, — поэтому «проехать хотя бы часть пути» невозможно.
-    ;
-    ; Для classic выбор бинарный: либо окно видно на соседе, либо
-    ; анимации нет. Поэтому его показ и уборка на внутреннем крае идут
-    ; мгновенным переносом, минуя карман.
-    ;
-    ; Проверять достаточно полностью убранное положение: за время
-    ; анимации окно занимает объединение от sx до hx+w, и часть, выходящая
-    ; за монитор, — это ровно прямоугольник (hx, hy, w, h).
-    ;
-    ; Reveal и DWM-эффекты не двигают настоящее окно через карман и
-    ; поэтому этот флаг не используют.
-    return { sx: sx, sy: sy, hx: hx, hy: hy, px: px, py: py, w: w, h: h,
-             edge: a.edge, monitor: mi, slide: !HitsMonitor(hx, hy, w, h, mi) }
+    ; sx/sy — показанное положение на целевом мониторе, px/py — парковка
+    ; вне всех мониторов. Ни один из оставшихся эффектов не двигает
+    ; настоящее окно через территорию соседа: reveal обрезает регион на
+    ; месте, DWM-эффекты анимируют только thumbnail внутри своего
+    ; монитора — соседний монитор им не важен в принципе.
+    return { sx: sx, sy: sy, px: px, py: py, w: w, h: h,
+             edge: a.edge, monitor: mi }
 }
 
 ; Пересекается ли прямоугольник хоть с одним монитором. skip — номер
@@ -1286,24 +1244,6 @@ FindWindow(a) {
     return best
 }
 
-Slide(hwnd, fromX, fromY, toX, toY, w, h, duration := -1) {
-    global animSteps, animMs
-    if (animSteps < 1) {
-        try WinMove(toX, toY, w, h, "ahk_id " hwnd)
-        return
-    }
-    dur := (duration >= 0) ? duration : animMs
-    delay := Max(1, dur // animSteps)
-    Loop animSteps {
-        t := A_Index / animSteps
-        e := 1 - (1 - t) ** 3
-        try WinMove(Round(fromX + (toX - fromX) * e), Round(fromY + (toY - fromY) * e),
-                    w, h, "ahk_id " hwnd)
-        Sleep(delay)
-    }
-    try WinMove(toX, toY, w, h, "ahk_id " hwnd)
-}
-
 ; Fluent baseline вместо самодельных per-preset кривых: один и тот же
 ; прогресс на показе и на скрытии для всех каналов канала — Fast Out,
 ; Slow In на входе, Slow Out, Fast In на выходе. Темп задают
@@ -1317,12 +1257,15 @@ AnimationMotionAt(t, show, style) {
     position := (style = "fade") ? 1 : progress
     ; Всплытие — Fluent Pop: некрутой scale у самого края, не "минимизация".
     scale := (style = "dwmShrink") ? (0.6 + 0.4 * progress) : 1
-    ; Растворение — чистый Fade, без движения. Плавное появление и
-    ; Всплытие уже приняты владельцем с прозрачностью, отстающей от
-    ; перевода/масштаба — сохраняю эту хореографию, пересчитывая
-    ; отставание от общего Fluent-прогресса, а не отдельной кривой.
+    ; Fade — у каждого эффекта, не только у "Растворения": Раскрытие
+    ; получает синхронную прозрачность поверх клипа (реальное окно,
+    ; см. AnimationLayeredAlpha), Растворение — чистый Fade без движения.
+    ; Плавное появление и Всплытие уже приняты владельцем с
+    ; прозрачностью, отстающей от перевода/масштаба — сохраняю эту
+    ; хореографию, пересчитывая отставание от общего Fluent-прогресса,
+    ; а не отдельной кривой.
     opacity := 1
-    if (style = "fade")
+    if (style = "fade" || style = "reveal")
         opacity := progress
     else if (style = "dwmSlideFade")
         opacity := AnimationLag(progress, 0.35)
@@ -1366,46 +1309,88 @@ AnimationLag(progress, lag) {
     return Max(0, Min(1, (progress - lag) / (1 - lag)))
 }
 
-; Общий Show/Hide для reveal — вызывается и напрямую при animationStyle=
-; reveal, и как fallback classic на внутреннем крае (см. Show()/Hide()):
-; там, где classic не может пройти через карман, не показывая окно на
-; соседнем мониторе, вместо мгновенного переноса без анимации подменяем
-; его на reveal целиком, а не только на кусок кривой.
+; Полупрозрачность настоящего окна для Раскрытия — тот же Fade, что и у
+; остальных эффектов, поверх уже имеющегося клипа. WS_EX_LAYERED
+; включается только на время анимации и снимается сразу после — окно
+; чужого приложения не должно навсегда остаться "слоистым". Если окно
+; уже layered само по себе (какой-то оверлей у самого приложения), его
+; alpha не трогаем: не наш стиль — не наше дело.
+AnimationLayeredBegin(hwnd) {
+    try {
+        if (WinGetExStyle("ahk_id " hwnd) & 0x00080000)   ; WS_EX_LAYERED
+            return false
+        WinSetExStyle("+0x00080000", "ahk_id " hwnd)
+        return true
+    } catch as e {
+        DebugLog("[ANIMATION] reveal fade unavailable: " e.Message)
+        return false
+    }
+}
+
+AnimationLayeredAlpha(hwnd, layered, opacity) {
+    if !layered
+        return
+    try DllCall("user32\SetLayeredWindowAttributes", "Ptr", hwnd, "UInt", 0,
+        "UChar", Max(0, Min(255, Round(255 * opacity))), "UInt", 0x2)   ; LWA_ALPHA
+}
+
+AnimationLayeredEnd(hwnd, layered) {
+    if !layered
+        return
+    try DllCall("user32\SetLayeredWindowAttributes", "Ptr", hwnd, "UInt", 0, "UChar", 255, "UInt", 0x2)
+    try WinSetExStyle("-0x00080000", "ahk_id " hwnd)
+}
+
+; Общий Show/Hide для Раскрытия — вызывается напрямую при animationStyle=
+; reveal.
 ShowReveal(hwnd, g, activate) {
     global animMs
-    ; Обрезаем окно до нулевого кадра ДО того, как оно станет видимым
-    ; и активным: иначе между WinMove/Activate и первым SetWindowRgn
-    ; проходит кадр, где на экране мелькает полное окно (виден
-    ; заголовок) — и только потом reveal начинает его открывать.
+    ; Обрезаем окно до нулевого кадра и гасим прозрачность ДО того, как
+    ; оно станет видимым и активным: иначе между WinMove/Activate и
+    ; первым кадром проходит миг, где на экране мелькает полное
+    ; непрозрачное окно (виден заголовок) — и только потом reveal
+    ; начинает его открывать.
     revealOriginal := ""
+    layered := AnimationLayeredBegin(hwnd)
     try {
-        revealOriginal := AnimationCaptureRegion(hwnd)
-        AnimationRevealFrame(hwnd, g, AnimationMotionAt(0, true, "reveal").position, revealOriginal)
-    } catch as e
-        DebugLog("[ANIMATION] reveal prepare fallback: " e.Message)
-    WinMove(g.sx, g.sy, g.w, g.h, "ahk_id " hwnd)
-    if activate
-        WinActivate("ahk_id " hwnd)
-    else
-        WinMoveTop("ahk_id " hwnd)
-    try AnimationReveal(hwnd, g, true, animMs, revealOriginal)
-    catch as e
-        DebugLog("[ANIMATION] reveal show fallback: " e.Message)
+        try {
+            revealOriginal := AnimationCaptureRegion(hwnd)
+            motion0 := AnimationMotionAt(0, true, "reveal")
+            AnimationRevealFrame(hwnd, g, motion0.position, revealOriginal)
+            AnimationLayeredAlpha(hwnd, layered, motion0.opacity)
+        } catch as e
+            DebugLog("[ANIMATION] reveal prepare fallback: " e.Message)
+        WinMove(g.sx, g.sy, g.w, g.h, "ahk_id " hwnd)
+        if activate
+            WinActivate("ahk_id " hwnd)
+        else
+            WinMoveTop("ahk_id " hwnd)
+        try AnimationReveal(hwnd, g, true, animMs, revealOriginal, layered)
+        catch as e
+            DebugLog("[ANIMATION] reveal show fallback: " e.Message)
+    } finally AnimationLayeredEnd(hwnd, layered)
 }
 
 HideReveal(hwnd, g) {
     global animMs
-    try AnimationReveal(hwnd, g, false, Round(animMs * 0.4))
-    catch as e
-        DebugLog("[ANIMATION] reveal hide fallback: " e.Message)
-    WinMove(g.px, g.py, g.w, g.h, "ahk_id " hwnd)
+    layered := AnimationLayeredBegin(hwnd)
+    try {
+        try AnimationReveal(hwnd, g, false, Round(animMs * 0.4), , layered)
+        catch as e
+            DebugLog("[ANIMATION] reveal hide fallback: " e.Message)
+        WinMove(g.px, g.py, g.w, g.h, "ahk_id " hwnd)
+    } finally AnimationLayeredEnd(hwnd, layered)
 }
 
 ; original — регион, уже захваченный и применённый вызывающим ДО показа
 ; окна (см. ShowReveal(): reveal должен появиться уже обрезанным, а не
 ; мигнуть полным кадром между WinMove/Activate и первым SetWindowRgn).
 ; "" — сам захватывает и накладывает нулевой кадр, как раньше делал Hide.
-AnimationReveal(hwnd, g, show, duration, original := "") {
+;
+; layered — состояние WS_EX_LAYERED от AnimationLayeredBegin() у
+; вызывающего (Show/HideReveal держат его на всю анимацию и снимают сами
+; в finally); false — фейд недоступен, работает только клип.
+AnimationReveal(hwnd, g, show, duration, original := "", layered := false) {
     global animSteps
     if (animSteps < 1)
         return
@@ -1414,11 +1399,16 @@ AnimationReveal(hwnd, g, show, duration, original := "") {
         original := AnimationCaptureRegion(hwnd)
     delay := Max(1, duration // animSteps)
     try {
-        if capture
-            AnimationRevealFrame(hwnd, g, AnimationMotionAt(0, show, "reveal").position, original)
+        if capture {
+            motion0 := AnimationMotionAt(0, show, "reveal")
+            AnimationRevealFrame(hwnd, g, motion0.position, original)
+            AnimationLayeredAlpha(hwnd, layered, motion0.opacity)
+        }
         Loop animSteps {
             t := A_Index / animSteps
-            AnimationRevealFrame(hwnd, g, AnimationMotionAt(t, show, "reveal").position, original)
+            motion := AnimationMotionAt(t, show, "reveal")
+            AnimationRevealFrame(hwnd, g, motion.position, original)
+            AnimationLayeredAlpha(hwnd, layered, motion.opacity)
             Sleep(delay)
         }
     } finally {
@@ -2782,9 +2772,17 @@ SettingsAnimationStyleItems() {
     return items
 }
 
-; Легаси-значение dwmSlide (не в меню) откатывается на первый пункт —
-; визуально оно совпадает с Выездом вне заблокированного соседним
-; монитором края, где Выезд и так подменяется на Раскрытие.
+; Легаси/неизвестное значение (например, снятый classic или dwmSlide из
+; старого config.ini) откатывается на принятый владельцем default, а не
+; на первый пункт списка — иначе выбор молча съезжает на случайный
+; первый эффект вместо того, что реально сейчас показывается пользователю.
+SettingsAnimationStyleDefaultIndex() {
+    for i, entry in AnimationStyleMenu()
+        if (entry.value = "dwmSlideFade")
+            return i
+    return 1
+}
+
 SettingsAnimationStylePick(ddl, current) {
     for i, entry in AnimationStyleMenu() {
         if (current = entry.value) {
@@ -2792,13 +2790,13 @@ SettingsAnimationStylePick(ddl, current) {
             return
         }
     }
-    ddl.Choose(1)
+    ddl.Choose(SettingsAnimationStyleDefaultIndex())
 }
 
 SettingsAnimationStyleVal(ddl) {
     menu := AnimationStyleMenu()
     return (ddl.Value >= 1 && ddl.Value <= menu.Length)
-        ? menu[ddl.Value].value : "classic"
+        ? menu[ddl.Value].value : "dwmSlideFade"
 }
 
 SettingsAnimItems() {
@@ -3794,7 +3792,7 @@ SettingsAnimationStyleIn(v, label, &err) {
     v := String(v)
     if AnimationStyleValid(v)
         return v
-    return SettingsBad(label ": ожидается classic, reveal, fade, dwmSlide, dwmSlideFade или dwmShrink", &err)
+    return SettingsBad(label ": ожидается reveal, fade, dwmSlide, dwmSlideFade или dwmShrink", &err)
 }
 
 SettingsMonitorIn(v, label, req, &err) {

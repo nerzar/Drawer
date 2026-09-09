@@ -4,7 +4,6 @@ import { settings, pickSlot, releaseSlot } from '../bridge/settings'
 import { fieldTarget } from '../bridge/fieldError'
 import { EDGE_OPTIONS, draftToWire } from '../bridge/general'
 import {
-  draftBehavior,
   resetPermanentIdentityFromSlot,
   resetToShared,
   setDraftExecutable,
@@ -12,8 +11,6 @@ import {
 import {
   useSlotStatus,
   edgeLabels,
-  hotkeyPresentation,
-  isPendingDynamicConversion,
   isRuntimeDynamicBound,
   monitorLabel,
   rowLabel,
@@ -117,17 +114,6 @@ const selectedSlotMonitor = computed({
   },
 })
 
-// Какие значения временный слот держит своими, а какие берёт из
-// General. Подпись следует за черновиком, чтобы Reset сразу давал
-// понятную обратную связь до «Применить».
-const OVERRIDE_NAMES = {
-  monitor: 'монитор',
-  edge: 'край',
-  widthPercent: 'ширина',
-  activateOnShow: 'активация',
-  hideOnBlur: 'автоскрытие',
-}
-
 const currentShared = computed(() => {
   if (settings.draft) {
     return draftToWire(settings.draft).dynamicDefaults
@@ -135,50 +121,9 @@ const currentShared = computed(() => {
   return settings.canonical?.general.dynamicDefaults
 })
 
-const hasDraftOverrides = computed(() => {
-  const shared = currentShared.value
-  const d = draft.value
-  if (!shared || !d || d.kind !== 'dynamic') return false
-  const b = draftBehavior(d)
-  return Object.keys(OVERRIDE_NAMES).some(
-    (k) => JSON.stringify(b[k]) !== JSON.stringify(shared[k]),
-  )
-})
-
-const hasAppliedOverrides = computed(() => {
-  if (selectedSlot.value?.kind !== 'dynamic') return false
-  const shared = currentShared.value
-  const applied = behavior.value
-  if (!shared) return false
-  return applied
-    ? Object.keys(OVERRIDE_NAMES).some((k) => JSON.stringify(applied[k]) !== JSON.stringify(shared[k]))
-    : false
-})
-
-const hasOverrides = computed(() => hasAppliedOverrides.value || hasDraftOverrides.value)
-const resetPending = computed(() => hasAppliedOverrides.value && !hasDraftOverrides.value)
-const pendingDynamicConversion = computed(() =>
-  Boolean(selectedSlot.value && isPendingDynamicConversion(selectedSlot.value, draft.value)),
-)
 const runtimeDynamicBound = computed(() =>
   Boolean(selectedSlot.value && isRuntimeDynamicBound(selectedSlot.value)),
 )
-const shownHotkey = computed(() =>
-  selectedSlot.value ? hotkeyPresentation(selectedSlot.value, draft.value) : { active: '', pending: null },
-)
-
-const overrideNote = computed(() => {
-  const shared = currentShared.value
-  const d = draft.value
-  if (!shared || !d || d.kind !== 'dynamic') return ''
-  const current = draftBehavior(d)
-  const own = Object.keys(OVERRIDE_NAMES).filter(
-    (k) => JSON.stringify(current[k]) !== JSON.stringify(shared[k]),
-  )
-  return own.length
-    ? `Свои параметры: ${own.map((k) => OVERRIDE_NAMES[k]).join(', ')}`
-    : 'Параметры: общие'
-})
 
 // Форма правит черновик, поэтому род слота на экране — из черновика, а
 // не из canonical: переключённая кнопка обязана менять панель сразу, а
@@ -229,13 +174,6 @@ function captureHotkey(event) {
   if (event.metaKey) parts.push('Win')
   parts.push(key)
   if (draft.value) draft.value.hotkey = parts.join(' + ')
-}
-
-function resetDynamic() {
-  const d = draft.value
-  const shared = currentShared.value
-  if (!d || !shared || locked.value) return
-  resetToShared(d, shared)
 }
 
 async function resetBoundSlot() {
@@ -520,41 +458,6 @@ async function resetBoundSlot() {
         </template>
 
         <template v-else>
-          <div class="temporary-intro" :class="{ 'temporary-intro-empty': !runtimeDynamicBound }">
-            <template v-if="pendingDynamicConversion">
-              <strong>Изменение ещё не применено.</strong>
-              <div v-if="selectedSlot.status.state === 'applicationNotRunning' || selectedSlot.status.state === 'empty'">
-                После «Применить» слот станет временным и свободным.
-              </div>
-              <div v-else>
-                После «Применить» текущее окно останется привязано к временному слоту.
-              </div>
-            </template>
-            <template v-else>
-              <strong v-if="!runtimeDynamicBound">Слот свободен.</strong>
-              <strong v-else>Окно привязано временно.</strong>
-              <div v-if="!runtimeDynamicBound">
-                Откройте нужное окно и нажмите
-                <kbd>Ctrl + Alt + Shift + {{ selectedSlot.number }}</kbd> — оно будет привязано
-                к слоту {{ selectedSlot.number }} до перезапуска Drawer.
-              </div>
-              <div v-else>
-                Привязка текущего окна живёт до перезапуска Drawer. «Сбросить слот» уберёт
-                привязку и вернёт его настройки к значениям по умолчанию.
-              </div>
-            </template>
-            <div v-if="shownHotkey.active">
-              Сейчас: <kbd>{{ shownHotkey.active }}</kbd> — показать или убрать окно.
-            </div>
-            <div v-else>Сейчас горячая клавиша «Показать / убрать» отключена.</div>
-            <div v-if="shownHotkey.pending !== null">
-              <template v-if="shownHotkey.pending">
-                После «Применить»: <kbd>{{ shownHotkey.pending }}</kbd>.
-              </template>
-              <template v-else>После «Применить» горячая клавиша будет отключена.</template>
-            </div>
-          </div>
-
           <fieldset v-if="draft" class="editor" :disabled="locked">
             <div class="row">
               <label for="dyn-monitor">Монитор</label>
@@ -625,29 +528,7 @@ async function resetBoundSlot() {
                 />
               </div>
             </div>
-            <div class="override-box">
-              <div class="override-copy">
-                <div class="hotkey-cap" data-testid="dyn-source">{{ overrideNote }}</div>
-                <div v-if="resetPending" class="reset-pending">
-                  Общие параметры будут применены после «Применить»; привязанное окно останется.
-                </div>
-                <div v-else-if="hasOverrides" class="reset-help">
-                  Сброс изменит только параметры; привязанное окно останется.
-                </div>
-              </div>
-              <button
-                v-if="hasOverrides"
-                class="btn-reset-override"
-                type="button"
-                data-testid="reset-dynamic-settings"
-                :disabled="locked || !hasDraftOverrides"
-                @click="resetDynamic()"
-              >
-                Вернуть общие настройки
-              </button>
-            </div>
           </fieldset>
-
 
           <div class="free-note">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent-fg)" stroke-width="2" stroke-linecap="round" style="flex: 0 0 auto">
@@ -655,8 +536,7 @@ async function resetBoundSlot() {
               <line x1="12" y1="8" x2="12" y2="13" />
               <circle cx="12" cy="16" r="1" fill="var(--accent-fg)" stroke="none" />
             </svg>
-            <div>
-              Параметры временного слота могут следовать общим настройкам. Чтобы Drawer
+            <div>Чтобы Drawer
               снова находил приложение после перезапуска, закрепите слот за приложением.
             </div>
           </div>
@@ -953,35 +833,6 @@ select.dd.narrow {
 .check-row span {
   font-size: 12.5px;
 }
-.hotkey-cap {
-  font-size: 10.5px;
-  color: var(--text-3);
-  margin: -3px 0 8px 120px;
-}
-.temporary-intro {
-  display: grid;
-  gap: 5px;
-  margin-bottom: 14px;
-  padding: 11px 13px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-hover);
-  font-size: 11.5px;
-  line-height: 1.5;
-}
-.temporary-intro-empty {
-  border-color: color-mix(in srgb, var(--accent-fg) 38%, var(--border));
-  background: var(--accent-tint);
-}
-.temporary-intro strong {
-  font-size: 12.5px;
-  font-weight: 600;
-}
-.temporary-intro kbd {
-  font: inherit;
-  font-weight: 600;
-  white-space: nowrap;
-}
 .detail-row {
   display: flex;
   align-items: baseline;
@@ -1062,58 +913,5 @@ select[disabled] {
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 8px;
-}
-.override-box {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 10px;
-  padding: 8px 12px;
-  background: var(--bg-hover);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-}
-.override-box .hotkey-cap {
-  margin: 0;
-}
-.override-copy {
-  flex: 1 1 180px;
-  min-width: 0;
-}
-.reset-help,
-.reset-pending {
-  margin-top: 3px;
-  color: var(--text-3);
-  font-size: 10.5px;
-  line-height: 1.35;
-}
-.reset-pending {
-  color: var(--accent-fg);
-}
-.btn-reset-override {
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 500;
-  padding: 4px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg-card);
-  color: var(--text);
-  cursor: pointer;
-  white-space: normal;
-  flex: 0 1 auto;
-  max-width: 100%;
-  transition: background 0.15s, border-color 0.15s;
-}
-.btn-reset-override:hover:not(:disabled) {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
-}
-.btn-reset-override:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 </style>

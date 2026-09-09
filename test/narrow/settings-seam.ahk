@@ -2086,7 +2086,9 @@ if FileExist(bridgePath) && FileExist(portPath) {
 }
 
 ; ---------------------------------------------------------------------
-; Точка 25: быстрая анимация скрытия (Hide ~40% от animMs)
+; Точка 25: быстрая анимация скрытия (Hide ~40% от animMs) — инвариант
+; держится и после снятия classic/Slide(): оба оставшихся Hide-пути
+; (reveal, DWM-эффекты) явно короче своего Show той же длительностью.
 ; ---------------------------------------------------------------------
 if FileExist(drawerPath) {
     src25 := FileRead(drawerPath, "UTF-8")
@@ -2095,24 +2097,13 @@ if FileExist(drawerPath) {
     pHideEnd := InStr(src25, "WindowManaged(hwnd) {")
     codeHide := (pHide > 0 && pHideEnd > pHide) ? SubStr(src25, pHide, pHideEnd - pHide) : ""
 
-    pShow := InStr(src25, "Show(hwnd, cfg, st,")
-    pShowEnd := InStr(src25, "Hide(hwnd, st) {")
-    codeShow := (pShow > 0 && pShowEnd > pShow) ? SubStr(src25, pShow, pShowEnd - pShow) : ""
-
-    pSlide := InStr(src25, "Slide(hwnd, fromX, fromY, toX, toY, w, h, duration := -1) {")
-    pSlideEnd := InStr(src25, "Cleanup(*) {")
-    codeSlide := (pSlide > 0 && pSlideEnd > pSlide) ? SubStr(src25, pSlide, pSlideEnd - pSlide) : ""
-
-    Assert("25a: Slide принимает опциональный параметр duration",
-        pSlide > 0)
-    Assert("25b: Slide использует animMs по умолчанию, если duration < 0",
-        InStr(codeSlide, "dur := (duration >= 0) ? duration : animMs") > 0)
-    Assert("25c: Show вызывает Slide без duration (используется animMs)",
-        InStr(codeShow, "Slide(hwnd, g.hx, g.hy, g.sx, g.sy, g.w, g.h)") > 0)
-    Assert("25d: Hide вызывает Slide с 40% от animMs (Round(animMs * 0.4))",
-        InStr(codeHide, "Slide(hwnd, g.sx, g.sy, g.hx, g.hy, g.w, g.h, Round(animMs * 0.4))") > 0)
-    Assert("25e: Slide корректно отрабатывает animSteps < 1 без анимации",
-        InStr(codeSlide, "if (animSteps < 1) {") > 0)
+    Assert("25a: HideReveal короче своего Show — те же 40% от animMs",
+        InStr(src25, "Round(animMs * 0.4), , layered)") > 0)
+    Assert("25b: DWM-эффекты Hide короче своего Show — те же 40% от animMs",
+        InStr(codeHide, "AnimationDwmHide(hwnd, g, animationStyle, Round(animMs * 0.4))") > 0)
+    Assert("25c: Show ни для одного эффекта не масштабирует animMs — только Hide",
+        InStr(codeHide, "Round(animMs * 0.4)") > 0
+     && !InStr(src25, "AnimationDwmShow(hwnd, g, mi, animationStyle, Round(animMs * 0.4)"))
 }
 
 ; ---------------------------------------------------------------------
@@ -2127,18 +2118,18 @@ if FileExist(drawerPath) {
 
     Assert("26a: LoadConfig использует dwmSlideFade при отсутствующем animationStyle",
         InStr(src26, 'IniRead(path, "general", "animationStyle", "dwmSlideFade")') > 0)
-    Assert("26b: enum содержит шесть утверждённых значений, включая fade",
-        InStr(src26, 'return ["classic", "reveal", "fade", "dwmSlide", "dwmSlideFade", "dwmShrink"]') > 0)
+    Assert("26b: enum содержит пять утверждённых значений, classic снят совсем",
+        InStr(src26, 'return ["reveal", "fade", "dwmSlide", "dwmSlideFade", "dwmShrink"]') > 0)
     Assert("26c: full reset явно возвращает принятый владельцем default dwmSlideFade",
         InStr(src26, '{ sec: "general", key: "animationStyle", val: "dwmSlideFade" }') > 0)
-    Assert("26d: classic сохраняет прежние Show/Hide Slide вызовы и тайминг",
-        InStr(src26, 'if (animationStyle = "classic")') > 0
-     && InStr(src26, "Slide(hwnd, g.hx, g.hy, g.sx, g.sy, g.w, g.h)") > 0
-     && InStr(src26, "Slide(hwnd, g.sx, g.sy, g.hx, g.hy, g.w, g.h, Round(animMs * 0.4))") > 0)
-    Assert("26e: reveal использует SetWindowRgn и восстанавливает исходный регион",
-        InStr(src26, 'AnimationReveal(hwnd, g, true, animMs, revealOriginal)') > 0
+    Assert("26d: classic и Slide() удалены целиком, не только из меню",
+        InStr(src26, 'animationStyle = "classic"') = 0
+     && InStr(src26, "Slide(hwnd,") = 0)
+    Assert("26e: reveal использует SetWindowRgn, восстанавливает регион и фейдит настоящее окно",
+        InStr(src26, 'AnimationReveal(hwnd, g, true, animMs, revealOriginal, layered)') > 0
      && InStr(src26, '"user32\SetWindowRgn"') > 0
-     && InStr(src26, "AnimationRestoreRegion(hwnd, original)") > 0)
+     && InStr(src26, "AnimationRestoreRegion(hwnd, original)") > 0
+     && InStr(src26, '"user32\SetLayeredWindowAttributes"') > 0)
     Assert("26f: DWM эффекты регистрируют, обновляют и освобождают thumbnail",
         InStr(src26, '"dwmapi\DwmRegisterThumbnail"') > 0
      && InStr(src26, '"dwmapi\DwmUpdateThumbnailProperties"') > 0
@@ -2197,7 +2188,7 @@ if FileExist(drawerPath) {
     ; 28a: reveal накладывает нулевой регион ДО вызова полной анимации
     ; (которая уже идёт после WinMove/Activate на целевую позицию).
     posPrepare28 := InStr(src28, "revealOriginal := AnimationCaptureRegion(hwnd)")
-    posRunCall28 := InStr(src28, "AnimationReveal(hwnd, g, true, animMs, revealOriginal)")
+    posRunCall28 := InStr(src28, "AnimationReveal(hwnd, g, true, animMs, revealOriginal, layered)")
     Assert("28a: reveal накладывает нулевой регион до показа окна",
         posPrepare28 > 0 && posRunCall28 > 0 && posPrepare28 < posRunCall28)
 
@@ -2218,27 +2209,25 @@ if FileExist(drawerPath) {
 }
 
 ; ---------------------------------------------------------------------
-; Точка 29: classic на внутреннем крае (сосед со стороны edge) молча
-; подменяется на reveal вместо мгновенного переноса без анимации —
-; решение владельца по итогам ручной проверки на двух мониторах.
+; Точка 29: classic снят целиком по решению владельца (не только из
+; меню) — g.slide/hx/hy и Slide() были нужны только его двоичному
+; фоллбеку на внутреннем крае, и вместе с ним уходят из ComputeGeom.
 ; ---------------------------------------------------------------------
 if FileExist(drawerPath) {
     src29 := FileRead(drawerPath, "UTF-8")
 
-    Assert("29a: обычный classic (g.slide) по-прежнему уезжает через карман Slide()",
-        InStr(src29, "if g.slide {") > 0
-     && InStr(src29, "Slide(hwnd, g.hx, g.hy, g.sx, g.sy, g.w, g.h)") > 0
-     && InStr(src29, "Slide(hwnd, g.sx, g.sy, g.hx, g.hy, g.w, g.h, Round(animMs * 0.4))") > 0)
-    Assert("29b: classic без g.slide (сосед блокирует карман) подменяется на reveal",
-        InStr(src29, "ShowReveal(hwnd, g, activate)") > 0
+    Assert("29a: ComputeGeom не считает и не отдаёт g.slide/hx/hy — они были только для classic",
+        InStr(src29, "hx := ") = 0 && InStr(src29, "hy := ") = 0
+     && InStr(src29, "slide: !HitsMonitor") = 0)
+    Assert("29b: Show/Hide зовут ShowReveal/HideReveal только из явной ветки reveal",
+        InStr(src29, 'if (animationStyle = "reveal") {') > 0
+     && InStr(src29, "ShowReveal(hwnd, g, activate)") > 0
      && InStr(src29, "HideReveal(hwnd, g)") > 0)
-    ; ShowReveal/HideReveal должны использоваться и явным style=reveal, и
-    ; classic-фоллбеком — иначе это два разных пути с разным поведением.
-    ; По одному определению плюс по два вызова (classic-фоллбек и явный
-    ; reveal) на каждую функцию — три вхождения подстроки.
-    Assert("29c: явный reveal и classic-фоллбек используют одну и ту же реализацию",
-        (StrSplit(src29, "ShowReveal(hwnd, g, activate)").Length - 1) = 3
-     && (StrSplit(src29, "HideReveal(hwnd, g)").Length - 1) = 3)
+    ; По одному определению плюс по одному вызову (только явный reveal,
+    ; classic-фоллбека больше нет) — два вхождения подстроки на функцию.
+    Assert("29c: ShowReveal/HideReveal — по одной реализации без classic-дублей",
+        (StrSplit(src29, "ShowReveal(hwnd, g, activate)").Length - 1) = 2
+     && (StrSplit(src29, "HideReveal(hwnd, g)").Length - 1) = 2)
 }
 
 ; ---------------------------------------------------------------------
@@ -2267,10 +2256,10 @@ if FileExist(drawerPath) {
     ; 30c: fade — валидный стиль и отдельная ветка в движке (чистая
     ; прозрачность, без перевода/масштаба).
     Assert("30c: fade — валидное значение enum",
-        InStr(src30, '["classic", "reveal", "fade", "dwmSlide", "dwmSlideFade", "dwmShrink"]') > 0)
+        InStr(src30, '["reveal", "fade", "dwmSlide", "dwmSlideFade", "dwmShrink"]') > 0)
     Assert("30d: fade в AnimationMotionAt — без перевода, только opacity",
         InStr(src30, '(style = "fade") ? 1 : progress') > 0
-     && InStr(src30, 'if (style = "fade")') > 0
+     && InStr(src30, 'if (style = "fade" || style = "reveal")') > 0
      && InStr(src30, "opacity := progress") > 0)
 
     ; 30e: dwmSlideFade остаётся default — принят владельцем, не ухудшаем.
@@ -2292,6 +2281,32 @@ if FileExist(drawerPath) {
         Assert("30g: WebView2-меню синхронно с native — без DWM, с fade",
             optBody30 != "" && InStr(optBody30, "value: 'fade'") > 0
          && InStr(optBody30, "DWM", true) = 0)
+    }
+}
+
+; ---------------------------------------------------------------------
+; Точка 31: пустой select "Вид" при открытии Settings — легаси/неизвестное
+; значение (снятый classic, будущий незнакомый ключ) откатывается на
+; принятый default dwmSlideFade, а не на "classic" (которого больше нет
+; в меню) и не остаётся пустым.
+; ---------------------------------------------------------------------
+if FileExist(drawerPath) {
+    src31 := FileRead(drawerPath, "UTF-8")
+    generalPath31 := A_ScriptDir "\..\..\settings-ui\src\bridge\general.ts"
+    general31 := FileExist(generalPath31) ? FileRead(generalPath31, "UTF-8") : ""
+
+    Assert("31a: native — неизвестное значение в дропдауне выбирает dwmSlideFade, не первый пункт",
+        InStr(src31, "SettingsAnimationStyleDefaultIndex()") > 0
+     && InStr(src31, 'entry.value = "dwmSlideFade"') > 0
+     && InStr(src31, "ddl.Choose(SettingsAnimationStyleDefaultIndex())") > 0)
+    Assert("31b: native — SettingsAnimationStyleVal никогда не возвращает снятый classic",
+        InStr(src31, ': "classic"') = 0
+     && InStr(src31, '? menu[ddl.Value].value : "dwmSlideFade"') > 0)
+    if (general31 != "") {
+        Assert("31c: WebView2 — неизвестный/отсутствующий style нормализуется, а не течёт как есть",
+            InStr(general31, "export function normalizeAnimationStyle") > 0
+         && InStr(general31, "animationStyle: normalizeAnimationStyle(g.animation.style)") > 0
+         && InStr(general31, "DEFAULT_ANIMATION_STYLE: AnimationStyle = 'dwmSlideFade'") > 0)
     }
 }
 
