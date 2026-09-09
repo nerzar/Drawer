@@ -29,8 +29,6 @@
 
 ## PAUSED до решения о следующей волне
 
-- [`RUN-20260908-MUSE-SETTINGS-USER-FACING-CONTROLS-01`](docs/agent-tasks/RUN-20260908-MUSE-SETTINGS-USER-FACING-CONTROLS-01.md).
-- [`RUN-20260908-MUSE-SETTINGS-ANIMATION-PRESETS-01`](docs/agent-tasks/RUN-20260908-MUSE-SETTINGS-ANIMATION-PRESETS-01.md).
 - [`RUN-20260908-MUSE-TRAY-MODULE-EXTRACT-01`](docs/agent-tasks/RUN-20260908-MUSE-TRAY-MODULE-EXTRACT-01.md).
 
 ## INTEGRATED в закрытой волне 2026-09-08
@@ -51,8 +49,7 @@
 - DWM Thumbnail PoC остаётся DRAFT: [`RUN-20260908-ANTIGRAVITY-DWM-THUMBNAIL-POC-01`](docs/agent-tasks/RUN-20260908-ANTIGRAVITY-DWM-THUMBNAIL-POC-01.md). Это техническая развилка, а не очередная автоматическая задача.
 - Попытка динамически назначить окно из постоянного слота должна получить отказ и Windows-уведомление с номером постоянного слота; решение владельца принято, но отдельную задачу сейчас не создаём.
 - Инвариант «одно окно — один слот» позже проверяется отдельно и сейчас не считается подтверждённым багом.
-- Поведение при недоступном закреплённом мониторе требует отдельного решения владельца.
-- Сведение трёх размеров кромки к одному пользовательскому параметру не выдаём без уточнения правила пересчёта существующих значений.
+- Если сохранённый закреплённый `monitor=N` недоступен, в runtime использовать default `monitor=cursor`; сам сохранённый config автоматически не переписывать.
 - Полное context-menu parity для кромки пока не READY: нужно сначала определить, выполняются ли destructive actions немедленно или открывают Settings с черновиком.
 - Новые модульные выносы из `drawer.ahk`, расширение числа слотов, installer и autostart не входят в ближайший фронт стабилизации.
 
