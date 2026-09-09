@@ -6,10 +6,10 @@
 
 ## База и текущая интеграция
 
-- Актуальный `master`: `51bdcda72f32de03096cdf0abd72124448120237`.
-- Ветка сведения: `codex/integrate-wave-20260908`; `master` пока не изменён.
-- В ветку сведены Settings instrumentation, full reset, единый WebView2 Settings в tray, настоящий путь `config.ini`, monitor picker и ускоренный Hide.
-- Code/semantic review и объединённые repo-проверки пройдены. Отдельный worker VM acceptance не является gate этой волны; владелец проверяет runtime на итоговой сведённой версии.
+- Интеграционная волна 2026-09-08 закрыта и сведена в локальный `master`; итог продуктовых изменений и roadmap — `1dd38b7c395f8b063b10da03e99e90c8f45bc6a7`.
+- В `master` вошли Settings instrumentation, full reset, единый WebView2 Settings в tray, настоящий путь `config.ini`, monitor picker и ускоренный Hide.
+- Code/semantic review и объединённые repo-проверки пройдены. Владелец принял итоговый runtime: Settings, monitor picker, Show/Hide, оба reset-сценария и исправленный раздел «О программе» работают.
+- Активной ветки сведения сейчас нет.
 
 ## Роли
 
@@ -33,7 +33,7 @@
 - [`RUN-20260908-MUSE-SETTINGS-ANIMATION-PRESETS-01`](docs/agent-tasks/RUN-20260908-MUSE-SETTINGS-ANIMATION-PRESETS-01.md).
 - [`RUN-20260908-MUSE-TRAY-MODULE-EXTRACT-01`](docs/agent-tasks/RUN-20260908-MUSE-TRAY-MODULE-EXTRACT-01.md).
 
-## INTEGRATED в текущей волне
+## INTEGRATED в закрытой волне 2026-09-08
 
 - [`RUN-20260908-GEMINI-WEBVIEW-SETTINGS-TRAY-01`](docs/agent-tasks/RUN-20260908-GEMINI-WEBVIEW-SETTINGS-TRAY-01.md) — `57bc0cea3a5c4dab6e0a0a1ca5aacd72deac2bec`.
 - [`RUN-20260908-GEMINI-SETTINGS-MONITOR-PICKER-01`](docs/agent-tasks/RUN-20260908-GEMINI-SETTINGS-MONITOR-PICKER-01.md) — `e660bee2153d058e76497f3be1fc796103968dc9`.
@@ -43,7 +43,7 @@
 
 ## Acceptance без отдельной READY-задачи
 
-- Владелец проводит общую ручную runtime-приёмку итоговой версии после сведения; отсутствие отдельных worker VM-прогонов не блокирует эту integration wave.
+- Общая ручная runtime-приёмка владельца завершена. Пустой About, обнаруженный на итоговой сборке, исправлен commit `22c97ca40f59d5714fcc9affaf264970b0c4282f` и принят владельцем после повторной проверки.
 - «Сбросить слот», конверсии и picker не образуют отдельный фронт проверки. Если конкретный runtime-сценарий выявит дефект, архитектор создаст узкую fix-задачу с воспроизведением.
 
 ## Не READY / сознательно не трогаем
