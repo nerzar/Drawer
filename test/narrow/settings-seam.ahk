@@ -2342,6 +2342,52 @@ if FileExist(drawerPath) {
     }
 }
 
+; ---------------------------------------------------------------------
+; Точка 32: закреплённый monitor=N физически недоступен — ResolveMonitor
+; работает на мониторе под курсором (без изменения конфига), а не бросает
+; или молча уезжает за экраны. AGENT_BOARD.md фиксировал это как решение
+; владельца; здесь — доказательство на модели, что ветка именно такая.
+; ---------------------------------------------------------------------
+
+; Копия ResolveMonitor: cursorMonitor/primaryMonitor заменяют
+; MouseGetPos+MonitorGet-цикл и MonitorGetPrimary() — геометрия курсора
+; здесь не проверяется (это WinAPI), только выбор между закреплённым
+; номером и фолбэком. "invalid" — нечисловая настройка (в реальной
+; функции это бросок ValueError; здесь строковый маркер для теста).
+ResolveMonitorModel(cfgMonitor, n, cursorMonitor, primaryMonitor) {
+    if (cfgMonitor != "cursor") {
+        if !IsInteger(cfgMonitor)
+            return "invalid"
+        if (cfgMonitor >= 1 && cfgMonitor <= n)
+            return cfgMonitor
+    }
+    return cursorMonitor ? cursorMonitor : primaryMonitor
+}
+
+Assert("32a: monitor=cursor всегда идёт на монитор под курсором",
+    ResolveMonitorModel("cursor", 2, 2, 1) = 2)
+Assert("32b: закреплённый существующий monitor=2 из двух используется как есть",
+    ResolveMonitorModel(2, 2, 1, 1) = 2)
+Assert("32c: закреплённый monitor=3 недоступен на машине с 2 мониторами -> фолбэк на курсор",
+    ResolveMonitorModel(3, 2, 1, 1) = 1)
+Assert("32d: закреплённый monitor=0 (никогда не валидный номер) -> фолбэк на курсор",
+    ResolveMonitorModel(0, 2, 2, 1) = 2)
+Assert("32e: курсор не над ни одним монитором -> фолбэк на primary",
+    ResolveMonitorModel(5, 2, 0, 1) = 1)
+
+if FileExist(drawerPath) {
+    src32 := FileRead(drawerPath, "UTF-8")
+    pRM := InStr(src32, "ResolveMonitor(a) {")
+    pRMEnd := InStr(src32, "ComputeGeom(a, mi) {")
+    codeRM := (pRM > 0 && pRMEnd > pRM) ? SubStr(src32, pRM, pRMEnd - pRM) : ""
+    Assert("32f: ResolveMonitor в src/drawer.ahk фолбэчит на курсор, а не бросает недоступный номер",
+        codeRM != "" && InStr(codeRM, "if (a.monitor >= 1 && a.monitor <= n)") > 0
+     && InStr(codeRM, "MouseGetPos(&mx, &my)") > 0
+     && InStr(codeRM, "return MonitorGetPrimary()") > 0)
+    Assert("32g: фолбэк не пишет обратно в config.ini — в ResolveMonitor нет IniWrite",
+        codeRM != "" && InStr(codeRM, "IniWrite") = 0)
+}
+
 out := ""
 allOk := true
 for r in results {
