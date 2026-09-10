@@ -138,7 +138,7 @@ WatchBlurCheck(hwnd) {
     }
     if StillFocused(hwnd)
         return
-    try Hide(hwnd, st)
+    try Hide(hwnd, st, true)
 }
 
 WatchBlur() {

@@ -1004,15 +1004,26 @@ Show(hwnd, cfg, st, forceActivate := false, prev := 0) {
     SetTimer(HandlesSync, -1)    ; окно выехало — кромка остаётся на месте
 }
 
-Hide(hwnd, st) {
+; blurred — скрытие вызвано потерей фокуса (WatchBlurCheck), а не ручным
+; toggle. В этот момент окно уже не поверх экрана — сверху новое чужое
+; активное окно. DWM-стили показывают отдельное +AlwaysOnTop окно-сцену
+; для thumbnail, и оно, только что созданное, встаёт НАД этим новым
+; активным окном: получается «исчез → вспыхнула копия поверх чужого
+; окна → исчез». reveal этой проблемы не знает в принципе — не создаёт
+; сцену, а обрезает регион настоящего окна на месте, так что спрятанное
+; за чужим окном оно там и остаётся всю анимацию, ничего не всплывает
+; поверх. Поэтому скрытие по потере фокуса всегда идёт через reveal,
+; какой бы DWM-стиль ни был выбран в Settings для ручного toggle.
+Hide(hwnd, st, blurred := false) {
     global animationStyle
     WatchForget(hwnd)
     wasActive := WinActive("ahk_id " hwnd) ? true : false
     title := ""
     try title := WinGetTitle("ahk_id " hwnd)
-    DebugLog("[HIDE] Hiding hwnd=" hwnd " ('" title "') wasActive=" (wasActive ? "1" : "0"))
+    DebugLog("[HIDE] Hiding hwnd=" hwnd " ('" title "') wasActive=" (wasActive ? "1" : "0")
+             . " blurred=" (blurred ? "1" : "0"))
     g := st.geom
-    if (animationStyle = "reveal") {
+    if (blurred || animationStyle = "reveal") {
         HideReveal(hwnd, g)
     } else {
         try AnimationDwmHide(hwnd, g, animationStyle, Round(animMs * 0.4))
@@ -1027,6 +1038,41 @@ Hide(hwnd, st) {
     ; watcher сняли ещё в начале Hide(). Здесь окно припарковано, но всё
     ; ещё наше (Release() его не трогал) — историю чистить рано.
     SetTimer(HandlesSync, -1)    ; окно припарковано — кромка возвращается
+}
+
+; SlotBind() уже посчитал st.geom — каноническую геометрию показа слота
+; (см. Slots.ahk) — но настоящее окно физически ещё сидит там, где было
+; до привязки, а не на месте показа: IsDeployed() честно отвечает false,
+; и первый Show() после Bind дёргал окно невидимым прыжком в WinMove за
+; экран, прежде чем красиво выехать обратно. Прячем сразу после Bind тем
+; же Hide(), какой знает toggle, только кадр «полностью показано»
+; подставляем с настоящих текущих границ окна, а не с канонической
+; геометрии слота: иначе первый кадр анимации сам дёрнул бы окно в чужой
+; размер и позицию перед тем, как начать прятаться. После Hide() —
+; каноническая геометрия возвращается: следующий Show() соберёт слот в
+; правильной пропорции уже вне экрана, где это не видно.
+ParkAfterBind(hwnd, cfg, st) {
+    if (WinGetMinMax("ahk_id " hwnd) != 0)
+        return                        ; свёрнуто — прятать нечего
+    try WinGetPos(&x, &y, &w, &h, "ahk_id " hwnd)
+    catch
+        return
+    if !HitsMonitor(x, y, w, h)
+        return                        ; уже вне экранов — сам Bind ничего не сдвигал
+    vL := SysGet(76), vT := SysGet(77), vW := SysGet(78), vH := SysGet(79)
+    switch cfg.edge {
+    case "right":  px := vL + vW + 20, py := y
+    case "left":   px := vL - w - 20,  py := y
+    case "bottom": px := x,            py := vT + vH + 20
+    case "top":    px := x,            py := vT - h - 20
+    default:       return             ; неверный край — та же диагностика найдёт его при Show
+    }
+    canonical := st.geom
+    st.geom := { sx: x, sy: y, px: px, py: py, w: w, h: h, edge: cfg.edge, monitor: canonical.monitor }
+    try
+        Hide(hwnd, st)
+    finally
+        st.geom := canonical
 }
 
 ; Управляет ли ящик этим окном: геометрия посчитана, значит слот хоть раз

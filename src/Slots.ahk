@@ -462,7 +462,8 @@ SlotBind(n) {
     }
     s.window := hwnd
     ; Dynamic сразу получает ту же оконную геометрию и кромку, что permanent.
-    if !WindowManaged(hwnd) {
+    wasManaged := WindowManaged(hwnd)
+    if !wasManaged {
         st := StateOf(hwnd)
         mi := ResolveMonitorForExisting(SlotCfg(n), hwnd)
         if !st.orig
@@ -470,6 +471,10 @@ SlotBind(n) {
         st.geom := ComputeGeom(SlotCfg(n), mi)
     }
     HandlesSync()
+    ; Окно ещё стоит там, где было до привязки, а не на месте показа —
+    ; прячем его сразу, а не ждём первого хоткея (см. ParkAfterBind).
+    if !wasManaged
+        try ParkAfterBind(hwnd, SlotCfg(n), StateOf(hwnd))
     title := WinGetTitle("ahk_id " hwnd)
     DebugLog("[BIND] Slot " n " bound to hwnd=" hwnd " ('" title "')")
     return { ok: true, code: "", message: "Слот " n " → " title, hwnd: hwnd, title: title }
