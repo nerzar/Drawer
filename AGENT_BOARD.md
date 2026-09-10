@@ -11,6 +11,7 @@
 - В `master` вошли Settings instrumentation, full reset, единый WebView2 Settings в tray, настоящий путь `config.ini`, monitor picker и ускоренный Hide.
 - Code/semantic review и объединённые repo-проверки пройдены. Владелец принял итоговый runtime: Settings, monitor picker, Show/Hide, оба reset-сценария и исправленный раздел «О программе» работают.
 - Post-0.2.0 hardening pass (2026-09-10, ветка `hardening/post-0.2.0-release`): разобраны хвосты из «Не READY» ниже — см. «Сделано в post-0.2.0 hardening».
+- `12e3f9a` — hardening смержен в локальный `master`, запушен в `dev` (актуален). В `origin` (публичный `github.com/nerzar/Drawer`, тот же репозиторий, откуда раздаётся релиз) ещё не запушен — там всё ещё `8866692` (сам релиз v0.2.0), `origin/master` на 6 коммитов позади. Публикация hardening-хвоста в `origin` требует отдельного подтверждения владельца.
 
 ## Роли
 
@@ -52,6 +53,13 @@
 - `activateOnShow` убран из обеих форм редактирования слота в `settings-ui` (постоянный и динамический слот); поле и его round-trip в backend не тронуты — внутренняя совместимость сохранена.
 - Устаревший комментарий в `src/webview/SettingsWebHost.ahk`, всё ещё называвший native `SettingsShow()` «единственным полноценным путём» (верно до волны 2026-09-08, устарело после перевода трея на WebView2), приведён в соответствие текущей архитектуре. Сам `SettingsShow()` не трогали — он держится намеренно, как fallback и опора `test/narrow/picker-slice.ahk` (см. `docs/agent-reports/2026-09-08-gemini-webview-settings-tray.md`).
 - `settings-ui`: `npm install`, `npm run typecheck`, `npm test` (75/75) — чисто, старых Settings-регрессий не найдено.
+
+## Аудит состояния (2026-09-10, после hardening)
+
+- **Найдена незакоммиченная работа в заброшенном worktree** `C:/Users/nerza/AppData/Local/Temp/drawer-dev-animation-integration` (ветка `codex/integrate-animation-effects`, база — старый `feat(animation): integrate production animation styles`). Незакоммиченный diff добавляет `blurTransition`-параметр в `Hide()` и `AnimationHidePin`/`AnimationHideUnpin` в `src/drawer.ahk`, плюс немедленный вызов `WatchBlur()` из `ForegroundWork()`. Это не то же самое, что уже смерженный `514a198` (тот вызывает точечный `WatchBlurCheck` по конкретному окну немедленно по событию foreground) — здесь решается остаточная проблема Z-order: временный TOPMOST-pin окна на время hide-анимации при blur-переходе, чтобы не было «исчез → вспыхнул → исчез». Работа не удалена и не тронута — она похожа на настоящий, ещё не интегрированный фикс, а не на мусор. Требуется решение владельца: смотреть/интегрировать или закрыть как неактуальное.
+- **Ветка и worktree `frontend/settings-ui-live-fix`** (`.claude/worktrees/frontend-live-fix`) — мёртвые. Три «уникальных» коммита там — старая версия уже смерженной анимационной волны на базе `VERSION 0.1.2`, `animationStyle=classic` по умолчанию и удалённым `app-logo.png`; полный diff к текущему `master` откатывает более новую логику, а не добавляет что-то новое. Безопасно к удалению (ветка + worktree), но удаление — на разрешение владельца, не выполнено автоматически.
+- **`src/config.ini` каждую сессию висит модифицированным** (`git status` показывает бинарный diff) — файл в последний раз осмысленно коммитился ещё в `0930d5f` (v0.1 тестовый релиз), с тех пор это чисто runtime-артефакт, который приложение переписывает при каждом запуске/тесте и который никогда не коммитится обратно. Стоит либо перестать трекать его в git (добавить в `.gitignore`, оставить в репозитории только эталон/пример), либо сознательно фиксировать, что рабочая копия всегда «грязная» и это норма. Сейчас это просто шум в каждом `git status`.
+- `settings-ui`: `npm test` в этой сессии повторно прогнан — 75/75, зелено.
 
 ## Осталось открытым после hardening
 
