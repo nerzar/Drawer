@@ -136,8 +136,11 @@ WatchBlurCheck(hwnd) {
         WatchForget(hwnd)
         return
     }
-    if StillFocused(hwnd)
+    if StillFocused(hwnd) {
+        DebugLog("[BLUR-DIAG] WatchBlurCheck hwnd=" hwnd " stillFocused=1, skip")
         return
+    }
+    DebugLog("[BLUR-DIAG] WatchBlurCheck hwnd=" hwnd " -> Hide(blurred=true)")
     try Hide(hwnd, st, true)
 }
 
