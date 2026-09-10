@@ -549,7 +549,7 @@ class DrawerSettingsPort {
             return dto
         }
         dto["kind"] := "dynamic"
-        dto["label"] := String(Opt(s.cfg, "name", "Слот " s.n))
+        dto["label"] := String(Opt(s.cfg, "name", T("slot.defaultLabel", s.n)))
         dto["effective"] := this._BehaviorDto(s.cfg)
         dto["hotkey"] := HotkeyAhkToHuman(String(Opt(s.cfg, "hotkey", SlotHotkey(s.n))))
         ; Тот же засев, которым native заполняет панель при «Сделать

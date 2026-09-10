@@ -2745,7 +2745,7 @@ SettingsEditSeed(n) {
                  hotkey: SlotHotkey(n) }
     }
     d := SlotCfg(n)
-    return { kind: "perm", name: "Слот " n, exe: "", cls: "",
+    return { kind: "perm", name: T("slot.defaultLabel", n), exe: "", cls: "",
              monitor: d.monitor, edge: d.edge, width: d.width,
              activateOnShow: d.activateOnShow, hideOnBlur: d.hideOnBlur,
              hotkey: SlotHotkey(n) }
@@ -3117,7 +3117,7 @@ SettingsSlotWindowPick(ui) {
     w := SettingsRunPicker("window", setGui)
     if (!w || setUI != ui || SettingsPickerState().closeNative || ui.editingSlot != n)
         return
-    auto := (Trim(ui.eName.Value) = "" || Trim(ui.eName.Value) = "Слот " n)
+    auto := (Trim(ui.eName.Value) = "" || Trim(ui.eName.Value) = T("slot.defaultLabel", n))
     ui.populating := true
     ui.eExe.Value := w.exe
     ui.eCls.Value := w.cls
@@ -4354,7 +4354,7 @@ SettingsSlotValidate(n, e, &err, &field?) {
             SplitPath(WinGetProcessPath("ahk_id " hwnd), &file)
             e.exe := file
             e.cls := WinGetClass("ahk_id " hwnd)
-            if (Trim(e.name) = "" || Trim(e.name) = "Слот " n)
+            if (Trim(e.name) = "" || Trim(e.name) = T("slot.defaultLabel", n))
                 e.name := WinGetTitle("ahk_id " hwnd)
         }
     }
@@ -4392,7 +4392,7 @@ SettingsSlotWrites(n, e, &err, &field?) {
     blur := SettingsBoolIn(e.hideOnBlur, lbl "автоскрытие", &err)
     if (err != "")
         return []
-    cand := [{ key: "name", val: Trim(name) = "" ? "Слот " n : name },
+    cand := [{ key: "name", val: Trim(name) = "" ? T("slot.defaultLabel", n) : name },
              { key: "exe",  val: Trim(exe) },
              { key: "cls",  val: cls },
              { key: "monitor", val: mon },

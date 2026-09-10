@@ -47,6 +47,8 @@ I18nStrings := Map(
         Map("ru", "Хоткей полного сброса не назначен:`n{1}",
             "en", "Full-reset hotkey wasn't registered:`n{1}"),
 
+    "slot.defaultLabel",
+        Map("ru", "Слот {1}", "en", "Slot {1}"),
     "slot.bind.number_range",
         Map("ru", "Номер слота должен быть 1…9", "en", "Slot number must be 1…9"),
     "slot.bind.busy",
