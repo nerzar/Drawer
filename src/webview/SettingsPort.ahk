@@ -313,7 +313,8 @@ class DrawerSettingsPort {
             accent:         this._Text(g, "accent", "general.accent", &err, &field),
             handleWidth:    this._Int(JsonGet(g, "handle", 0), "width", "general.handle.width", &err, &field),
             handleHeight:   this._Int(JsonGet(g, "handle", 0), "height", "general.handle.height", &err, &field),
-            handleGap:      this._Int(JsonGet(g, "handle", 0), "gap", "general.handle.gap", &err, &field)
+            handleGap:      this._Int(JsonGet(g, "handle", 0), "gap", "general.handle.gap", &err, &field),
+            locale:         this._Text(g, "locale", "general.locale", &err, &field)
         }
     }
 
@@ -345,7 +346,8 @@ class DrawerSettingsPort {
             "general.accent",                         "цвет акцента",
             "general.handle.width",                   "размер кромки",
             "general.handle.height",                  "высота кромки",
-            "general.handle.gap",                     "отступ между кромками")
+            "general.handle.gap",                     "отступ между кромками",
+            "general.locale",                         "язык")
         if names.Has(path)
             return names[path]
         ; Имена полей слота знает backend: он же ставит их в свои
@@ -526,7 +528,8 @@ class DrawerSettingsPort {
             "accent", String(Opt(g, "accent", "2A2E35")),
             "handle", Map("width", this._Num(Opt(g, "handleWidth", 22), 22),
                            "height", this._Num(Opt(g, "handleHeight", 34), 34),
-                           "gap", this._Num(Opt(g, "handleGap", 8), 8)))
+                           "gap", this._Num(Opt(g, "handleGap", 8), 8)),
+            "locale", String(Opt(g, "locale", "ru")))
     }
 
     _BehaviorDto(b) {
