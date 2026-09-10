@@ -22,10 +22,6 @@ const d = computed(() => settings.draft)
 const loaded = computed(() => settings.draft !== null)
 const saving = computed(() => settings.status === 'saving')
 
-// Что действует прямо сейчас. Меняется только из ответа AHK, поэтому
-// расходится с полем ровно тогда, когда правка ещё не сохранена.
-const applied = computed(() => settings.canonical?.general ?? null)
-
 const bad = (path) => settings.field === path
 
 const preset = computed({
@@ -267,32 +263,7 @@ const selectedMonitor = computed({
       </div>
 
       <div class="card">
-        <h3>{{ t('general.card.extra.title') }}</h3>
-        <div class="row">
-          <label for="general-blur-ms">{{ t('general.field.blurCheckMs') }}</label>
-          <div class="field">
-            <input
-              id="general-blur-ms"
-              class="num-sm"
-              :class="{ 'field-bad': bad('general.blurCheckMs') }"
-              :aria-invalid="bad('general.blurCheckMs') ? 'true' : undefined"
-              type="text"
-              data-testid="blurCheckMs"
-              :disabled="saving"
-              v-model="d.blurCheckMs"
-            />
-          </div>
-        </div>
-        <p class="hint" style="margin-top: 12px; margin-bottom: 0">
-          {{ t('general.hint.blurCheckMs') }}
-          <span v-if="applied" data-testid="blurApplied">
-            {{ t('general.hint.blurApplied', { ms: applied.blurCheckMs }) }}
-          </span>
-        </p>
-      </div>
-
-      <div class="card">
-        <h3>{{ t('general.field.locale') }}</h3>
+        <h3>{{ t('general.card.locale.title') }}</h3>
         <div class="row">
           <label for="general-locale">{{ t('general.field.locale') }}</label>
           <select id="general-locale" class="dd" data-testid="locale" :disabled="saving" v-model="d.locale">

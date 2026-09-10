@@ -64,10 +64,7 @@ const STRINGS: Record<string, Entry> = {
   'general.field.animPreset': { ru: 'Плавность', en: 'Smoothness' },
   'general.animPreset.none': { ru: 'Без анимации', en: 'No animation' },
   'general.animPreset.custom': { ru: 'Текущая нестандартная', en: 'Current custom' },
-  'general.card.extra.title': { ru: 'Дополнительно', en: 'Advanced' },
-  'general.field.blurCheckMs': { ru: 'Проверка потери фокуса (мс)', en: 'Focus-loss check (ms)' },
-  'general.hint.blurCheckMs': { ru: 'Интервал опроса, используется для скрытия окна, когда фокус ушёл.', en: 'Polling interval used to hide the window once focus has moved away.' },
-  'general.hint.blurApplied': { ru: 'Применено сейчас: {ms} мс.', en: 'Currently applied: {ms} ms.' },
+  'general.card.locale.title': { ru: 'Локализация', en: 'Localization' },
   'general.field.locale': { ru: 'Язык', en: 'Language' },
   'general.monitorRaw': { ru: 'в файле: {raw}', en: 'in file: {raw}' },
 

@@ -66,15 +66,14 @@ test('G06/localization: GeneralView binds labels with for/id, adds aria-invalid,
   assert.match(generalSource, /<label for="general-anim-preset">\{\{ t\('general\.field\.animPreset'\) \}\}<\/label>/)
   assert.match(generalSource, /id="general-anim-preset"/)
 
-  assert.match(generalSource, /<label for="general-blur-ms">\{\{ t\('general\.field\.blurCheckMs'\) \}\}<\/label>/)
-  assert.match(generalSource, /id="general-blur-ms"/)
-  assert.match(generalSource, /:aria-invalid="bad\('general\.blurCheckMs'\) \? 'true' : undefined"/)
+  assert.match(generalSource, /<label for="general-locale">\{\{ t\('general\.field\.locale'\) \}\}<\/label>/)
+  assert.match(generalSource, /id="general-locale"/)
 
   // Переведённые подписи существуют и на русском не пустые.
   assert.match(i18nSource, /'general\.field\.width':\s*\{\s*ru:\s*'Размер окна'/)
   assert.match(i18nSource, /'general\.field\.edge':\s*\{\s*ru:\s*'Сторона выезда'/)
   assert.match(i18nSource, /'general\.field\.monitor':\s*\{\s*ru:\s*'Монитор'/)
-  assert.match(i18nSource, /'general\.field\.blurCheckMs':\s*\{\s*ru:\s*'Проверка потери фокуса \(мс\)'/)
+  assert.match(i18nSource, /'general\.card\.locale\.title':\s*\{\s*ru:\s*'Локализация'/)
 
   // G03 save-lock preserved
   assert.match(generalSource, /const saving = computed\(\(\) => settings\.status === 'saving'\)/)
