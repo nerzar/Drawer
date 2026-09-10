@@ -964,8 +964,11 @@ if !FileExist(drawerPath) {
 ; HWND не передаётся в результат ответа порта.
 ; ---------------------------------------------------------------
 
-; Копия чистой логики SlotBind/SlotRelease для проверки guards модели
-SlotBindModel(permSlots, dynSlots, pickerActive, activeHwnd, n) {
+; Копия чистой логики SlotBind/SlotRelease для проверки guards модели.
+; permWindows — Map(слот -> hwnd), который постоянный слот уже держит;
+; параллелен permSlots и нужен только тестам 13t/13u ниже, поэтому
+; необязателен и по умолчанию пуст.
+SlotBindModel(permSlots, dynSlots, pickerActive, activeHwnd, n, permWindows := 0) {
     if (n < 1 || n > 9)
         return { ok: false, code: "validation_error", message: "Номер слота должен быть 1…9" }
     if pickerActive
@@ -974,6 +977,19 @@ SlotBindModel(permSlots, dynSlots, pickerActive, activeHwnd, n) {
         return { ok: false, code: "slot_is_permanent", message: "Слот " n " занят постоянной привязкой" }
     if !activeHwnd
         return { ok: false, code: "no_eligible_active_window", message: "Активное окно не годится для ящика" }
+    ; Инвариант «одно окно — один слот»: постоянная привязка отказывает
+    ; (с номером слота в сообщении), чужая динамическая — переносится.
+    if IsObject(permWindows) {
+        for pm, phwnd in permWindows {
+            if (phwnd = activeHwnd)
+                return { ok: false, code: "window_bound_to_permanent_slot",
+                         message: "Окно уже закреплено за постоянным слотом " pm }
+        }
+    }
+    for dm, dhwnd in dynSlots.Clone() {
+        if (dhwnd = activeHwnd && dm != n)
+            dynSlots.Delete(dm)
+    }
     dynSlots[n] := activeHwnd
     return { ok: true, code: "", message: "Слот " n " привязан", hwnd: activeHwnd }
 }
@@ -1004,6 +1020,18 @@ Assert("13e: SlotBind без активного подходящего окна 
     SlotBindModel(mPerm, mDyn, false, 0, 4).code = "no_eligible_active_window")
 Assert("13f: SlotBind успешен при наличии активного окна",
     SlotBindModel(mPerm, mDyn, false, 1234, 4).ok = true && mDyn[4] = 1234)
+
+; 13t/13u — инвариант «одно окно — один слот» (PRODUCT_SPEC.md §2, §12):
+; свежие карты, чтобы не зависеть от мутаций предыдущих проверок.
+mPermW := Map(2, 5555)
+rBind := SlotBindModel(mPerm, Map(), false, 5555, 4, mPermW)
+Assert("13t: SlotBind отвергает окно постоянного слота с его номером в сообщении",
+    rBind.code = "window_bound_to_permanent_slot" && InStr(rBind.message, "2") > 0)
+
+mDynT := Map(4, 9999)
+rBind2 := SlotBindModel(mPerm, mDynT, false, 9999, 6)
+Assert("13u: SlotBind переносит окно из чужого dynamic слота, а не дублирует",
+    rBind2.ok = true && mDynT[6] = 9999 && !mDynT.Has(4) && mDynT.Count = 1)
 
 Assert("13g: SlotRelease с n < 1 отвергнут validation_error",
     SlotReleaseModel(mPerm, mDyn, false, 0).code = "validation_error")
@@ -1049,6 +1077,10 @@ if FileExist(drawerPath) && FileExist(slotsPath) {
      && InStr(srcBridge, 'outcome := this._port.Release(Request.payload)') > 0)
     Assert("13s: slot.bind и slot.release блокируются во время picker",
         InStr(srcBridge, '"slot.bind", "slot.release"') > 0)
+
+    srcSlots13 := FileRead(slotsPath, "UTF-8")
+    Assert("13v: SlotBind в src/Slots.ahk отклоняет окно постоянного слота новым кодом",
+        InStr(srcSlots13, "window_bound_to_permanent_slot") > 0)
 
     ; Подмена активного окна нужна только тесту, и жить она обязана в
     ; харнессе: харнесс правит копию drawer.ahk, а отгружаемый exe не

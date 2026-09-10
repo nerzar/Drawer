@@ -431,6 +431,31 @@ SlotBind(n) {
         return { ok: false, code: "no_eligible_active_window",
                  message: "Активное окно не годится для ящика", hwnd: 0, title: "" }
     }
+
+    ; Инвариант «одно окно — один слот» (PRODUCT_SPEC.md §2, §12): активное
+    ; окно уже может быть чьей-то привязкой. Постоянная — отказ с номером
+    ; постоянного слота в сообщении (и, через Notify() у вызывающего, тем
+    ; же текстом в Windows-уведомлении): решение владельца, второго хозяина
+    ; окна постоянный слот не уступает молча. Чужая динамическая привязка,
+    ; наоборот, переносится сюда — то же правило, что и «повторная
+    ; привязка того же окна переносит, а не дублирует запись».
+    Loop Slots.COUNT {
+        m := A_Index, other := Slots.Get(m)
+        if (other.window != hwnd)
+            continue
+        if other.perm {
+            DebugLog("[BIND] Slot " n " rejected: hwnd=" hwnd " already owned by permanent slot " m)
+            return { ok: false, code: "window_bound_to_permanent_slot",
+                     message: "Окно уже закреплено за постоянным слотом " m " (" other.perm.name ")",
+                     hwnd: 0, title: "" }
+        }
+        if (m != n) {
+            DebugLog("[BIND] Slot " n " takes over hwnd=" hwnd " from dynamic slot " m)
+            other.window := 0
+        }
+        break
+    }
+
     if (s.window && s.window != hwnd) {
         DebugLog("[BIND] Slot " n " releasing previous window hwnd=" s.window)
         Release(s.window)             ; прежнее окно возвращаем на место

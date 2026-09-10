@@ -11,6 +11,7 @@ export const ERROR_CODES = [
   'verify_failed',
   'busy',
   'slot_is_permanent',
+  'window_bound_to_permanent_slot',
   'no_eligible_active_window',
   'not_bound',
   'internal_error',
