@@ -3,10 +3,10 @@
 ; из webview/, который знает про глобалы drawer.ahk, и единственная точка
 ; входа: пункт трея и завершение работы.
 ;
-; Native Settings остаётся на месте и продолжает работать: WebView —
-; второй клиент того же backend, а не замена окну. Пока slice не
-; закрывает правку слотов, picker и bind, native — единственный
-; полноценный путь.
+; Единственный пункт Settings в трее — этот, WebView2. Native
+; SettingsShow() из src/drawer.ahk остался в коде намеренно (как
+; внутренний fallback и опора test/narrow/picker-slice.ahk), но у него
+; больше нет пункта меню и обычный пользователь до него не доходит.
 
 global webAdapter := 0     ; SettingsWebViewAdapter, пока окно живо
 global webBridge  := 0     ; SettingsJsonBridge того же окна
