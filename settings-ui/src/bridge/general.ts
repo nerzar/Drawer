@@ -115,7 +115,7 @@ export function isCustomAnim(animMs: string, animSteps: string): boolean {
 
 export function draftFromState(g: GeneralSettings): GeneralDraft {
   const m = g.dynamicDefaults.monitor
-  const handle = g.handle ?? { width: 22, height: 34, gap: 8 }
+  const handle = g.handle ?? { width: 26, height: 34, gap: 8 }
   const animMs = String(g.animation.durationMs)
   const animSteps = String(g.animation.steps)
   return {

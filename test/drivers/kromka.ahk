@@ -10,7 +10,7 @@ CoordMode("Mouse", "Screen")
 ;
 ; Размеры кромки — те же константы, что в drawer.ahk. В покое плитка
 ; вмещает иконку приложения, поэтому она не 5 пикселей, как была.
-REST := 22, NEAR := 28, HOVER := 44, LEN := 34, GAP := 8
+REST := 26, NEAR := 32, HOVER := 48, LEN := 34, GAP := 8
 
 dest := A_Args[1]
 pid  := Integer(A_Args[2])

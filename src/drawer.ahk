@@ -7,7 +7,7 @@ SetWinDelay(-1)
 CoordMode("Mouse", "Screen")   ; по умолчанию v2 отдаёт координаты активного окна
 
 #Include I18n.ahk
-locale := "ru"   ; T() до LoadConfig (например, ранний MsgBox) — на русском
+locale := "en"   ; T() до LoadConfig (например, ранний MsgBox) — по умолчанию английский
 
 ; Единственное место, где записана версия: build.ps1 читает её отсюда и
 ; так называет папку и архив релиза. Иначе номер расходится между кодом,
@@ -127,13 +127,13 @@ LoadConfig(path, &diags) {
             " — ожидается reveal, fade, dwmSlide, dwmSlideFade или dwmShrink; взято dwmSlideFade")
         animationStyle := "dwmSlideFade"
     }
-    locale := IniRead(path, "general", "locale", "ru")
+    locale := IniRead(path, "general", "locale", "en")
     if !LocaleValid(locale) {
-        diags.Push("config.ini: [general] locale=" locale " — ожидается ru или en; взято ru")
-        locale := "ru"
+        diags.Push("config.ini: [general] locale=" locale " — ожидается ru или en; взято en")
+        locale := "en"
     }
     blurMs    := IniRead(path, "general", "blurMs", 250)
-    handleWidth := IniRead(path, "general", "handleWidth", 22)
+    handleWidth := IniRead(path, "general", "handleWidth", 26)
     handleHeight := IniRead(path, "general", "handleHeight", 34)
     handleGap := IniRead(path, "general", "handleGap", 8)
     ; По умолчанию включено: в конфиге, написанном до появления кромок,
@@ -613,7 +613,7 @@ FullResetDefaultWrites() {
         { sec: "general", key: "animationStyle", val: "dwmSlideFade" },
         { sec: "general", key: "blurMs", val: "250" },
         { sec: "general", key: "handles", val: "true" },
-        { sec: "general", key: "locale", val: "ru" },
+        { sec: "general", key: "locale", val: "en" },
         { sec: "dynamic", key: "name", val: "Слот" },
         { sec: "dynamic", key: "monitor", val: "cursor" },
         { sec: "dynamic", key: "edge", val: "right" },
