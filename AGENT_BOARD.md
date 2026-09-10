@@ -12,6 +12,7 @@
 - Code/semantic review и объединённые repo-проверки пройдены. Владелец принял итоговый runtime: Settings, monitor picker, Show/Hide, оба reset-сценария и исправленный раздел «О программе» работают.
 - Post-0.2.0 hardening pass (2026-09-10, ветка `hardening/post-0.2.0-release`): разобраны хвосты из «Не READY» ниже — см. «Сделано в post-0.2.0 hardening».
 - `12e3f9a` — hardening смержен в локальный `master`, запушен в `dev` (актуален). В `origin` (публичный `github.com/nerzar/Drawer`, тот же репозиторий, откуда раздаётся релиз) ещё не запушен — там всё ещё `8866692` (сам релиз v0.2.0), `origin/master` на 6 коммитов позади. Публикация hardening-хвоста в `origin` требует отдельного подтверждения владельца.
+- `9548b53` (`v0.3.0`) — ветка `feat/localization-en` смержена в `master`: полная локализация на английский (бэкенд AHK — трей/уведомления/MsgBox'ы/сообщения Slots.ahk через новый `src/I18n.ahk`, Settings UI — новый `settings-ui/src/i18n/`, карточка «Localization» с переключателем ru/en, работающим сразу в открытой форме). Нативный fallback GUI (`SettingsShow()`) и диагностика `config.ini` намеренно остались только на русском. `npm run typecheck` и `npm test` (75/75) чисто.
 
 ## Роли
 
