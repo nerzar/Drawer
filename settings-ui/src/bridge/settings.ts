@@ -269,9 +269,17 @@ function fail(e: unknown, ticket: number): void {
     if (e.field !== undefined) {
       settings.field = e.field ?? ''
     }
-    if (e.diagnostics && e.diagnostics.length > 0) {
-      settings.diagnostics = e.diagnostics
-    }
+    // partial значит, что диска уже коснулись до того, как Save
+    // отказал, — молчать об этом значило бы дать человеку решить, что
+    // не сохранилось вообще ничего. runtimeReloaded=true — canonical
+    // ниже станет тем, что реально на диске; false — перечитать не
+    // удалось, и experience может отстать от файла до переоткрытия.
+    const partialNote = e.partial?.mayHavePersisted
+      ? t(e.partial.runtimeReloaded ? 'status.partial.reloaded' : 'status.partial.unknown')
+      : null
+    settings.diagnostics = partialNote
+      ? [partialNote, ...(e.diagnostics ?? [])]
+      : (e.diagnostics && e.diagnostics.length > 0 ? e.diagnostics : settings.diagnostics)
     // Частичная запись с успешным reload приносит актуальный canonical:
     // baseline надо заменить, а draft — сохранить. Поэтому здесь absorb,
     // а не adopt: человек не должен второй раз набирать то, что не

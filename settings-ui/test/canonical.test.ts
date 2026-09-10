@@ -624,12 +624,77 @@ test('C03-2: partial/retryable result does not become false success and exposes 
   assert.doesNotMatch(settings.message, /Сохранено/, 'partial failure must NEVER show Сохранено')
   assert.match(settings.message, /Не записалось: \[slot2\] exe/)
   assert.equal(settings.field, 'slots.2.executable', 'field diagnostic must be exposed')
-  assert.deepEqual(settings.diagnostics, ['config.ini: [general] accent — неверный формат'])
+  // Honest partial-save feedback (05-план-работ.md §2 audit item 5): a
+  // mayHavePersisted+runtimeReloaded error must tell the user disk was
+  // already touched, not just show the raw validation message — the note
+  // leads diagnostics, ahead of whatever config.ini diagnostics came back.
+  assert.equal(settings.diagnostics.length, 2)
+  assert.match(settings.diagnostics[0], /записаться на диск/, 'must disclose the partial write')
+  assert.equal(settings.diagnostics[1], 'config.ini: [general] accent — неверный формат')
   assert.match(diagnosticsHint(), /accent/)
   // Canonical was updated to partial reloaded state:
   assert.deepEqual(settings.canonical, partialState)
   // Retryable draft edit on slot 2 was NOT discarded:
   assert.equal(settings.slotDrafts[2]!.widthPercent, '80')
+
+  _resetClientForTesting()
+  delete (globalThis as any).chrome
+})
+
+test('C03-2b: partial save with failed reload warns that the view may be stale, not just the raw error', async () => {
+  const s1 = state(perm(1), dyn(2))
+
+  const reqHandler = (action: string, _payload: any): any => {
+    if (action === 'settings.apply') {
+      return {
+        ok: false,
+        error: {
+          code: 'internal_error',
+          message: 'Настройки записаны, но перечитать конфиг не удалось: доступ запрещён',
+          retryable: false,
+          partial: { mayHavePersisted: true, runtimeReloaded: false },
+        },
+      }
+    }
+    throw new Error('unexpected action ' + action)
+  }
+
+  const listeners: any[] = []
+  ;(globalThis as any).chrome = {
+    webview: {
+      postMessage(msg: any) {
+        if (msg.type === 'request') {
+          Promise.resolve().then(() => {
+            const resp = reqHandler(msg.action, msg.payload)
+            listeners.forEach((l) => l({ data: { type: 'response', id: msg.id, ...resp } }))
+          })
+        }
+      },
+      addEventListener(_t: string, h: any) { listeners.push(h) },
+      removeEventListener(_t: string, h: any) {
+        const idx = listeners.indexOf(h)
+        if (idx >= 0) listeners.splice(idx, 1)
+      },
+    },
+  }
+
+  const { settings, applySettings, _resetClientForTesting } = await import('../src/bridge/settings')
+  _resetClientForTesting()
+
+  settings.canonical = s1
+  settings.draft = draftFromState(s1.general)
+  settings.slotDrafts = slotDraftsFromState(s1)
+
+  await applySettings()
+
+  assert.equal(settings.status, 'error')
+  assert.equal(settings.bad, true)
+  // No state came back (reload failed), so canonical must NOT silently
+  // look confirmed-current — but the user still needs to know disk may
+  // have changed underneath the view they're looking at.
+  assert.deepEqual(settings.canonical, s1, 'without a reloaded state, canonical must not be guessed at')
+  assert.equal(settings.diagnostics.length, 1)
+  assert.match(settings.diagnostics[0], /перечитать/, 'must warn the view may not match config.ini')
 
   _resetClientForTesting()
   delete (globalThis as any).chrome

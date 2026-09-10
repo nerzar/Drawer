@@ -32,6 +32,8 @@ const STRINGS: Record<string, Entry> = {
   'status.saving': { ru: 'Сохраняем…', en: 'Saving…' },
   'status.saved': { ru: 'Сохранено. Изменённых строк: {n}', en: 'Saved. Changed lines: {n}' },
   'status.noop': { ru: 'Менять нечего: всё уже так', en: 'Nothing to change: already like this' },
+  'status.partial.reloaded': { ru: 'Часть изменений успела записаться на диск до ошибки — экран уже показывает то, что реально сохранено.', en: 'Some changes were written to disk before the error — this screen already shows what actually saved.' },
+  'status.partial.unknown': { ru: 'Часть изменений могла записаться на диск до ошибки, но перечитать их не удалось — экран может не совпадать с config.ini. Переоткройте настройки, чтобы проверить.', en: "Some changes may have been written to disk before the error, but rereading them failed — this screen might not match config.ini. Reopen Settings to check." },
 
   'hint.restart.slot_one': { ru: 'Хоткей фокуса (слот {list}) заработает после перезапуска Ящика.', en: 'Focus hotkey (slot {list}) will take effect after restarting Drawer.' },
   'hint.restart.slot_many': { ru: 'Хоткей фокуса (слоты {list}) заработает после перезапуска Ящика.', en: 'Focus hotkeys (slots {list}) will take effect after restarting Drawer.' },
