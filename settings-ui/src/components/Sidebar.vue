@@ -1,18 +1,20 @@
 <script setup>
+import { t } from '../i18n'
+
 defineProps({
   active: { type: String, required: true },
 })
 defineEmits(['update:active'])
 
 const tabs = [
-  { key: 'general', label: 'Общие' },
-  { key: 'slots', label: 'Слоты' },
-  { key: 'about', label: 'О программе' },
+  { key: 'general', labelKey: 'sidebar.tab.general' },
+  { key: 'slots', labelKey: 'sidebar.tab.slots' },
+  { key: 'about', labelKey: 'sidebar.tab.about' },
 ]
 </script>
 
 <template>
-  <nav class="sidebar" aria-label="Разделы настроек">
+  <nav class="sidebar" :aria-label="t('sidebar.aria')">
     <button
       v-for="tab in tabs"
       :key="tab.key"
@@ -68,7 +70,7 @@ const tabs = [
         <line x1="12" y1="11" x2="12" y2="16" />
         <circle cx="12" cy="8" r="1" fill="currentColor" stroke="none" />
       </svg>
-      <span>{{ tab.label }}</span>
+      <span>{{ t(tab.labelKey) }}</span>
     </button>
   </nav>
 </template>

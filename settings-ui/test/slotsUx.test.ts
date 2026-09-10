@@ -6,12 +6,17 @@ import type { SlotState } from '../src/bridge/protocol'
 import type { SlotDraft } from '../src/bridge/slotDraft'
 
 const source = readFileSync(new URL('../src/views/SlotsView.vue', import.meta.url), 'utf8')
+const i18nSource = readFileSync(new URL('../src/i18n/index.ts', import.meta.url), 'utf8')
 
 test('Slots UI keeps release action separate from the free-slot note and drops the retired override copy', () => {
-  assert.match(source, /Сбросить слот/)
-  assert.match(source, /снова находил приложение после перезапуска, закрепите слот за приложением/)
+  assert.match(source, /t\('slots\.action\.reset'\)/)
+  assert.match(source, /t\('slots\.freeNote'\)/)
+  assert.match(i18nSource, /'slots\.action\.reset':\s*\{\s*ru:\s*'Сбросить слот'/)
+  assert.match(i18nSource, /'slots\.freeNote':\s*\{\s*ru:\s*'Чтобы Drawer снова находил приложение после перезапуска, закрепите слот за приложением\.'/)
   assert.doesNotMatch(source, /Вернуть общие настройки/)
   assert.doesNotMatch(source, /привязанное окно останется/)
+  assert.doesNotMatch(i18nSource, /Вернуть общие настройки/)
+  assert.doesNotMatch(i18nSource, /привязанное окно останется/)
 })
 
 test('Slots UI does not expose internal slot vocabulary in rendered copy', () => {
@@ -19,8 +24,11 @@ test('Slots UI does not expose internal slot vocabulary in rendered copy', () =>
 
   assert.doesNotMatch(template, /Динамический|Сделать динамическим/)
   assert.doesNotMatch(template, /show\/hide|ahk_class|\[dynamic(?:SlotN)?\]|\[slot N\]/)
-  assert.match(template, /Постоянный' : 'Временный/)
-  assert.match(template, /Сделать постоянным/)
+  assert.match(template, /t\('slots\.pill\.permanent'\) : t\('slots\.pill\.dynamic'\)/)
+  assert.match(template, /t\('slots\.action\.makePermanent'\)/)
+  assert.match(i18nSource, /'slots\.pill\.permanent':\s*\{\s*ru:\s*'Постоянный'/)
+  assert.match(i18nSource, /'slots\.pill\.dynamic':\s*\{\s*ru:\s*'Временный'/)
+  assert.match(i18nSource, /'slots\.action\.makePermanent':\s*\{\s*ru:\s*'Сделать постоянным'/)
 })
 
 test('narrow detail-actions still wraps after the override-box block was removed', () => {

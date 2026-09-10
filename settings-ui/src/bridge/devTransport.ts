@@ -33,6 +33,7 @@ const general: GeneralSettings = {
   blurCheckMs: 120,
   accent: '2A2E35',
   handle: { width: 22, height: 34, gap: 8 },
+  locale: 'ru',
 }
 
 function permanentValue(number: SlotNumber): PermanentSlotValue {

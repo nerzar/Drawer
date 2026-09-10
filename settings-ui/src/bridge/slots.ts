@@ -1,5 +1,6 @@
 import { onUnmounted, ref, watch } from 'vue'
 import { settings, settingsClient } from './settings'
+import { t } from '../i18n'
 import type { MonitorRef, SlotState, SlotStatus } from './protocol'
 import type { SlotDraft } from './slotDraft'
 
@@ -63,11 +64,16 @@ export function slotIcon(slot: SlotState): string {
   return ('icon' in slot.status && slot.status.icon) || ''
 }
 export function monitorLabel(monitor: MonitorRef): string {
-  if (monitor.kind === 'cursor') return 'Под курсором'
-  if (monitor.kind === 'number') return `Монитор ${monitor.number}`
-  return `Некорректное значение: ${monitor.raw}`
+  if (monitor.kind === 'cursor') return t('monitor.cursor')
+  if (monitor.kind === 'number') return t('monitor.number', { n: monitor.number })
+  return t('monitor.invalid', { raw: monitor.raw })
 }
-export const edgeLabels = { left: 'Слева', right: 'Справа', top: 'Сверху', bottom: 'Снизу' }
+
+const EDGE_KEYS = { left: 'edge.left', right: 'edge.right', top: 'edge.top', bottom: 'edge.bottom' } as const
+
+export function edgeLabel(edge: keyof typeof EDGE_KEYS): string {
+  return t(EDGE_KEYS[edge])
+}
 
 // Как показать состояние слота: текст, точка и её цвет — ровно три
 // вещи, которыми состояние показано в дизайне. Состояний пять, а в
@@ -82,14 +88,14 @@ const IDLE = 'rgba(255,255,255,.2)'
 export function statusFor(status: SlotStatus): StatusView {
   switch (status.state) {
     case 'empty':
-      return { text: 'пусто', dot: 'transparent', color: 'var(--text-3)' }
+      return { text: t('status.slot.empty'), dot: 'transparent', color: 'var(--text-3)' }
     case 'applicationNotRunning':
-      return { text: 'не запущено', dot: IDLE, color: 'var(--text-3)' }
+      return { text: t('status.slot.notRunning'), dot: IDLE, color: 'var(--text-3)' }
     case 'available':
-      return { text: 'запущено', dot: BOUND, color: 'var(--text-2)' }
+      return { text: t('status.slot.available'), dot: BOUND, color: 'var(--text-2)' }
     case 'parked':
-      return { text: 'убрано', dot: BOUND, color: 'var(--text-2)' }
+      return { text: t('status.slot.parked'), dot: BOUND, color: 'var(--text-2)' }
     case 'shown':
-      return { text: 'на экране', dot: BOUND, color: 'var(--text-2)' }
+      return { text: t('status.slot.shown'), dot: BOUND, color: 'var(--text-2)' }
   }
 }

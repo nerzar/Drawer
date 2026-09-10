@@ -923,7 +923,7 @@ test('G03-2: GeneralView locks all save-participating inputs and actions during 
     'accent',
     'animationStyle',
     'animPreset',
-    'blurCheckMs',
+    'locale',
   ]
 
   for (const tid of requiredTestIds) {

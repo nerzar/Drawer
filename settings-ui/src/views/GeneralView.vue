@@ -3,9 +3,9 @@ import { computed, ref } from 'vue'
 import { settings } from '../bridge/settings'
 import {
   ACCENT_PALETTE,
-  ANIMATION_STYLE_OPTIONS,
-  ANIM_PRESETS,
-  EDGE_OPTIONS,
+  animationStyleOptions,
+  animPresets,
+  edgeOptions,
   animPreset,
   applyAnimPreset,
 } from '../bridge/general'
@@ -14,16 +14,13 @@ import {
   currentMonitorValue,
   setMonitorValue,
 } from '../bridge/monitors'
+import { t, LOCALE_OPTIONS } from '../i18n'
 
 // Форма правит только черновик. Значения в нём — из canonical state
 // AHK, и вернуться туда они могут единственным путём: Применить/ОК.
 const d = computed(() => settings.draft)
 const loaded = computed(() => settings.draft !== null)
 const saving = computed(() => settings.status === 'saving')
-
-// Что действует прямо сейчас. Меняется только из ответа AHK, поэтому
-// расходится с полем ровно тогда, когда правка ещё не сохранена.
-const applied = computed(() => settings.canonical?.general ?? null)
 
 const bad = (path) => settings.field === path
 
@@ -59,8 +56,8 @@ const monitorOptions = computed(() => {
   return buildMonitorOptions(
     monitors.value,
     d.value,
-    'Следовать за курсором',
-    d.value.monitorRaw ? `в файле: ${d.value.monitorRaw}` : undefined
+    t('monitor.cursorDefault'),
+    d.value.monitorRaw ? t('general.monitorRaw', { raw: d.value.monitorRaw }) : undefined
   )
 })
 
@@ -75,20 +72,19 @@ const selectedMonitor = computed({
 
 <template>
   <div class="content">
-    <h1 class="page-title">Общие настройки</h1>
-    <p class="page-sub">Поведение, внешний вид и умолчания для динамических слотов.</p>
+    <h1 class="page-title">{{ t('general.title') }}</h1>
+    <p class="page-sub">{{ t('general.subtitle') }}</p>
 
-    <div v-if="!loaded" class="card empty">Настройки ещё не прочитаны.</div>
+    <div v-if="!loaded" class="card empty">{{ t('general.notLoaded') }}</div>
 
     <fieldset v-else class="editor grid2" :disabled="saving">
       <div class="card">
-        <h3>Поведение по умолчанию</h3>
+        <h3>{{ t('general.card.behavior.title') }}</h3>
         <p class="hint">
-          Действует на динамические слоты — у постоянных свои значения в config.ini, отсюда их не
-          поменять.
+          {{ t('general.card.behavior.hint') }}
         </p>
         <div class="row">
-          <label for="general-width">Размер окна</label>
+          <label for="general-width">{{ t('general.field.width') }}</label>
           <div class="field">
             <input
               id="general-width"
@@ -100,17 +96,17 @@ const selectedMonitor = computed({
               :disabled="saving"
               v-model="d.widthPercent"
             />
-            <span class="unit">% экрана</span>
+            <span class="unit">{{ t('general.unit.percentScreen') }}</span>
           </div>
         </div>
         <div class="row">
-          <label for="general-edge">Сторона выезда</label>
+          <label for="general-edge">{{ t('general.field.edge') }}</label>
           <select id="general-edge" class="dd" data-testid="edge" :disabled="saving" v-model="d.edge">
-            <option v-for="o in EDGE_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
+            <option v-for="o in edgeOptions()" :key="o.value" :value="o.value">{{ o.label }}</option>
           </select>
         </div>
         <div class="row">
-          <label for="general-monitor-kind">Монитор</label>
+          <label for="general-monitor-kind">{{ t('general.field.monitor') }}</label>
           <div class="field">
             <select
               id="general-monitor-kind"
@@ -134,18 +130,18 @@ const selectedMonitor = computed({
         </div>
         <label class="check-row" style="margin-top: 20px;">
           <input type="checkbox" data-testid="handlesEnabled" :disabled="saving" v-model="d.handlesEnabled" />
-          <span>Кромки у края экрана</span>
+          <span>{{ t('general.check.handles') }}</span>
         </label>
         <label class="check-row">
           <input type="checkbox" data-testid="hideOnBlur" :disabled="saving" v-model="d.hideOnBlur" />
-          <span>Убирать окно, когда фокус ушёл в другое</span>
+          <span>{{ t('general.check.hideOnBlur') }}</span>
         </label>
       </div>
 
       <div class="card">
-        <h3>Внешний вид</h3>
+        <h3>{{ t('general.card.appearance.title') }}</h3>
         <div class="row">
-          <label>Размер кромки (px)</label>
+          <label>{{ t('general.field.handleSize') }}</label>
           <div class="field">
             <input class="num-sm" type="text" data-testid="handleWidth" v-model="d.handleWidth" />
             <span class="unit">×</span>
@@ -153,14 +149,14 @@ const selectedMonitor = computed({
           </div>
         </div>
         <div class="row">
-          <label>Отступ между кромками (px)</label>
+          <label>{{ t('general.field.handleGap') }}</label>
           <div class="field"><input class="num-sm" type="text" data-testid="handleGap" v-model="d.handleGap" /></div>
         </div>
 
         <div class="divider"></div>
 
         <div class="row" style="margin-bottom: 10px">
-          <label for="general-accent">Цвет акцента</label>
+          <label for="general-accent">{{ t('general.field.accent') }}</label>
           <div class="field">
             <span class="unit">HEX</span>
             <input
@@ -183,7 +179,7 @@ const selectedMonitor = computed({
               type="button"
               :data-testid="'swatch-' + hex"
               :style="{ background: '#' + hex }"
-              :aria-label="'Цвет #' + hex"
+              :aria-label="t('general.swatch.aria', { hex })"
               :aria-pressed="hex.toLowerCase() === d.accent.toLowerCase()"
               :disabled="saving"
               @click="pickAccent(hex)"
@@ -205,8 +201,8 @@ const selectedMonitor = computed({
             <label
               class="swatch-add"
               :class="{ disabled: saving }"
-              title="Свой цвет"
-              aria-label="Свой цвет"
+              :title="t('general.customColor.title')"
+              :aria-label="t('general.customColor.title')"
               :tabindex="saving ? -1 : 0"
               @click="saving && $event.preventDefault()"
               @keydown.enter.prevent="triggerCustomColor"
@@ -223,7 +219,7 @@ const selectedMonitor = computed({
                 :disabled="saving"
                 @input="pickCustomAccent"
                 class="visually-hidden-color"
-                aria-label="Выбрать свой цвет"
+                :aria-label="t('general.customColor.pick')"
               />
             </label>
           </div>
@@ -238,12 +234,12 @@ const selectedMonitor = computed({
       </div>
 
       <div class="card">
-        <h3>Анимация</h3>
+        <h3>{{ t('general.card.animation.title') }}</h3>
         <p class="hint">
-          Вид задаёт эффект, плавность — его существующий темп.
+          {{ t('general.card.animation.hint') }}
         </p>
         <div class="row">
-          <label for="general-animation-style">Вид</label>
+          <label for="general-animation-style">{{ t('general.field.animationStyle') }}</label>
           <select
             id="general-animation-style"
             class="dd"
@@ -251,44 +247,29 @@ const selectedMonitor = computed({
             :disabled="saving"
             v-model="d.animationStyle"
           >
-            <option v-for="o in ANIMATION_STYLE_OPTIONS" :key="o.value" :value="o.value">
+            <option v-for="o in animationStyleOptions()" :key="o.value" :value="o.value">
               {{ o.label }}
             </option>
           </select>
         </div>
         <div class="row">
-          <label for="general-anim-preset">Плавность</label>
+          <label for="general-anim-preset">{{ t('general.field.animPreset') }}</label>
           <select id="general-anim-preset" class="dd" data-testid="animPreset" :disabled="saving" v-model="preset">
-            <option value="none">Без анимации</option>
-            <option v-for="o in ANIM_PRESETS" :key="o.id" :value="o.id">{{ o.label }}</option>
-            <option value="custom">Текущая нестандартная</option>
+            <option value="none">{{ t('general.animPreset.none') }}</option>
+            <option v-for="o in animPresets()" :key="o.id" :value="o.id">{{ o.label }}</option>
+            <option value="custom">{{ t('general.animPreset.custom') }}</option>
           </select>
         </div>
       </div>
 
       <div class="card">
-        <h3>Дополнительно</h3>
+        <h3>{{ t('general.card.locale.title') }}</h3>
         <div class="row">
-          <label for="general-blur-ms">Проверка потери фокуса (мс)</label>
-          <div class="field">
-            <input
-              id="general-blur-ms"
-              class="num-sm"
-              :class="{ 'field-bad': bad('general.blurCheckMs') }"
-              :aria-invalid="bad('general.blurCheckMs') ? 'true' : undefined"
-              type="text"
-              data-testid="blurCheckMs"
-              :disabled="saving"
-              v-model="d.blurCheckMs"
-            />
-          </div>
+          <label for="general-locale">{{ t('general.field.locale') }}</label>
+          <select id="general-locale" class="dd" data-testid="locale" :disabled="saving" v-model="d.locale">
+            <option v-for="o in LOCALE_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
+          </select>
         </div>
-        <p class="hint" style="margin-top: 12px; margin-bottom: 0">
-          Интервал опроса, используется для скрытия окна, когда фокус ушёл.
-          <span v-if="applied" data-testid="blurApplied">
-            Применено сейчас: {{ applied.blurCheckMs }} мс.
-          </span>
-        </p>
       </div>
     </fieldset>
   </div>

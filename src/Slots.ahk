@@ -414,22 +414,22 @@ SlotFocus(n) {
 SlotBind(n) {
     if (!IsInteger(n) || n < 1 || n > Slots.COUNT) {
         DebugLog("[BIND] Slot " n " rejected: validation_error")
-        return { ok: false, code: "validation_error", message: "Номер слота должен быть 1…9", hwnd: 0, title: "" }
+        return { ok: false, code: "validation_error", message: T("slot.bind.number_range"), hwnd: 0, title: "" }
     }
     if SettingsPickerState().active {
         DebugLog("[BIND] Slot " n " rejected: busy (picker active)")
-        return { ok: false, code: "busy", message: "Открыт picker", hwnd: 0, title: "" }
+        return { ok: false, code: "busy", message: T("slot.bind.busy"), hwnd: 0, title: "" }
     }
     s := Slots.Get(n)
     if s.perm {
         DebugLog("[BIND] Slot " n " rejected: slot is permanent (" s.perm.name ")")
         return { ok: false, code: "slot_is_permanent",
-                 message: "Слот " n " занят постоянной привязкой: " s.perm.name, hwnd: 0, title: "" }
+                 message: T("slot.bind.owned_by_permanent", n, s.perm.name), hwnd: 0, title: "" }
     }
     if !(hwnd := PickActive()) {
         DebugLog("[BIND] Slot " n " rejected: no eligible active window")
         return { ok: false, code: "no_eligible_active_window",
-                 message: "Активное окно не годится для ящика", hwnd: 0, title: "" }
+                 message: T("slot.bind.no_eligible_window"), hwnd: 0, title: "" }
     }
 
     ; Инвариант «одно окно — один слот» (PRODUCT_SPEC.md §2, §12): активное
@@ -446,7 +446,7 @@ SlotBind(n) {
         if other.perm {
             DebugLog("[BIND] Slot " n " rejected: hwnd=" hwnd " already owned by permanent slot " m)
             return { ok: false, code: "window_bound_to_permanent_slot",
-                     message: "Окно уже закреплено за постоянным слотом " m " (" other.perm.name ")",
+                     message: T("slot.bind.window_bound_to_permanent", m, other.perm.name),
                      hwnd: 0, title: "" }
         }
         if (m != n) {
@@ -477,7 +477,7 @@ SlotBind(n) {
         try ParkAfterBind(hwnd, SlotCfg(n), StateOf(hwnd))
     title := WinGetTitle("ahk_id " hwnd)
     DebugLog("[BIND] Slot " n " bound to hwnd=" hwnd " ('" title "')")
-    return { ok: true, code: "", message: "Слот " n " → " title, hwnd: hwnd, title: title }
+    return { ok: true, code: "", message: T("slot.bind.done", n, title), hwnd: hwnd, title: title }
 }
 
 ; Освободить динамический слот: вернуть окно на исходное место, забыть о
@@ -486,29 +486,29 @@ SlotBind(n) {
 SlotRelease(n) {
     if (!IsInteger(n) || n < 1 || n > Slots.COUNT) {
         DebugLog("[RELEASE] Slot " n " rejected: validation_error")
-        return { ok: false, code: "validation_error", message: "Номер слота должен быть 1…9", hwnd: 0 }
+        return { ok: false, code: "validation_error", message: T("slot.bind.number_range"), hwnd: 0 }
     }
     if SettingsPickerState().active {
         DebugLog("[RELEASE] Slot " n " rejected: busy (picker active)")
-        return { ok: false, code: "busy", message: "Открыт picker", hwnd: 0 }
+        return { ok: false, code: "busy", message: T("slot.bind.busy"), hwnd: 0 }
     }
     s := Slots.Get(n)
     if s.perm {
         DebugLog("[RELEASE] Slot " n " rejected: slot is permanent")
         return { ok: false, code: "slot_is_permanent",
-                 message: "Слот " n " — постоянный, его нельзя освободить", hwnd: 0 }
+                 message: T("slot.release.is_permanent", n), hwnd: 0 }
     }
     if !s.window {
         DebugLog("[RELEASE] Slot " n " rejected: not bound")
         return { ok: false, code: "not_bound",
-                 message: "Слот " n " не привязан к окну", hwnd: 0 }
+                 message: T("slot.release.not_bound", n), hwnd: 0 }
     }
     hwnd := s.window
     s.window := 0
     Release(hwnd)
     SetTimer(HandlesSync, -1)
     DebugLog("[RELEASE] Slot " n " released hwnd=" hwnd)
-    return { ok: true, code: "", message: "Слот " n " освобождён", hwnd: hwnd }
+    return { ok: true, code: "", message: T("slot.release.done", n), hwnd: hwnd }
 }
 
 ; Очистка динамических слотов. Постоянные не трогаем — их window это

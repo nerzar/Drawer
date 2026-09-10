@@ -6,6 +6,9 @@ Persistent()
 SetWinDelay(-1)
 CoordMode("Mouse", "Screen")   ; по умолчанию v2 отдаёт координаты активного окна
 
+#Include I18n.ahk
+locale := "ru"   ; T() до LoadConfig (например, ранний MsgBox) — на русском
+
 ; Единственное место, где записана версия: build.ps1 читает её отсюда и
 ; так называет папку и архив релиза. Иначе номер расходится между кодом,
 ; сборкой и тем, что видит тестер.
@@ -71,9 +74,7 @@ ApplyDwmTitlebarTheme(hwnd) {
 configPath := A_ScriptDir "\config.ini"
 if !FileExist(configPath) {
     DebugLog("[STARTUP] ERROR: config.ini not found at " configPath)
-    MsgBox("Не найден config.ini рядом с программой:`n" configPath
-         "`n`nВерните config.ini из архива программы или создайте его заново.",
-         "Ящик", 16)
+    MsgBox(T("msgbox.config.missing", configPath), T("app.title"), 16)
     ExitApp()
 }
 
@@ -125,6 +126,11 @@ LoadConfig(path, &diags) {
         diags.Push("config.ini: [general] animationStyle=" animationStyle
             " — ожидается reveal, fade, dwmSlide, dwmSlideFade или dwmShrink; взято dwmSlideFade")
         animationStyle := "dwmSlideFade"
+    }
+    locale := IniRead(path, "general", "locale", "ru")
+    if !LocaleValid(locale) {
+        diags.Push("config.ini: [general] locale=" locale " — ожидается ru или en; взято ru")
+        locale := "ru"
     }
     blurMs    := IniRead(path, "general", "blurMs", 250)
     handleWidth := IniRead(path, "general", "handleWidth", 22)
@@ -205,8 +211,12 @@ LoadConfig(path, &diags) {
     DebugLog("[CONFIG] LoadConfig done: " perm.Count " permanent slot(s), " overrides.Count " override(s)")
     return { animMs: animMs, animSteps: animSteps, animationStyle: animationStyle, blurMs: blurMs,
              handleWidth: handleWidth, handleHeight: handleHeight, handleGap: handleGap,
-             handlesOn: handlesOn, accent: handleBg,
+             handlesOn: handlesOn, accent: handleBg, locale: locale,
              perm: perm, dynamic: dynamic, overrides: overrides, hotkeys: hotkeys }
+}
+
+LocaleValid(value) {
+    return value = "ru" || value = "en"
 }
 
 ; Валидные значения config.ini — включая dwmSlide: он больше не
@@ -251,7 +261,7 @@ IniBool(path, section, key, def, &diags) {
 ; меняется только кто и когда его показывает.
 ConfigDiagShow(diags) {
     for d in diags
-        MsgBox(d, "Ящик")
+        MsgBox(d, T("app.title"))
 }
 
 ; Общие настройки прочитанного config.ini в рантайм. Слоты сюда не
@@ -259,7 +269,7 @@ ConfigDiagShow(diags) {
 ; реконсиляции после Save нужен ещё и снимок постоянных привязок.
 ConfigApply(cfg) {
     global animMs, animSteps, animationStyle, blurMs, handleWidth, handleHeight, handleGap, handlesOn, HANDLE_BG
-    global HANDLE_REST, HANDLE_NEAR, HANDLE_HOVER, HANDLE_LEN, HANDLE_GAP
+    global HANDLE_REST, HANDLE_NEAR, HANDLE_HOVER, HANDLE_LEN, HANDLE_GAP, locale
     animMs       := cfg.animMs
     animSteps    := cfg.animSteps
     animationStyle := cfg.animationStyle
@@ -274,9 +284,10 @@ ConfigApply(cfg) {
     HANDLE_GAP   := handleGap
     handlesOn    := cfg.handlesOn
     HANDLE_BG    := cfg.accent
+    locale       := cfg.locale
     DebugLog("[CONFIG] ConfigApply: animMs=" animMs " animSteps=" animSteps
         " animationStyle=" animationStyle " blurMs=" blurMs
-        " handles=" (handlesOn ? "true" : "false") " accent=" HANDLE_BG)
+        " handles=" (handlesOn ? "true" : "false") " accent=" HANDLE_BG " locale=" locale)
 }
 
 ; Слоты: модель, реестр и общие операции над ними. Всё, что программа
@@ -312,7 +323,7 @@ Loop 9 {
         DebugLog("[HOTKEY] Registered " Hooked(SlotHotkey(n)) " for Slot " n " (Show/Hide)")
     } catch as e {
         DebugLog("[HOTKEY] Failed to register ^!" n ": " e.Message)
-        MsgBox("Хоткей слота " n " не назначен:`n" e.Message, "Ящик")
+        MsgBox(T("msgbox.hotkey.slot.failed", n, e.Message), T("app.title"))
     }
     try {
         Hotkey(Hooked("^!+" n), OnSlotBind.Bind(n))
@@ -320,7 +331,7 @@ Loop 9 {
         DebugLog("[HOTKEY] Registered " Hooked("^!+" n) " for Slot " n " (Bind)")
     } catch as e {
         DebugLog("[HOTKEY] Failed to register ^!+" n ": " e.Message)
-        MsgBox("Хоткей назначения слота " n " не назначен:`n" e.Message, "Ящик")
+        MsgBox(T("msgbox.hotkey.bind.failed", n, e.Message), T("app.title"))
     }
 }
 
@@ -354,7 +365,7 @@ try {
     DebugLog("[HOTKEY] Registered " Hooked("^!0") " (Clear dynamic slots)")
 } catch as e {
     DebugLog("[HOTKEY] Failed to register ^!0: " e.Message)
-    MsgBox("Хоткей очистки слотов не назначен:`n" e.Message, "Ящик")
+    MsgBox(T("msgbox.hotkey.clear.failed", e.Message), T("app.title"))
 }
 try {
     Hotkey(Hooked("^!+0"), OnFullResetHotkey)
@@ -362,7 +373,7 @@ try {
     DebugLog("[HOTKEY] Registered " Hooked("^!+0") " (Full reset)")
 } catch as e {
     DebugLog("[HOTKEY] Failed to register ^!+0: " e.Message)
-    MsgBox("Хоткей полного сброса не назначен:`n" e.Message, "Ящик")
+    MsgBox(T("msgbox.hotkey.fullreset.failed", e.Message), T("app.title"))
 }
 DebugLog("[HOTKEY] Total live hotkeys registered: " live)
 
@@ -380,7 +391,7 @@ foreCb   := CallbackCreate(OnForeground, "F", 7)
 foreHook := DllCall("SetWinEventHook", "UInt", 0x0003, "UInt", 0x0003, "Ptr", 0
                   , "Ptr", foreCb, "UInt", 0, "UInt", 0, "UInt", 0, "Ptr")
 if !foreHook
-    Notify("Активация припаркованных окон работать не будет", "Ящик", 2)
+    Notify(T("notify.activation.unavailable"), T("app.title"), 2)
 
 ; Кромка: толщина плитки в покое, при подходе курсора и под курсором,
 ; длина вдоль края и зазор в стопке. В покое плитка вмещает иконку
@@ -441,12 +452,12 @@ OnMessage(0x0201, HandleClick)      ; WM_LBUTTONDOWN
 ; заданы номером слота и не используются для настроек. Пункт Settings
 ; открывает единый WebView2-интерфейс (SettingsWebShow).
 A_TrayMenu.Insert("1&", "Settings", (*) => SettingsWebShow())
-A_TrayMenu.Insert("2&", "Нашёл баг…", (*) => BugReportShow())
+A_TrayMenu.Insert("2&", T("tray.bug"), (*) => BugReportShow())
 
 OnExit(Cleanup)
 ; Единственное уведомление, которое ящик показывает сам по себе. Здесь же
 ; версия: иначе тестер не может сказать, какая у него сборка.
-Notify("Запущен. Хоткеев: " live, "Ящик " VERSION, 1)
+Notify(T("notify.startup", live), T("app.title") " " VERSION, 1)
 
 Hooked(hk) {
     return (SubStr(hk, 1, 1) = "$") ? hk : "$" hk
@@ -460,7 +471,7 @@ Hooked(hk) {
 ; поэтому разные слоты друг другу не мешают сами по себе. Одинаковое
 ; уведомление можно показать снова, как только пройдёт время, за
 ; которое прежнее успевает и показаться, и исчезнуть.
-Notify(text, title := "Ящик", opt := 1) {
+Notify(text, title := T("app.title"), opt := 1) {
     global notified
     key := title "|" text
     if notified.Has(key)
@@ -554,7 +565,7 @@ OnSlot(n, *) {
         ToggleSlot(n)
     catch as e {
         DebugLog("[EXCEPTION] OnSlot(" n "): " e.Message)
-        Notify("Сбой: " e.Message, "Ящик", 3)
+        Notify(T("notify.failure", e.Message), T("app.title"), 3)
     }
 }
 
@@ -566,7 +577,7 @@ OnSlotBind(n, *) {
         BindSlot(n)
     catch as e {
         DebugLog("[EXCEPTION] OnSlotBind(" n "): " e.Message)
-        Notify("Сбой: " e.Message, "Ящик", 3)
+        Notify(T("notify.failure", e.Message), T("app.title"), 3)
     }
 }
 
@@ -578,7 +589,7 @@ OnClearHotkey(*) {
         SlotClearDynamic()
     catch as e {
         DebugLog("[EXCEPTION] OnClearHotkey: " e.Message)
-        Notify("Сбой: " e.Message, "Ящик", 3)
+        Notify(T("notify.failure", e.Message), T("app.title"), 3)
     }
 }
 
@@ -588,10 +599,10 @@ OnFullResetHotkey(*) {
         return
     try {
         FullReset()
-        Notify("Привязки и настройки сброшены", "Ящик")
+        Notify(T("notify.reset.done"), T("app.title"))
     } catch as e {
         OnDrawerException(e, "OnFullResetHotkey")
-        Notify("Полный сброс не выполнен: " e.Message, "Ящик", 3)
+        Notify(T("notify.reset.failed", e.Message), T("app.title"), 3)
     }
 }
 
@@ -602,6 +613,7 @@ FullResetDefaultWrites() {
         { sec: "general", key: "animationStyle", val: "dwmSlideFade" },
         { sec: "general", key: "blurMs", val: "250" },
         { sec: "general", key: "handles", val: "true" },
+        { sec: "general", key: "locale", val: "ru" },
         { sec: "dynamic", key: "name", val: "Слот" },
         { sec: "dynamic", key: "monitor", val: "cursor" },
         { sec: "dynamic", key: "edge", val: "right" },
@@ -717,7 +729,7 @@ ForegroundWork() {
         }
         Show(hwnd, cfg, state[hwnd], false, prev)
     } catch as e
-        Notify("Сбой: " e.Message, "Ящик", 3)
+        Notify(T("notify.failure", e.Message), T("app.title"), 3)
 }
 
 ; Колбэк держит НОМЕР слота, а не позицию в массиве. Номер слота
@@ -731,14 +743,14 @@ ForegroundWork() {
 ; Назначение слота по хоткею Ctrl+Alt+Shift+N. Показывает уведомление.
 BindSlot(n) {
     res := SlotBind(n)
-    Notify(res.message, "Ящик", res.ok ? 1 : 2)
+    Notify(res.message, T("app.title"), res.ok ? 1 : 2)
     return res
 }
 
 ; Освобождение динамического слота с показом уведомления.
 ReleaseSlot(n) {
     res := SlotRelease(n)
-    Notify(res.message, "Ящик", res.ok ? 1 : 2)
+    Notify(res.message, T("app.title"), res.ok ? 1 : 2)
     return res
 }
 
@@ -2321,7 +2333,7 @@ BugReportSubmit(g, comment) {
     comment := Trim(comment)
     BugReportRecord(comment, capturedActiveForBug)
     BugReportClose(g)
-    Notify("Запись о баге добавлена в лог", "Ящик")
+    Notify(T("notify.bugreport.added"), T("app.title"))
 }
 
 BugReportRecord(comment, activeHwnd) {
@@ -2374,7 +2386,7 @@ SettingsShow() {
     try
         SettingsOpen()
     catch as e
-        Notify("Настройки не открылись: " e.Message, "Ящик", 3)
+        Notify(T("notify.settings.failed", e.Message), T("app.title"), 3)
 }
 
 ; Поля слота — в том же порядке, в каком они описаны в config.ini.
@@ -2733,7 +2745,7 @@ SettingsEditSeed(n) {
                  hotkey: SlotHotkey(n) }
     }
     d := SlotCfg(n)
-    return { kind: "perm", name: "Слот " n, exe: "", cls: "",
+    return { kind: "perm", name: T("slot.defaultLabel", n), exe: "", cls: "",
              monitor: d.monitor, edge: d.edge, width: d.width,
              activateOnShow: d.activateOnShow, hideOnBlur: d.hideOnBlur,
              hotkey: SlotHotkey(n) }
@@ -3032,9 +3044,9 @@ SettingsDynamicReleaseClick(ui) {
         return
     res := SlotRelease(n)
     if res.ok
-        Notify(res.message, "Ящик")
+        Notify(res.message, T("app.title"))
     else
-        Notify(res.message, "Ящик", 2)
+        Notify(res.message, T("app.title"), 2)
     SettingsSlotsRefreshAll(ui)
     SettingsFillRow(ui, ui.selectedSlot)
 }
@@ -3065,7 +3077,7 @@ SettingsConvertClick(ui) {
         if (MsgBox("Слот " r.n " станет динамическим: секция [slot" r.n "] будет"
                   . " удалена вместе с комментариями внутри неё, если они там были."
                   . " Действие войдёт в силу после «Применить» или «ОК». Продолжить?",
-                  "Ящик", 0x24) != "Yes")
+                  T("app.title"), 0x24) != "Yes")
             return
         ; Тот же засев, которым native заполняет панель для уже
         ; динамического слота (SettingsEffective, ef.kind = "dyn"):
@@ -3105,7 +3117,7 @@ SettingsSlotWindowPick(ui) {
     w := SettingsRunPicker("window", setGui)
     if (!w || setUI != ui || SettingsPickerState().closeNative || ui.editingSlot != n)
         return
-    auto := (Trim(ui.eName.Value) = "" || Trim(ui.eName.Value) = "Слот " n)
+    auto := (Trim(ui.eName.Value) = "" || Trim(ui.eName.Value) = T("slot.defaultLabel", n))
     ui.populating := true
     ui.eExe.Value := w.exe
     ui.eCls.Value := w.cls
@@ -3815,7 +3827,7 @@ SettingsClose(force := false) {
     global setGui, setUI
     if (!force && SettingsIsDirty()) {
         if (MsgBox("Изменения не сохранены. Закрыть и отменить их?",
-                   "Ящик", 0x24) != "Yes")
+                   T("app.title"), 0x24) != "Yes")
             return true    ; событиям Close и Escape ненулевое значение
     }                      ; означает «окно не закрывать»
     picker := SettingsPickerState()
@@ -3900,6 +3912,15 @@ SettingsAnimationStyleIn(v, label, &err) {
     if AnimationStyleValid(v)
         return v
     return SettingsBad(label ": ожидается reveal, fade, dwmSlide, dwmSlideFade или dwmShrink", &err)
+}
+
+SettingsLocaleIn(v, label, &err) {
+    if (err != "")
+        return ""
+    v := String(v)
+    if LocaleValid(v)
+        return v
+    return SettingsBad(label ": ожидается ru или en", &err)
 }
 
 SettingsMonitorIn(v, label, req, &err) {
@@ -4183,6 +4204,7 @@ SettingsGeneralPlan(input, &err) {
     act := SettingsBoolIn(input.activateOnShow, "Активация", &err)
     blur := SettingsBoolIn(input.hideOnBlur, "Автоскрытие", &err)
     handles := SettingsBoolIn(input.handlesEnabled, "Кромки", &err)
+    loc := SettingsLocaleIn(input.locale, "Язык", &err)
     if (err != "")
         return 0
 
@@ -4195,6 +4217,7 @@ SettingsGeneralPlan(input, &err) {
     cand.Push({ sec: "dynamic", key: "activateOnShow", val: act ? "true" : "false" })
     cand.Push({ sec: "dynamic", key: "hideOnBlur",     val: blur ? "true" : "false" })
     cand.Push({ sec: "general", key: "handles",        val: handles ? "true" : "false" })
+    cand.Push({ sec: "general", key: "locale",         val: loc })
     if !noAnim
         cand.Push({ sec: "general", key: "animMs",     val: String(ms) })
     cand.Push({ sec: "general", key: "animSteps",      val: String(steps) })
@@ -4231,7 +4254,7 @@ SettingsDynamicFinal(generalWrites) {
 ; значения. Валидацию и сравнение с runtime делает SettingsGeneralPlan —
 ; backend-seam controls/GUI не видит.
 SettingsCollect(&err) {
-    global setUI, handleWidth, handleHeight, handleGap
+    global setUI, handleWidth, handleHeight, handleGap, locale
     err := ""
     if !(ui := setUI)
         return 0
@@ -4250,7 +4273,8 @@ SettingsCollect(&err) {
         accent: ui.accentVal,
         handleWidth: handleWidth,
         handleHeight: handleHeight,
-        handleGap: handleGap
+        handleGap: handleGap,
+        locale: locale
     }
     return SettingsGeneralPlan(input, &err)
 }
@@ -4260,7 +4284,7 @@ SettingsCollect(&err) {
 ; меняли, остаётся ненаписанным сам собой — умолчания живут в
 ; LoadConfig, и дублировать их здесь не приходится.
 SettingsLive(sec, key) {
-    global animMs, animSteps, animationStyle, blurMs, handlesOn, HANDLE_BG, handleWidth, handleHeight, handleGap
+    global animMs, animSteps, animationStyle, blurMs, handlesOn, HANDLE_BG, handleWidth, handleHeight, handleGap, locale
     if (sec = "dynamic") {
         v := Opt(SlotDefaults(), key, "")
         return (key = "activateOnShow" || key = "hideOnBlur")
@@ -4276,6 +4300,7 @@ SettingsLive(sec, key) {
     case "handleWidth":  return String(handleWidth)
     case "handleHeight": return String(handleHeight)
     case "handleGap":    return String(handleGap)
+    case "locale":       return locale
     }
     return ""
 }
@@ -4329,7 +4354,7 @@ SettingsSlotValidate(n, e, &err, &field?) {
             SplitPath(WinGetProcessPath("ahk_id " hwnd), &file)
             e.exe := file
             e.cls := WinGetClass("ahk_id " hwnd)
-            if (Trim(e.name) = "" || Trim(e.name) = "Слот " n)
+            if (Trim(e.name) = "" || Trim(e.name) = T("slot.defaultLabel", n))
                 e.name := WinGetTitle("ahk_id " hwnd)
         }
     }
@@ -4367,7 +4392,7 @@ SettingsSlotWrites(n, e, &err, &field?) {
     blur := SettingsBoolIn(e.hideOnBlur, lbl "автоскрытие", &err)
     if (err != "")
         return []
-    cand := [{ key: "name", val: Trim(name) = "" ? "Слот " n : name },
+    cand := [{ key: "name", val: Trim(name) = "" ? T("slot.defaultLabel", n) : name },
              { key: "exe",  val: Trim(exe) },
              { key: "cls",  val: cls },
              { key: "monitor", val: mon },
@@ -4786,7 +4811,7 @@ SettingsBehaviorCopy(cfg) {
 ; перевод в имена wire (executable/windowClass/widthPercent, MonitorRef)
 ; — работа порта, здесь ей не место.
 SettingsStateSnapshot() {
-    global animMs, animSteps, animationStyle, blurMs, handleWidth, handleHeight, handleGap, handlesOn, HANDLE_BG
+    global animMs, animSteps, animationStyle, blurMs, handleWidth, handleHeight, handleGap, handlesOn, HANDLE_BG, locale
     slots := []
     Loop 9 {
         n := A_Index
@@ -4808,7 +4833,7 @@ SettingsStateSnapshot() {
                         handlesEnabled: handlesOn, animMs: animMs,
                         animSteps: animSteps, animationStyle: animationStyle, blurMs: blurMs,
                         handleWidth: handleWidth, handleHeight: handleHeight, handleGap: handleGap,
-                        accent: HANDLE_BG },
+                        accent: HANDLE_BG, locale: locale },
              slots: slots }
 }
 
