@@ -9,6 +9,7 @@ import {
   restartHint,
   diagnosticsHint,
 } from '../bridge/settings'
+import { t } from '../i18n'
 
 const props = defineProps({
   status: { type: String, default: '' },
@@ -46,12 +47,12 @@ watch(
     role="alert"
     aria-live="assertive"
   >
-    <div class="footer-status">Изменения не сохранены. Закрыть и отменить их?</div>
+    <div class="footer-status">{{ t('footer.confirmMessage') }}</div>
     <button ref="keepButtonRef" class="btn-outline" data-testid="keep" @click="keepEditing()">
-      Продолжить правку
+      {{ t('footer.keepEditing') }}
     </button>
     <button class="btn-primary" data-testid="discard" @click="cancelSettings(true)">
-      Отменить изменения
+      {{ t('footer.discard') }}
     </button>
   </div>
 
@@ -68,11 +69,11 @@ watch(
       <span v-if="restart" class="restart" data-testid="restart">{{ restart }}</span>
       <span v-if="diagnostics" class="warning" data-testid="diagnostics">{{ diagnostics }}</span>
     </div>
-    <button class="btn-outline" data-testid="cancel" :disabled="busy" @click="cancelSettings()">Отмена</button>
+    <button class="btn-outline" data-testid="cancel" :disabled="busy" @click="cancelSettings()">{{ t('footer.cancel') }}</button>
     <button class="btn-outline" data-testid="apply" :disabled="busy || !ready || settings.pickerActive" @click="applySettings()">
-      Применить
+      {{ t('footer.apply') }}
     </button>
-    <button class="btn-primary" data-testid="ok" :disabled="busy || !ready || settings.pickerActive" @click="okSettings()">ОК</button>
+    <button class="btn-primary" data-testid="ok" :disabled="busy || !ready || settings.pickerActive" @click="okSettings()">{{ t('footer.ok') }}</button>
   </div>
 </template>
 

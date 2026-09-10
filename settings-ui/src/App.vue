@@ -2,6 +2,7 @@
 import { computed, onMounted, watch } from 'vue'
 import { settings, loadSettings } from './bridge/settings'
 import { fieldTarget } from './bridge/fieldError'
+import { setLocale } from './i18n'
 import Sidebar from './components/Sidebar.vue'
 import FooterBar from './components/FooterBar.vue'
 import GeneralView from './views/GeneralView.vue'
@@ -43,6 +44,15 @@ watch(
 // виден сразу всему окну — тот же предпросмотр, что и у native, только
 // не в одном квадратике. До загрузки — цвет по умолчанию из config.ini.
 const accent = computed(() => '#' + (settings.draft?.accent ?? '2A2E35'))
+
+// Язык — тем же путём, что и акцент: черновик меняет его сразу, ещё до
+// «Применить»/«ОК», а не после перезапуска. До загрузки и пока черновик
+// не заведён — canonical, иначе умолчание совпадёт с AHK ("ru").
+watch(
+  () => settings.draft?.locale ?? settings.canonical?.general.locale ?? 'ru',
+  (next) => setLocale(next),
+  { immediate: true },
+)
 </script>
 
 <template>

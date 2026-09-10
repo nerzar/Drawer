@@ -21,6 +21,7 @@ import {
 } from './client'
 import { CanonicalGate, reconcileSlotDrafts } from './canonical'
 import { draftFromState, draftToWire, type GeneralDraft } from './general'
+import { t } from '../i18n'
 import type { SettingsState, SlotNumber } from './protocol'
 import {
   setDraftExecutableFromPicker,
@@ -84,12 +85,12 @@ export async function loadSettings(): Promise<void> {
   if (!api) {
     settings.status = 'error'
     settings.bad = true
-    settings.message = 'Страница открыта не из Ящика: WebView2-мост недоступен'
+    settings.message = t('status.noBridge')
     return
   }
   settings.connected = true
   settings.status = 'loading'
-  settings.message = 'Читаем настройки…'
+  settings.message = t('status.loading')
   settings.bad = false
   // Системный крестик не закрывает окно сам: AHK спрашивает, и ответить
   // должен фронтенд. Без этого закрытие ждало бы таймаута моста.
@@ -142,7 +143,7 @@ async function save(action: 'settings.apply' | 'settings.ok'): Promise<void> {
   const api = settingsClient()
   if (!api || !settings.draft || settings.pickerActive || settings.closed) return
   settings.status = 'saving'
-  settings.message = 'Сохраняем…'
+  settings.message = t('status.saving')
   settings.bad = false
   settings.confirmDiscard = false
   const ticket = gate.issue()
@@ -159,7 +160,7 @@ async function save(action: 'settings.apply' | 'settings.ok'): Promise<void> {
       settings.restartRequired = result.restartRequiredFields ?? []
       settings.field = ''
       settings.status = 'ready'
-      settings.message = `Сохранено. Изменённых строк: ${result.changedFields}`
+      settings.message = t('status.saved', { n: result.changedFields })
     } else {
       // При no-op запись не происходила и реконсиляция не запускалась.
       // Нельзя сбрасывать черновик через adopt: применяем absorb при наличии state.
@@ -172,7 +173,7 @@ async function save(action: 'settings.apply' | 'settings.ok'): Promise<void> {
       }
       settings.restartRequired = result.restartRequiredFields ?? settings.restartRequired
       settings.status = 'ready'
-      settings.message = 'Менять нечего: всё уже так'
+      settings.message = t('status.noop')
     }
   } catch (e) {
     fail(e, ticket)
@@ -210,11 +211,11 @@ export async function pickSlot(number: SlotNumber, kind: 'exe' | 'window'): Prom
 }
 
 export async function bindSlot(number: SlotNumber): Promise<void> {
-  await slotRuntime('slot.bind', number, `Слот ${number} привязан к активному окну`)
+  await slotRuntime('slot.bind', number, t('slot.bind.done', { n: number }))
 }
 
 export async function releaseSlot(number: SlotNumber): Promise<boolean> {
-  return slotRuntime('slot.release', number, `Слот ${number} освобождён`)
+  return slotRuntime('slot.release', number, t('slot.release.done', { n: number }))
 }
 
 // bind/release меняют рантайм, но не config: они возвращают снимок,
@@ -292,9 +293,9 @@ export function restartHint(): string {
   const slots = settings.restartRequired
     .map((f) => /^slots\.(\d)\./.exec(f)?.[1])
     .filter((n): n is string => Boolean(n))
-  return slots.length
-    ? `Хоткей фокуса (слот${slots.length > 1 ? 'ы' : ''} ${slots.join(', ')}) заработает после перезапуска Ящика.`
-    : 'Часть изменений заработает после перезапуска Ящика.'
+  if (!slots.length) return t('hint.restart.generic')
+  const list = slots.join(', ')
+  return slots.length > 1 ? t('hint.restart.slot_many', { list }) : t('hint.restart.slot_one', { list })
 }
 
 export function diagnosticsHint(): string {

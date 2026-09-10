@@ -2,7 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { settings, pickSlot, releaseSlot } from '../bridge/settings'
 import { fieldTarget } from '../bridge/fieldError'
-import { EDGE_OPTIONS, draftToWire } from '../bridge/general'
+import { edgeOptions, draftToWire } from '../bridge/general'
 import {
   resetPermanentIdentityFromSlot,
   resetToShared,
@@ -10,7 +10,7 @@ import {
 } from '../bridge/slotDraft'
 import {
   useSlotStatus,
-  edgeLabels,
+  edgeLabel,
   isRuntimeDynamicBound,
   monitorLabel,
   rowLabel,
@@ -23,6 +23,7 @@ import {
   currentMonitorValue,
   setMonitorValue,
 } from '../bridge/monitors'
+import { t } from '../i18n'
 
 const props = defineProps({
   selectedSlot: {
@@ -102,8 +103,8 @@ const slotMonitorOptions = computed(() => {
   return buildMonitorOptions(
     monitors.value,
     draft.value,
-    'Следовать за курсором',
-    draft.value.monitorRaw ? `Некорректное значение: ${draft.value.monitorRaw} — выберите монитор` : undefined
+    t('monitor.cursorDefault'),
+    draft.value.monitorRaw ? t('monitor.invalidChoose', { raw: draft.value.monitorRaw }) : undefined
   )
 })
 
@@ -190,18 +191,18 @@ async function resetBoundSlot() {
 
 <template>
   <div class="content">
-    <h1 class="page-title">Слоты Drawer</h1>
-    <p class="page-sub">Настройте слоты для приложений и горячие клавиши.</p>
+    <h1 class="page-title">{{ t('slots.title') }}</h1>
+    <p class="page-sub">{{ t('slots.subtitle') }}</p>
     <p v-if="watchError" class="page-sub" role="alert">
-      Обновление состояний недоступно: {{ watchError }}
+      {{ t('slots.watchError', { err: watchError }) }}
     </p>
 
     <div v-if="!settings.canonical" class="page-sub">
-      {{ settings.message || 'Читаем настройки…' }}
+      {{ settings.message || t('status.loading') }}
     </div>
 
     <div v-else class="split" data-testid="slots">
-      <div class="list" aria-label="Слоты">
+      <div class="list" :aria-label="t('slots.list.aria')">
         <button
           v-for="slot in slots"
           :key="slot.number"
@@ -232,7 +233,7 @@ async function resetBoundSlot() {
           <div style="flex: 1; min-width: 0">
             <div class="slotrow-name">{{ slot.number }}. {{ rowLabel(slot) }}</div>
             <div class="slotrow-meta">
-              {{ edgeLabels[slotBehavior(slot).edge] }} ·
+              {{ edgeLabel(slotBehavior(slot).edge) }} ·
               {{ monitorLabel(slotBehavior(slot).monitor) }} · {{ slotBehavior(slot).widthPercent }}%
             </div>
           </div>
@@ -248,7 +249,7 @@ async function resetBoundSlot() {
                 color: slotKind(slot) === 'permanent' ? 'var(--accent-fg)' : 'var(--neutral-text)',
               }"
             >
-              {{ slotKind(slot) === 'permanent' ? 'Постоянный' : 'Временный' }}
+              {{ slotKind(slot) === 'permanent' ? t('slots.pill.permanent') : t('slots.pill.dynamic') }}
             </div>
           </div>
         </button>
@@ -256,7 +257,7 @@ async function resetBoundSlot() {
 
       <div v-if="selectedSlot" class="detail" data-testid="slot-detail">
         <div class="detail-head">
-          <h2>Слот {{ selectedSlot.number }}</h2>
+          <h2>{{ t('slots.detail.title', { n: selectedSlot.number }) }}</h2>
           <div class="detail-actions">
             <!-- Смена рода — правка черновика: панель меняется сразу,
                  config.ini — только по «Применить»/«ОК». -->
@@ -267,10 +268,10 @@ async function resetBoundSlot() {
               type="button"
               data-testid="release-slot"
               :disabled="locked"
-                    title="Отвязать окно и вернуть слот к настройкам по умолчанию"
+                    :title="t('slots.action.reset.title')"
                     @click="resetBoundSlot()"
             >
-                    Сбросить слот
+                    {{ t('slots.action.reset') }}
             </button>
             <button
               v-if="kind === 'permanent'"
@@ -278,10 +279,10 @@ async function resetBoundSlot() {
               type="button"
               data-testid="make-dynamic"
               :disabled="locked"
-              title="После «Применить» Drawer перестанет автоматически искать это приложение"
+              :title="t('slots.action.makeDynamic.title')"
               @click="makeDynamic()"
             >
-              Сделать временным
+              {{ t('slots.action.makeDynamic') }}
             </button>
 
             <button
@@ -289,11 +290,11 @@ async function resetBoundSlot() {
               class="btn-primary-sm"
               type="button"
               data-testid="make-permanent"
-               title="После привязки слот сохраняется за приложением навсегда"
+               :title="t('slots.action.makePermanent.title')"
               :disabled="locked"
               @click="makePermanent()"
             >
-               Сделать постоянным
+               {{ t('slots.action.makePermanent') }}
             </button>
           </div>
         </div>
@@ -302,18 +303,18 @@ async function resetBoundSlot() {
         <!-- Живое состояние окна. В макете его не было — тогда его не
              было и в Ящике; строка та же, что у остальных фактов. -->
         <div class="detail-row">
-          <div class="l">Состояние</div>
+          <div class="l">{{ t('slots.detail.state') }}</div>
           <div class="v">{{ statusFor(selectedSlot.status).text }}</div>
         </div>
         <div class="detail-row" style="margin-bottom: 14px">
-          <div class="l">Окно</div>
+          <div class="l">{{ t('slots.detail.window') }}</div>
           <div class="v" data-testid="slot-title">{{ selectedSlot.status.windowTitle || '—' }}</div>
         </div>
 
         <template v-if="kind === 'permanent'">
           <fieldset v-if="draft" class="editor" :disabled="locked">
             <div class="row">
-              <label for="slot-name">Имя</label>
+              <label for="slot-name">{{ t('slots.field.name') }}</label>
               <div class="field">
                 <input
                   id="slot-name"
@@ -327,7 +328,7 @@ async function resetBoundSlot() {
               </div>
             </div>
             <div class="row">
-              <label for="slot-exe">Приложение (.exe)</label>
+              <label for="slot-exe">{{ t('slots.field.executable') }}</label>
               <div class="field">
                 <input
                   id="slot-exe"
@@ -343,8 +344,8 @@ async function resetBoundSlot() {
                 <button
                   class="btn-icon"
                   type="button"
-                  title="Выбрать приложение…"
-                  aria-label="Выбрать приложение для слота"
+                  :title="t('slots.pickExe.title')"
+                  :aria-label="t('slots.pickExe.aria')"
                   data-testid="pick-exe"
                   @click="pickSlot(selectedNumber, 'exe')"
                 >
@@ -355,8 +356,8 @@ async function resetBoundSlot() {
                 <button
                   class="btn-icon"
                   type="button"
-                  title="Взять данные из открытого окна…"
-                  aria-label="Взять данные из открытого окна для слота"
+                  :title="t('slots.pickWindow.title')"
+                  :aria-label="t('slots.pickWindow.aria')"
                   data-testid="pick-window"
                   @click="pickSlot(selectedNumber, 'window')"
                 >
@@ -370,7 +371,7 @@ async function resetBoundSlot() {
                   class="info-ico"
                   tabindex="0"
                   role="note"
-                  aria-label="Справка о признаке окна"
+                  :aria-label="t('slots.classTip.aria')"
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="transform: translate(3%, 2%)">
                     <circle cx="12" cy="12" r="9" />
@@ -378,15 +379,15 @@ async function resetBoundSlot() {
                     <circle cx="12" cy="8" r="1" fill="currentColor" stroke="none" />
                   </svg>
                   <div class="tip">
-                    Дополнительный признак окна: <code data-testid="slot-class">{{ draft.windowClass || '—' }}</code>.
-                    Помогает выбрать нужный тип окна, если у приложения их несколько.
-                    Заполняется кнопкой «Взять данные из открытого окна…».
+                    {{ t('slots.classTip.text1') }} <code data-testid="slot-class">{{ draft.windowClass || '—' }}</code>.
+                    {{ t('slots.classTip.text2') }}
+                    {{ t('slots.classTip.text3') }}
                   </div>
                 </div>
               </div>
             </div>
             <div class="row">
-              <label for="slot-monitor">Монитор</label>
+              <label for="slot-monitor">{{ t('general.field.monitor') }}</label>
               <div class="field">
                 <select
                   id="slot-monitor"
@@ -408,15 +409,15 @@ async function resetBoundSlot() {
               </div>
             </div>
             <div class="row">
-              <label for="slot-edge">Край</label>
+              <label for="slot-edge">{{ t('slots.field.edge') }}</label>
               <div class="field">
                 <select id="slot-edge" class="dd" data-testid="edit-edge" v-model="draft.edge">
-                  <option v-for="o in EDGE_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
+                  <option v-for="o in edgeOptions()" :key="o.value" :value="o.value">{{ o.label }}</option>
                 </select>
               </div>
             </div>
             <div class="row">
-              <label for="slot-width">Ширина (%)</label>
+              <label for="slot-width">{{ t('slots.field.width') }}</label>
               <div class="field">
                 <input
                   id="slot-width"
@@ -431,10 +432,10 @@ async function resetBoundSlot() {
             </div>
             <label class="check-row">
               <input type="checkbox" data-testid="edit-hideOnBlur" v-model="draft.hideOnBlur" />
-              <span>Убирать окно, когда фокус ушёл</span>
+              <span>{{ t('slots.check.hideOnBlur') }}</span>
             </label>
             <div class="row">
-              <label for="slot-hotkey">Горячая клавиша</label>
+              <label for="slot-hotkey">{{ t('slots.field.hotkey') }}</label>
               <div class="field">
                 <input
                   id="slot-hotkey"
@@ -456,7 +457,7 @@ async function resetBoundSlot() {
         <template v-else>
           <fieldset v-if="draft" class="editor" :disabled="locked">
             <div class="row">
-              <label for="dyn-monitor">Монитор</label>
+              <label for="dyn-monitor">{{ t('general.field.monitor') }}</label>
               <div class="field">
                 <select
                   id="dyn-monitor"
@@ -478,15 +479,15 @@ async function resetBoundSlot() {
               </div>
             </div>
             <div class="row">
-              <label for="dyn-edge">Край</label>
+              <label for="dyn-edge">{{ t('slots.field.edge') }}</label>
               <div class="field">
                 <select id="dyn-edge" class="dd" data-testid="edit-edge" v-model="draft.edge">
-                  <option v-for="o in EDGE_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
+                  <option v-for="o in edgeOptions()" :key="o.value" :value="o.value">{{ o.label }}</option>
                 </select>
               </div>
             </div>
             <div class="row">
-              <label for="dyn-width">Ширина (%)</label>
+              <label for="dyn-width">{{ t('slots.field.width') }}</label>
               <div class="field">
                 <input
                   id="dyn-width"
@@ -501,10 +502,10 @@ async function resetBoundSlot() {
             </div>
             <label class="check-row">
               <input type="checkbox" data-testid="edit-hideOnBlur" v-model="draft.hideOnBlur" />
-              <span>Убирать окно, когда фокус ушёл</span>
+              <span>{{ t('slots.check.hideOnBlur') }}</span>
             </label>
             <div class="row">
-              <label for="dyn-hotkey">Горячая клавиша</label>
+              <label for="dyn-hotkey">{{ t('slots.field.hotkey') }}</label>
               <div class="field">
                 <input
                   id="dyn-hotkey"
@@ -528,9 +529,7 @@ async function resetBoundSlot() {
               <line x1="12" y1="8" x2="12" y2="13" />
               <circle cx="12" cy="16" r="1" fill="var(--accent-fg)" stroke="none" />
             </svg>
-            <div>Чтобы Drawer
-              снова находил приложение после перезапуска, закрепите слот за приложением.
-            </div>
+            <div>{{ t('slots.freeNote') }}</div>
           </div>
         </template>
       </div>

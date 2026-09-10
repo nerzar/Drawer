@@ -7,7 +7,7 @@ import { test } from 'node:test'
 import { computed, reactive } from 'vue'
 
 import {
-  ANIM_PRESETS,
+  animPresets,
   animPreset,
   applyAnimPreset,
   draftFromState,
@@ -16,6 +16,8 @@ import {
   type GeneralDraft,
 } from '../src/bridge/general'
 import type { GeneralSettings } from '../src/bridge/protocol'
+
+const ANIM_PRESETS = animPresets()
 
 function makeGeneralSettings(durationMs = 167, steps = 14): GeneralSettings {
   return {
@@ -30,6 +32,8 @@ function makeGeneralSettings(durationMs = 167, steps = 14): GeneralSettings {
     animation: { style: 'dwmSlideFade', durationMs, steps },
     blurCheckMs: 250,
     accent: '2A2E35',
+    handle: { width: 22, height: 34, gap: 8 },
+    locale: 'ru',
   }
 }
 

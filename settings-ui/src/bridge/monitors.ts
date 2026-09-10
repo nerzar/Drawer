@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import type { MonitorDescriptor } from './protocol'
 import type { MonitorKind } from './general'
 
@@ -8,13 +9,13 @@ export type MonitorSelectOption = {
 }
 
 export function formatMonitorLabel(m: MonitorDescriptor): string {
-  return `Монитор ${m.number} — ${m.width}×${m.height}`
+  return t('monitor.label', { n: m.number, w: m.width, h: m.height })
 }
 
 export function buildMonitorOptions(
   monitors: MonitorDescriptor[] = [],
   current: { monitorKind: MonitorKind; monitorNumber: string; monitorRaw?: string },
-  cursorLabel = 'Следовать за курсором',
+  cursorLabel = t('monitor.cursorDefault'),
   invalidLabel?: string
 ): MonitorSelectOption[] {
   const options: MonitorSelectOption[] = [
@@ -36,7 +37,7 @@ export function buildMonitorOptions(
   if (current.monitorKind === 'number' && !currentFound) {
     options.push({
       value: String(current.monitorNumber),
-      label: `Монитор ${current.monitorNumber} (недоступен)`,
+      label: t('monitor.unavailable', { n: current.monitorNumber }),
       disabled: true
     })
   }
@@ -45,7 +46,7 @@ export function buildMonitorOptions(
   if (current.monitorKind === 'invalid') {
     options.push({
       value: 'invalid',
-      label: invalidLabel ?? (current.monitorRaw ? `Некорректное значение: ${current.monitorRaw} — выберите монитор` : 'Некорректное значение — выберите монитор'),
+      label: invalidLabel ?? (current.monitorRaw ? t('monitor.invalidChoose', { raw: current.monitorRaw }) : t('monitor.invalidChooseGeneric')),
       disabled: true
     })
   }
