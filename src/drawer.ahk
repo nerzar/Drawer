@@ -1005,15 +1005,8 @@ Show(hwnd, cfg, st, forceActivate := false, prev := 0) {
 }
 
 ; blurred — скрытие вызвано потерей фокуса (WatchBlurCheck), а не ручным
-; toggle. В этот момент окно уже не поверх экрана — сверху новое чужое
-; активное окно. DWM-стили показывают отдельное +AlwaysOnTop окно-сцену
-; для thumbnail, и оно, только что созданное, встаёт НАД этим новым
-; активным окном: получается «исчез → вспыхнула копия поверх чужого
-; окна → исчез». reveal этой проблемы не знает в принципе — не создаёт
-; сцену, а обрезает регион настоящего окна на месте, так что спрятанное
-; за чужим окном оно там и остаётся всю анимацию, ничего не всплывает
-; поверх. Поэтому скрытие по потере фокуса всегда идёт через reveal,
-; какой бы DWM-стиль ни был выбран в Settings для ручного toggle.
+; toggle. Пока не меняет выбор анимации — только идёт в лог для
+; диагностики; см. обсуждение мигания при скрытии по blur.
 Hide(hwnd, st, blurred := false) {
     global animationStyle
     WatchForget(hwnd)
@@ -1023,7 +1016,7 @@ Hide(hwnd, st, blurred := false) {
     DebugLog("[HIDE] Hiding hwnd=" hwnd " ('" title "') wasActive=" (wasActive ? "1" : "0")
              . " blurred=" (blurred ? "1" : "0"))
     g := st.geom
-    if (blurred || animationStyle = "reveal") {
+    if (animationStyle = "reveal") {
         HideReveal(hwnd, g)
     } else {
         try AnimationDwmHide(hwnd, g, animationStyle, Round(animMs * 0.4))
