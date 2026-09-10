@@ -430,10 +430,6 @@ async function resetBoundSlot() {
               </div>
             </div>
             <label class="check-row">
-              <input type="checkbox" data-testid="edit-activateOnShow" v-model="draft.activateOnShow" />
-              <span>Активировать окно при выезде</span>
-            </label>
-            <label class="check-row">
               <input type="checkbox" data-testid="edit-hideOnBlur" v-model="draft.hideOnBlur" />
               <span>Убирать окно, когда фокус ушёл</span>
             </label>
@@ -503,10 +499,6 @@ async function resetBoundSlot() {
                 />
               </div>
             </div>
-            <label class="check-row">
-              <input type="checkbox" data-testid="edit-activateOnShow" v-model="draft.activateOnShow" />
-              <span>Активировать окно при выезде</span>
-            </label>
             <label class="check-row">
               <input type="checkbox" data-testid="edit-hideOnBlur" v-model="draft.hideOnBlur" />
               <span>Убирать окно, когда фокус ушёл</span>
