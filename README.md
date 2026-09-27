@@ -32,8 +32,8 @@ goes back — nothing minimised, nothing closed, the game keeps running.
 4. Run `Drawer.exe`.
 
 All nine slots are dynamic out of the box — bind whatever you like with
-`Ctrl + Alt + Shift + N`. `SETUP.md` in the archive explains every option
-in `config.ini`.
+`Ctrl + Alt + Shift + N`. Every option in `config.ini` is explained by the
+comments right in the file.
 
 That's it.
 
